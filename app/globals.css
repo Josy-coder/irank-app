@@ -95,47 +95,20 @@
   }
 }
 
-body {
-  background-color: hsl(var(--background));
-  color: hsl(var(--foreground));
-  overflow-x: hidden;
-  box-sizing: border-box;
-}
-
-:root {
-  --onboarding-overlay: rgba(0, 0, 0, 0.5);
-  --onboarding-bg: white;
-  --onboarding-text: #1f2937;
-  --onboarding-border: #e5e7eb;
-}
-
-[data-theme="dark"] {
-  --onboarding-overlay: rgba(0, 0, 0, 0.7);
-  --onboarding-bg: #1f2937;
-  --onboarding-text: #f3f4f6;
-  --onboarding-border: #374151;
-}
-
-.onboarding-highlight {
-  position: relative;
-}
-
-.onboarding-highlight::after {
-  content: '';
-  position: absolute;
-  inset: -4px;
-  border-radius: 8px;
-  background: rgba(59, 130, 246, 0.1);
-  border: 2px solid #3b82f6;
-  pointer-events: none;
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
 @keyframes pulse {
   0%, 100% {
     opacity: 1;
   }
   50% {
     opacity: .5;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
   }
 }

@@ -1,11 +1,12 @@
-import type { Config } from "tailwindcss";
+import type { Config } from "tailwindcss"
 
-const config: Config = {
+const config = {
 	darkMode: ["class"],
 	content: [
-		"./pages/**/*.{js,ts,jsx,tsx,mdx}",
-		"./components/**/*.{js,ts,jsx,tsx,mdx}",
-		"./app/**/*.{js,ts,jsx,tsx,mdx}",
+		'./pages/**/*.{ts,tsx}',
+		'./components/**/*.{ts,tsx}',
+		'./app/**/*.{ts,tsx}',
+		'./src/**/*.{ts,tsx}',
 	],
 	prefix: "",
 	theme: {
@@ -17,9 +18,6 @@ const config: Config = {
 			}
 		},
 		extend: {
-			screens: {
-				xs: '480px'
-			},
 			colors: {
 				border: 'hsl(var(--border))',
 				input: 'hsl(var(--input))',
@@ -70,13 +68,6 @@ const config: Config = {
 					light: 'hsl(var(--success-light))',
 					border: 'hsl(var(--success-border))',
 					green: 'hsl(var(--success-green))'
-				},
-				chart: {
-					'1': 'hsl(var(--chart-1))',
-					'2': 'hsl(var(--chart-2))',
-					'3': 'hsl(var(--chart-3))',
-					'4': 'hsl(var(--chart-4))',
-					'5': 'hsl(var(--chart-5))'
 				}
 			},
 			borderRadius: {
@@ -108,15 +99,16 @@ const config: Config = {
 					'20%,50%': {
 						opacity: '0'
 					}
-				}
+				},
 			},
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
 				'accordion-up': 'accordion-up 0.2s ease-out',
-				'caret-blink': 'caret-blink 1.25s ease-out infinite'
+				'caret-blink': 'caret-blink 1.25s ease-out infinite',
 			}
 		}
 	},
-  plugins: [require("tailwindcss-animate")],
-};
-export default config;
+	plugins: [require("tailwindcss-animate")],
+} satisfies Config
+
+export default config

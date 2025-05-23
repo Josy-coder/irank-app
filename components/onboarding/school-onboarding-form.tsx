@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { z } from "zod"
 import { useForm } from "react-hook-form"
@@ -25,9 +25,10 @@ import {
 import { Loader2, Upload } from "lucide-react"
 import { toast } from "sonner"
 import { motion } from "framer-motion"
-import { useMutation } from "convex/react"
+import { useMutation, useConvexAvatarClient } from "convex/react"
 import { api } from "@/convex/_generated/api"
-import Rwanda from "rwanda"
+import { LocationSelector } from "@/components/location-selector"
+import { FileUpload } from "@/components/ui/file-upload"
 
 const formSchema = z.object({
   name: z.string().min(2, { message: "School name is required" }),
@@ -38,7 +39,11 @@ const formSchema = z.object({
   province: z.string().optional(),
   district: z.string().optional(),
   sector: z.string().optional(),
+  cell: z.string().optional(),
+  village: z.string().optional(),
+  contactName: z.string().min(2, { message: "Contact name is required" }),
   contactEmail: z.string().email({ message: "Valid contact email is required" }),
+  contactPhone: z.string().optional(),
   logo: z.any().optional(),
 })
 
@@ -48,78 +53,39 @@ const SchoolOnboardingForm = ({ userId }: { userId: string }) => {
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [provinces, setProvinces] = useState<string[]>([])
-  const [districts, setDistricts] = useState<string[]>([])
-  const [sectors, setSectors] = useState<string[]>([])
-  const [logoPreview, setLogoPreview] = useState<string | null>(null)
+  const [logoFile, setLogoFile] = useState<File[] | null>(null)
 
   const router = useRouter()
+  const convexClient = useConvexAvatarClient()
 
-  const createSchool = useMutation(api.functions.schools.createSchool)
-  const updateUser = useMutation(api.functions.users.updateUser)
+  const createSchool = useMutation(api.schools.createSchool)
+  const updateUser = useMutation(api.users.updateUser)
+  const generateUploadUrl = useMutation(api.storage.generateUploadUrl)
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: "",
       type: undefined,
-      country: "Rwanda",
+      country: "RW",
       province: "",
       district: "",
       sector: "",
+      cell: "",
+      village: "",
+      contactName: "",
       contactEmail: "",
+      contactPhone: "",
       logo: undefined,
     },
   })
 
-  useState(() => {
-    try {
-      const rwandaProvinces = Rwanda.Provinces()
-      setProvinces(rwandaProvinces)
-    } catch (error) {
-      console.error("Error loading provinces:", error)
-      setProvinces([])
-    }
-  })
-
-  const handleProvinceChange = (province: string) => {
-    form.setValue("province", province)
-    form.setValue("district", "")
-    form.setValue("sector", "")
-
-    try {
-      const provinceDistricts = Rwanda.Districts(province)
-      setDistricts(provinceDistricts)
-      setSectors([])
-    } catch (error) {
-      console.error("Error loading districts:", error)
-      setDistricts([])
-    }
-  }
-
-  const handleDistrictChange = (district: string) => {
-    form.setValue("district", district)
-    form.setValue("sector", "")
-
-    try {
-      const districtSectors = Rwanda.Sectors(form.getValues("province"), district)
-      setSectors(districtSectors)
-    } catch (error) {
-      console.error("Error loading sectors:", error)
-      setSectors([])
-    }
-  }
-
-  const handleLogoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (file) {
-      form.setValue("logo", file)
-
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        setLogoPreview(e.target?.result as string)
-      }
-      reader.readAsDataURL(file)
+  const handleLogoChange = (files: File[] | null) => {
+    setLogoFile(files)
+    if (files && files.length > 0) {
+      form.setValue("logo", files[0])
+    } else {
+      form.setValue("logo", undefined)
     }
   }
 
@@ -150,7 +116,6 @@ const SchoolOnboardingForm = ({ userId }: { userId: string }) => {
     setError(null)
 
     try {
-      // Create the new school
       const schoolId = await createSchool({
         name: values.name,
         type: values.type,
@@ -159,21 +124,18 @@ const SchoolOnboardingForm = ({ userId }: { userId: string }) => {
         district: values.district || undefined,
         sector: values.sector || undefined,
         contact_email: values.contactEmail,
-        logo_url: undefined, // For now, we'll handle file upload in a follow-up step
+        logo_url: undefined,
         status: "active",
       })
 
-      // Update the user's schoolId and status
       await updateUser({
         id: userId,
         school_id: schoolId,
         status: "active",
       })
 
-      // Show success message
       toast.success("School onboarding completed successfully!")
 
-      // Redirect to school dashboard
       router.push("/dashboard/school")
     } catch (error: any) {
       console.error("Onboarding error:", error)
@@ -190,8 +152,6 @@ const SchoolOnboardingForm = ({ userId }: { userId: string }) => {
         <h2 className="text-2xl font-bold mb-2">School Onboarding</h2>
         <p className="text-muted-foreground">Set up your school profile to get started</p>
       </div>
-
-      {/* Progress indicator */}
       <div className="flex items-center justify-between mb-8">
         <div className="w-full flex items-center">
           <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 1 ? 'bg-primary text-white' : 'bg-gray-200 text-gray-500'}`}>

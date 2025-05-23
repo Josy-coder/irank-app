@@ -87,7 +87,6 @@ export function SchoolSelector({
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(searchQuery)
-      // Reset pagination when search changes
       setPage(1)
       setAllSchools([])
       setNextCursor(null)
@@ -131,7 +130,6 @@ export function SchoolSelector({
     }
   }
 
-  // Handle creating a new school
   const handleAddSchool = async () => {
     if (!newSchoolName.trim() || !newSchoolType || !newSchoolCountry.trim() || !newSchoolContactName.trim() || !newSchoolContactEmail.trim()) {
       toast.error("Please fill in all required fields.")
@@ -140,7 +138,6 @@ export function SchoolSelector({
 
     try {
       if (role === 'volunteer') {
-        // For volunteers, create a temporary school object
         const newSchool: School = {
           _id: `temp-${Date.now()}` as Id<"schools">,
           name: newSchoolName,

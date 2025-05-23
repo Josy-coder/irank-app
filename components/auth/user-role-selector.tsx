@@ -55,7 +55,7 @@ const UserRoleSelector = () => {
       </div>
 
       <div className="text-center">
-        <h1 className="text-lg sm:text-xl font-bold dark:text-muted">Welcome to iRankHub</h1>
+        <h1 className="text-lg sm:text-xl font-bold dark:text-foreground">Welcome to iRankHub</h1>
         <p className="text-muted-foreground mt-1 text-sm sm:text-base">Select your role to continue</p>
       </div>
 
@@ -79,13 +79,13 @@ const UserRoleSelector = () => {
                 <div
                   className={`p-1 rounded-full mb-1 ${
                     selectedRole === role.id
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-secondary text-secondary-foreground"
+                      ? "bg-primary"
+                      : "bg-secondary"
                   }`}
                 >
                   {role.icon}
                 </div>
-                <h3 className="font-medium text-sm mb-1 dark:text-muted">{role.title}</h3>
+                <h3 className="font-medium text-sm mb-1 dark:text-foreground">{role.title}</h3>
                 <p className="hidden md:block text-xs sm:text-sm text-muted-foreground">{role.description}</p>
               </CardContent>
             </Card>

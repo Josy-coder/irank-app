@@ -22,6 +22,7 @@ import { toast } from "sonner"
 import { useAuthActions } from "@convex-dev/auth/react"
 import { motion } from "framer-motion"
 import Image from "next/image";
+import { Label } from "@/components/ui/label";
 
 const formSchema = z.object({
   name: z.string().min(2, { message: "Full name is required" }),
@@ -266,7 +267,7 @@ const SchoolAdminSignUpForm = () => {
                   onCheckedChange={(checked) => setAgreeTerms(checked as boolean)}
                   disabled={loading}
                 />
-                <label
+                <Label
                   htmlFor="terms"
                   className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                 >
@@ -274,14 +275,8 @@ const SchoolAdminSignUpForm = () => {
                   <Link href="/terms" className="text-primary hover:underline">
                     terms and conditions
                   </Link>
-                </label>
+                </Label>
               </div>
-
-              {error && (
-                <div className="bg-red-500/10 border border-red-500/20 text-red-700 dark:text-red-300 p-3 rounded-md text-sm">
-                  {error}
-                </div>
-              )}
 
               <div className="flex space-x-2 pt-2">
                 <Button
