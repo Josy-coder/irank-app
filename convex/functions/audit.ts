@@ -5,6 +5,11 @@ const actionType = v.union(
   v.literal("user_created"),
   v.literal("user_updated"),
   v.literal("user_deleted"),
+  v.literal("user_login"),
+  v.literal("user_logout"),
+  v.literal("user_password_changed"),
+  v.literal("user_locked"),
+  v.literal("user_verified"),
   v.literal("school_created"),
   v.literal("school_updated"),
   v.literal("school_deleted"),
@@ -29,6 +34,11 @@ const actionType = v.union(
 type ActionType =
   | "user_created"
   | "user_updated"
+  | "user_login"
+  | "user_logout"
+  | "user_password_changed"
+  | "user_locked"
+  | "user_verified"
   | "user_deleted"
   | "school_created"
   | "school_updated"
@@ -102,14 +112,17 @@ export const getAuditLogs = query({
     const identity = await ctx.auth.getUserIdentity();
     const email = identity?.email;
 
-    const currentUser = await ctx.db
-      .query("users")
-      .withIndex("by_email", (q) => q.eq("email", email))
-      .first();
+    if (email) {
+      const currentUser = await ctx.db
+        .query("users")
+        .withIndex("by_email", (q) => q.eq("email", email))
+        .first();
 
-    if (!currentUser || currentUser.role !== "admin") {
-      throw new Error("Unauthorized - Admin access required");
+      if (!currentUser || currentUser.role !== "admin") {
+        throw new Error("Unauthorized - Admin access required");
+      }
     }
+
 
     const baseQuery = ctx.db.query("audit_logs");
 

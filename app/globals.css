@@ -112,3 +112,18 @@
     @apply bg-background text-foreground;
   }
 }
+
+.banner-offset {
+  padding-top: 56px;
+}
+
+.banner-enter {
+  transform: translateY(-100%);
+  opacity: 0;
+}
+
+.banner-enter-active {
+  transform: translateY(0);
+  opacity: 1;
+  transition: all 300ms ease-out;
+}

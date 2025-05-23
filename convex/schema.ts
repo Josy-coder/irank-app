@@ -1,9 +1,125 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
-import { authTables } from "@convex-dev/auth/server";
 
 export default defineSchema({
-  ...authTables,
+  auth_sessions: defineTable({
+    user_id: v.id("users"),
+    session_token: v.string(),
+    device_id: v.optional(v.string()),
+    device_info: v.optional(v.object({
+      user_agent: v.optional(v.string()),
+      ip_address: v.optional(v.string()),
+      platform: v.optional(v.string()),
+    })),
+    expires_at: v.number(),
+    last_used_at: v.number(),
+    is_offline_capable: v.boolean(),
+    created_at: v.number(),
+  })
+    .index("by_user_id", ["user_id"])
+    .index("by_session_token", ["session_token"])
+    .index("by_expires_at", ["expires_at"])
+    .index("by_user_id_device_id", ["user_id", "device_id"]),
+
+  magic_links: defineTable({
+    email: v.string(),
+    token: v.string(),
+    user_id: v.optional(v.id("users")),
+    expires_at: v.number(),
+    used_at: v.optional(v.number()),
+    created_at: v.number(),
+    purpose: v.union(
+      v.literal("login"),
+      v.literal("password_reset"),
+      v.literal("email_verification"),
+      v.literal("account_recovery")
+    ),
+  })
+    .index("by_email", ["email"])
+    .index("by_token", ["token"])
+    .index("by_expires_at", ["expires_at"])
+    .index("by_email_purpose", ["email", "purpose"]),
+
+  security_questions: defineTable({
+    user_id: v.id("users"),
+    question: v.string(),
+    answer_hash: v.string(),
+    created_at: v.number(),
+    updated_at: v.optional(v.number()),
+  })
+    .index("by_user_id", ["user_id"]),
+
+  password_reset_tokens: defineTable({
+    user_id: v.id("users"),
+    token: v.string(),
+    expires_at: v.number(),
+    used_at: v.optional(v.number()),
+    created_at: v.number(),
+  })
+    .index("by_user_id", ["user_id"])
+    .index("by_token", ["token"])
+    .index("by_expires_at", ["expires_at"]),
+
+  users: defineTable({
+    name: v.string(),
+    email: v.string(),
+    phone: v.optional(v.string()),
+    password_hash: v.string(),
+    role: v.union(
+      v.literal("student"),
+      v.literal("school_admin"),
+      v.literal("volunteer"),
+      v.literal("admin")
+    ),
+    profile_image: v.optional(v.id("_storage")),
+    school_id: v.optional(v.id("schools")),
+    status: v.union(
+      v.literal("active"),
+      v.literal("inactive"),
+      v.literal("banned")
+    ),
+    verified: v.boolean(),
+    gender: v.optional(v.union(
+      v.literal("male"),
+      v.literal("female"),
+      v.literal("non_binary")
+    )),
+    date_of_birth: v.optional(v.string()),
+
+    // Student-specific fields
+    grade: v.optional(v.string()),
+
+    // School admin specific fields
+    position: v.optional(v.string()),
+
+    // Volunteer-specific fields
+    high_school_attended: v.optional(v.string()),
+    safeguarding_certificate: v.optional(v.id("_storage")),
+    national_id: v.optional(v.string()),
+
+    mfa_enabled: v.optional(v.boolean()),
+    biometric_enabled: v.optional(v.boolean()),
+    last_login_at: v.optional(v.number()),
+    password_changed_at: v.optional(v.number()),
+    failed_login_attempts: v.optional(v.number()),
+    locked_until: v.optional(v.number()),
+    created_at: v.number(),
+    updated_at: v.optional(v.number()),
+  })
+    .index("by_email", ["email"])
+    .index("by_phone", ["phone"])
+    .index("by_school_id", ["school_id"])
+    .index("by_role", ["role"])
+    .index("by_status", ["status"])
+    .index("by_verified", ["verified"])
+    .index("by_role_status", ["role", "status"])
+    .index("by_school_id_role", ["school_id", "role"])
+    .index("by_name", ["name"])
+    .searchIndex("search_users", {
+      searchField: "name",
+      filterFields: ["role", "status", "school_id", "verified"]
+    }),
+
   schools: defineTable({
     name: v.string(),
     type: v.union(
@@ -16,6 +132,8 @@ export default defineSchema({
     province: v.optional(v.string()),
     district: v.optional(v.string()),
     sector: v.optional(v.string()),
+    cell: v.optional(v.string()),
+    village: v.optional(v.string()),
     contact_name: v.string(),
     contact_email: v.string(),
     contact_phone: v.optional(v.string()),
@@ -25,63 +143,22 @@ export default defineSchema({
       v.literal("inactive"),
       v.literal("banned")
     ),
+    verified: v.boolean(),
+    created_by: v.optional(v.id("users")),
+    created_at: v.number(),
+    updated_at: v.optional(v.number()),
   })
     .index("by_name", ["name"])
     .index("by_country", ["country"])
     .index("by_country_province", ["country", "province"])
     .index("by_country_province_district", ["country", "province", "district"])
     .index("by_status", ["status"])
+    .index("by_verified", ["verified"])
     .index("by_type_status", ["type", "status"])
+    .index("by_created_by", ["created_by"])
     .searchIndex("search_schools", {
       searchField: "name",
-      filterFields: ["country", "type", "status"]
-    }),
-
-  users: defineTable({
-    name: v.string(),
-    role: v.union(
-      v.literal("student"),
-      v.literal("school_admin"),
-      v.literal("volunteer"),
-      v.literal("admin")
-    ),
-    email: v.optional(v.string()),
-    phone: v.optional(v.string()),
-    profile_image: v.optional(v.id("_storage")),
-    school_id: v.optional(v.id("schools")),
-    status: v.union(
-      v.literal("active"),
-      v.literal("inactive"),
-      v.literal("banned")
-    ),
-    gender: v.optional(v.union(
-      v.literal("male"),
-      v.literal("female"),
-      v.literal("non_binary")
-    )),
-    idebate_id: v.optional(v.string()),
-    position: v.optional(v.string()),
-    mfa_enabled: v.boolean(),
-    grade: v.optional(v.string()),
-    safeguarding_certificate: v.optional(v.id("_storage")),
-    date_of_birth: v.optional(v.string()),
-    national_id: v.optional(v.string()),
-    high_school_attended: v.optional(v.string()),
-    biometric_enabled: v.boolean(),
-    verified: v.boolean(),
-    last_login: v.optional(v.number()),
-  })
-    .index("by_email", ["email"])
-    .index("by_phone", ["phone"])
-    .index("by_school_id", ["school_id"])
-    .index("by_role", ["role"])
-    .index("by_idebate_id", ["idebate_id"])
-    .index("by_status", ["status"])
-    .index("by_role_status", ["role", "status"])
-    .index("by_school_id_role", ["school_id", "role"])
-    .searchIndex("search_users", {
-      searchField: "name",
-      filterFields: ["role", "status", "school_id"]
+      filterFields: ["country", "type", "status", "verified"]
     }),
 
   leagues: defineTable({
@@ -100,6 +177,8 @@ export default defineSchema({
       v.literal("inactive"),
       v.literal("banned")
     ),
+    created_at: v.number(),
+    updated_at: v.optional(v.number()),
   })
     .index("by_name", ["name"])
     .index("by_type", ["type"])
@@ -141,6 +220,8 @@ export default defineSchema({
       v.literal("completed"),
       v.literal("cancelled")
     ),
+    created_at: v.number(),
+    updated_at: v.optional(v.number()),
   })
     .index("by_name", ["name"])
     .index("by_league_id", ["league_id"])
@@ -172,6 +253,8 @@ export default defineSchema({
       v.literal("withdrawn"),
       v.literal("disqualified")
     ),
+    created_at: v.number(),
+    updated_at: v.optional(v.number()),
   })
     .index("by_tournament_id", ["tournament_id"])
     .index("by_school_id", ["school_id"])
@@ -377,7 +460,8 @@ export default defineSchema({
       v.literal("tournament"),
       v.literal("debate"),
       v.literal("result"),
-      v.literal("system")
+      v.literal("system"),
+      v.literal("auth")
     ),
     related_id: v.optional(v.string()),
     is_read: v.boolean(),
@@ -385,6 +469,7 @@ export default defineSchema({
     sent_via_email: v.optional(v.boolean()),
     sent_via_push: v.optional(v.boolean()),
     sent_via_sms: v.optional(v.boolean()),
+    created_at: v.number(),
   })
     .index("by_user_id", ["user_id"])
     .index("by_user_id_is_read", ["user_id", "is_read"])
@@ -405,6 +490,7 @@ export default defineSchema({
     expires_at: v.number(),
     allowed_views: v.optional(v.number()),
     view_count: v.number(),
+    created_at: v.number(),
   })
     .index("by_report_type", ["report_type"])
     .index("by_report_type_report_id", ["report_type", "report_id"])
@@ -470,6 +556,11 @@ export default defineSchema({
       v.literal("user_created"),
       v.literal("user_updated"),
       v.literal("user_deleted"),
+      v.literal("user_login"),
+      v.literal("user_logout"),
+      v.literal("user_password_changed"),
+      v.literal("user_locked"),
+      v.literal("user_verified"),
       v.literal("school_created"),
       v.literal("school_updated"),
       v.literal("school_deleted"),

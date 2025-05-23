@@ -28,7 +28,7 @@ import { motion } from "framer-motion"
 import { useMutation, useConvexAvatarClient } from "convex/react"
 import { api } from "@/convex/_generated/api"
 import { LocationSelector } from "@/components/location-selector"
-import { FileUpload } from "@/components/ui/file-upload"
+import { FileUpload } from "@/components/file-upload"
 
 const formSchema = z.object({
   name: z.string().min(2, { message: "School name is required" }),

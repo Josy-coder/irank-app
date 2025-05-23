@@ -4,6 +4,8 @@ import { Inter } from 'next/font/google'
 import { Toaster } from '@/components/ui/sonner'
 import { ConvexClientProvider } from "@/components/ConvexClientProvider";
 import { ThemeProvider } from "@/components/theme-provider";
+import { AuthProvider } from "@/hooks/useAuth";
+import { AdvancedOfflineBanner } from "@/components/offline-banner";
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -16,20 +18,25 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({
-  children,
-}: Readonly<{
+                                     children,
+                                   }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-      <html lang="en" suppressHydrationWarning>
-        <body className={inter.className}>
-        <ThemeProvider attribute="class" defaultTheme="light" forcedTheme="light">
-          <ConvexClientProvider>
+    <html lang="en" suppressHydrationWarning>
+    <body className={inter.className}>
+    <ThemeProvider attribute="class" defaultTheme="light" forcedTheme="light">
+      <ConvexClientProvider>
+        <AuthProvider>
+          <AdvancedOfflineBanner />
+          <div className="min-h-screen">
             {children}
-            <Toaster richColors closeButton position="top-right" />
-          </ConvexClientProvider>
-        </ThemeProvider>
-        </body>
-      </html>
+          </div>
+          <Toaster richColors closeButton position="top-right" />
+        </AuthProvider>
+      </ConvexClientProvider>
+    </ThemeProvider>
+    </body>
+    </html>
   );
 }
