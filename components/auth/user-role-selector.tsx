@@ -79,7 +79,7 @@ const UserRoleSelector = () => {
                 <div
                   className={`p-1 rounded-full mb-1 ${
                     selectedRole === role.id
-                      ? "bg-primary"
+                      ? "bg-primary text-white"
                       : "bg-secondary"
                   }`}
                 >

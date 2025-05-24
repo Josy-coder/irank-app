@@ -27,13 +27,13 @@ export default function SignIn() {
   const getRoleImage = () => {
     switch (role) {
       case "student":
-        return "/images/student-signin.png"
+        return "/images/students-signup.png"
       case "school_admin":
-        return "/images/school-signin.png"
+        return "/images/school-signup.png"
       case "volunteer":
-        return "/images/volunteer-signin.png"
+        return "/images/volunteer1.jpg"
       case "admin":
-        return "/images/admin-signin.png"
+        return "/images/admin-signup.png"
       default:
         return "/images/volunteer3.jpg"
     }
@@ -90,7 +90,7 @@ export default function SignIn() {
             <div className="bg-white/80 dark:bg-gray-800/80 p-6 rounded-lg shadow">
               <h3 className="font-medium text-primary mb-2 text-lg">Did you know?</h3>
               <p className="text-sm text-gray-600 dark:text-gray-300">
-                iRankHub is the premiere platform for World Schools Debate tournaments, helping students develop critical thinking skills and connect with debaters worldwide.
+                iRankHub is the premiere platform for debate tournaments, helping students develop critical thinking skills and connect with debaters worldwide.
               </p>
             </div>
           </motion.div>

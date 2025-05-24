@@ -1,17 +1,20 @@
 "use client"
 
-import { useState, useEffect, useCallback, useContext, createContext } from "react"
-import { useRouter, usePathname } from "next/navigation"
-import { useMutation, useQuery } from "convex/react"
+import { createContext, useContext, useEffect, useState, ReactNode } from "react"
+import { useQuery, useMutation } from "convex/react"
+import { useRouter } from "next/navigation"
 import { api } from "@/convex/_generated/api"
+import { Id } from "@/convex/_generated/dataModel"
 import { toast } from "sonner"
+
+type UserRole = "student" | "school_admin" | "volunteer" | "admin"
 
 type User = {
   id: string
   name: string
   email: string
   phone?: string
-  role: string
+  role: UserRole
   status: string
   verified: boolean
   gender?: string
@@ -32,30 +35,16 @@ type User = {
   } | null
 }
 
-type AuthState = {
-  user: User | null
-  token: string | null
-  isLoading: boolean
-  isOffline: boolean
-  isAuthenticated: boolean
-  isOfflineValid: boolean
-}
-
 type AuthContextType = {
   user: User | null
   token: string | null
-  isLoading: boolean
-  isOffline: boolean
   isAuthenticated: boolean
-  isOfflineValid: boolean
+  isLoading: boolean
+  signUp: (userData: SignUpData) => Promise<void>
   signIn: (email: string, password: string, rememberMe?: boolean) => Promise<void>
-  signInWithPhone: (nameSearch: string, selectedUserId: string, phone: string, securityAnswer: string) => Promise<void>
-  signUp: (data: SignUpData) => Promise<void>
+  signInWithPhone: (data: PhoneSignInData) => Promise<void>
   signOut: () => Promise<void>
-  requestMagicLink: (email: string, purpose: string) => Promise<void>
-  verifyMagicLink: (token: string) => Promise<void>
   refreshToken: () => Promise<void>
-  updateOfflineStatus: (isOffline: boolean) => void
 }
 
 type SignUpData = {
@@ -63,484 +52,356 @@ type SignUpData = {
   email: string
   phone?: string
   password: string
-  role: "student" | "school_admin" | "volunteer" | "admin"
+  role: UserRole
   gender?: "male" | "female" | "non_binary"
   date_of_birth?: string
-  school_id?: string
+  school_id?: Id<"schools">
   grade?: string
   security_question?: string
   security_answer?: string
   position?: string
-  school_data?: any
+  school_data?: {
+    name: string
+    type: "Private" | "Public" | "Government Aided" | "International"
+    country: string
+    province?: string
+    district?: string
+    sector?: string
+    cell?: string
+    village?: string
+    contact_name: string
+    contact_email: string
+    contact_phone?: string
+  }
   high_school_attended?: string
   national_id?: string
+  safeguarding_certificate?: Id<"_storage">
 }
 
-const AuthContext = createContext<AuthContextType | null>(null)
+type PhoneSignInData = {
+  name_search: string
+  selected_user_id: Id<"users">
+  phone: string
+  security_answer: string
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 const TOKEN_KEY = "irank_auth_token"
-const USER_KEY = "irank_auth_user"
-const OFFLINE_EXPIRY_KEY = "irank_offline_expiry"
+const USER_KEY = "irank_user_data"
 
-function getDeviceInfo() {
-  return {
-    user_agent: navigator.userAgent,
-    platform: navigator.platform,
-    device_id: getDeviceId(),
-    ip_address: undefined,
-  }
-}
-
-function getDeviceId(): string {
-  let deviceId = localStorage.getItem("irank_device_id")
-  if (!deviceId) {
-    deviceId = crypto.randomUUID()
-    localStorage.setItem("irank_device_id", deviceId)
-  }
-  return deviceId
-}
-
-function persistAuthData(token: string, user: User, offlineExpiry: number) {
-  localStorage.setItem(TOKEN_KEY, token)
-  localStorage.setItem(USER_KEY, JSON.stringify(user))
-  localStorage.setItem(OFFLINE_EXPIRY_KEY, offlineExpiry.toString())
-}
-
-function clearAuthData() {
-  localStorage.removeItem(TOKEN_KEY)
-  localStorage.removeItem(USER_KEY)
-  localStorage.removeItem(OFFLINE_EXPIRY_KEY)
-}
-
-function getPersistedAuthData(): { token: string | null; user: User | null; isOfflineValid: boolean } {
-  const token = localStorage.getItem(TOKEN_KEY)
-  const userStr = localStorage.getItem(USER_KEY)
-  const offlineExpiryStr = localStorage.getItem(OFFLINE_EXPIRY_KEY)
-
-  if (!token || !userStr || !offlineExpiryStr) {
-    return { token: null, user: null, isOfflineValid: false }
-  }
-
-  const offlineExpiry = parseInt(offlineExpiryStr)
-  const isOfflineValid = Date.now() < offlineExpiry
-
-  try {
-    const user = JSON.parse(userStr)
-    return { token, user, isOfflineValid }
-  } catch {
-    clearAuthData()
-    return { token: null, user: null, isOfflineValid: false }
-  }
-}
-
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [authState, setAuthState] = useState<AuthState>({
-    user: null,
-    token: null,
-    isLoading: true,
-    isOffline: false,
-    isAuthenticated: false,
-    isOfflineValid: false,
-  })
-
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [token, setToken] = useState<string | null>(null)
+  const [user, setUser] = useState<User | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
-  const pathname = usePathname()
 
+  const signUpMutation = useMutation(api.functions.auth.signUp)
   const signInMutation = useMutation(api.functions.auth.signIn)
   const signInWithPhoneMutation = useMutation(api.functions.auth.signInWithPhone)
-  const signUpMutation = useMutation(api.functions.auth.signUp)
   const signOutMutation = useMutation(api.functions.auth.signOut)
   const refreshTokenMutation = useMutation(api.functions.auth.refreshToken)
-  const requestMagicLinkMutation = useMutation(api.functions.auth.requestMagicLink)
-  const verifyMagicLinkMutation = useMutation(api.functions.auth.verifyMagicLink)
 
-  const currentUserQuery = useQuery(
+  const currentUser = useQuery(
     api.functions.auth.getCurrentUser,
-    authState.token && !authState.isOffline ? { token: authState.token } : "skip"
+    token ? { token } : "skip"
   )
 
   useEffect(() => {
-    const handleOnline = () => {
-      setAuthState(prev => ({ ...prev, isOffline: false }))
-    }
+    const storedToken = localStorage.getItem(TOKEN_KEY)
+    const storedUser = localStorage.getItem(USER_KEY)
 
-    const handleOffline = () => {
-      setAuthState(prev => ({ ...prev, isOffline: true }))
-    }
-
-    window.addEventListener('online', handleOnline)
-    window.addEventListener('offline', handleOffline)
-
-    // Set initial state
-    setAuthState(prev => ({ ...prev, isOffline: !navigator.onLine }))
-
-    return () => {
-      window.removeEventListener('online', handleOnline)
-      window.removeEventListener('offline', handleOffline)
-    }
-  }, [])
-
-  useEffect(() => {
-    const { token, user, isOfflineValid } = getPersistedAuthData()
-
-    setAuthState(prev => ({
-      ...prev,
-      token,
-      user,
-      isAuthenticated: !!user,
-      isOfflineValid,
-      isLoading: false,
-    }))
-  }, [])
-
-  useEffect(() => {
-    if (currentUserQuery !== undefined && !authState.isOffline) {
-      if (currentUserQuery) {
-        const offlineExpiry = Date.now() + (2 * 24 * 60 * 60 * 1000)
-        persistAuthData(authState.token!, currentUserQuery, offlineExpiry)
-
-        setAuthState(prev => ({
-          ...prev,
-          user: currentUserQuery,
-          isAuthenticated: true,
-          isOfflineValid: true,
-          isLoading: false,
-        }))
-      } else if (authState.token) {
-        // Token is invalid, clear auth
-        clearAuthData()
-        setAuthState(prev => ({
-          ...prev,
-          user: null,
-          token: null,
-          isAuthenticated: false,
-          isOfflineValid: false,
-          isLoading: false,
-        }))
+    if (storedToken && storedUser) {
+      try {
+        setToken(storedToken)
+        setUser(JSON.parse(storedUser))
+      } catch (error) {
+        console.error("Error parsing stored user data:", error)
+        localStorage.removeItem(TOKEN_KEY)
+        localStorage.removeItem(USER_KEY)
       }
     }
-  }, [currentUserQuery, authState.isOffline, authState.token])
+    setIsLoading(false)
+  }, [])
 
-  const signIn = useCallback(async (email: string, password: string, rememberMe = false) => {
+  const getDeviceInfo = () => ({
+    user_agent: navigator.userAgent,
+    platform: navigator.platform,
+    device_id: localStorage.getItem("device_id") || generateDeviceId(),
+  })
+
+  const generateDeviceId = () => {
+    const deviceId = Math.random().toString(36).substring(2, 15) +
+      Math.random().toString(36).substring(2, 15)
+    localStorage.setItem("device_id", deviceId)
+    return deviceId
+  }
+
+  const handleSignOut = async () => {
+    if (token) {
+      try {
+        await signOutMutation({
+          token,
+          device_id: localStorage.getItem("device_id") || undefined,
+        })
+      } catch (error) {
+        console.error("Error during sign out:", error)
+      }
+    }
+
+    setToken(null)
+    setUser(null)
+    localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(USER_KEY)
+    router.push("/")
+  }
+
+  useEffect(() => {
+    if (currentUser !== undefined) {
+      if (currentUser) {
+        setUser({
+          ...currentUser,
+          role: currentUser.role as UserRole,
+        })
+        localStorage.setItem(USER_KEY, JSON.stringify(currentUser))
+      } else if (token) {
+        handleSignOut()
+      }
+      setIsLoading(false)
+    }
+  }, [currentUser, token])
+
+  const signUp = async (userData: SignUpData) => {
     try {
-      setAuthState(prev => ({ ...prev, isLoading: true }))
+      setIsLoading(true)
+      const result = await signUpMutation({
+        ...userData,
+        device_info: getDeviceInfo(),
+      })
 
+      if (result.success) {
+        toast.success(result.message)
+        router.push("/")
+      }
+    } catch (error: any) {
+      console.error("Sign up error:", error)
+      toast.error(error.message || "Failed to create account")
+      throw error
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const signIn = async (email: string, password: string, rememberMe = false) => {
+    try {
+      setIsLoading(true)
       const result = await signInMutation({
         email,
         password,
-        device_info: getDeviceInfo(),
         remember_me: rememberMe,
-      })
-
-      const offlineExpiry = Date.now() + (2 * 24 * 60 * 60 * 1000)
-      persistAuthData(result.token, result.user, offlineExpiry)
-
-      setAuthState(prev => ({
-        ...prev,
-        token: result.token,
-        user: result.user,
-        isAuthenticated: true,
-        isOfflineValid: true,
-        isLoading: false,
-      }))
-
-      toast.success("Signed in successfully!")
-
-      // Redirect to dashboard
-      const dashboardPath = getDashboardPath(result.user.role)
-      router.push(dashboardPath)
-
-    } catch (error: any) {
-      setAuthState(prev => ({ ...prev, isLoading: false }))
-      toast.error(error.message || "Failed to sign in")
-      throw error
-    }
-  }, [signInMutation, router])
-
-  const signInWithPhone = useCallback(async (
-    nameSearch: string,
-    selectedUserId: string,
-    phone: string,
-    securityAnswer: string
-  ) => {
-    try {
-      setAuthState(prev => ({ ...prev, isLoading: true }))
-
-      const result = await signInWithPhoneMutation({
-        name_search: nameSearch,
-        selected_user_id: selectedUserId,
-        phone,
-        security_answer: securityAnswer,
         device_info: getDeviceInfo(),
       })
 
-      const offlineExpiry = Date.now() + (2 * 24 * 60 * 60 * 1000)
-      persistAuthData(result.token, result.user, offlineExpiry)
+      if (result.success && result.token && result.user) {
+        setToken(result.token)
 
-      setAuthState(prev => ({
-        ...prev,
-        token: result.token,
-        user: result.user,
-        isAuthenticated: true,
-        isOfflineValid: true,
-        isLoading: false,
-      }))
+        // Transform the result to match our User type
+        const userWithSchool: User = {
+          ...result.user,
+          school: null, // We'll need to fetch school data separately if needed
+        } as User
 
-      toast.success("Signed in successfully!")
+        setUser(userWithSchool)
+        localStorage.setItem(TOKEN_KEY, result.token)
+        localStorage.setItem(USER_KEY, JSON.stringify(userWithSchool))
 
-      // Redirect to dashboard
-      const dashboardPath = getDashboardPath(result.user.role)
-      router.push(dashboardPath)
-
+        const dashboardPath = result.user.role === 'school_admin'
+          ? '/dashboard/school'
+          : `/dashboard/${result.user.role}`
+        router.push(dashboardPath)
+        toast.success("Signed in successfully!")
+      }
     } catch (error: any) {
-      setAuthState(prev => ({ ...prev, isLoading: false }))
+      console.error("Sign in error:", error)
       toast.error(error.message || "Failed to sign in")
       throw error
+    } finally {
+      setIsLoading(false)
     }
-  }, [signInWithPhoneMutation, router])
+  }
 
-  const signUp = useCallback(async (data: SignUpData) => {
+  const signInWithPhone = async (data: PhoneSignInData) => {
     try {
-      setAuthState(prev => ({ ...prev, isLoading: true }))
-
-      await signUpMutation({
+      setIsLoading(true)
+      const result = await signInWithPhoneMutation({
         ...data,
         device_info: getDeviceInfo(),
       })
 
-      setAuthState(prev => ({ ...prev, isLoading: false }))
-      toast.success("Account created successfully! Please wait for admin approval.")
+      if (result.success && result.token && result.user) {
+        setToken(result.token)
 
-      // Redirect to sign in
-      router.push(`/signin/${data.role}`)
+        const userWithSchool: User = {
+          ...result.user,
+          school: null,
+        } as User
 
-    } catch (error: any) {
-      setAuthState(prev => ({ ...prev, isLoading: false }))
-      toast.error(error.message || "Failed to create account")
-      throw error
-    }
-  }, [signUpMutation, router])
+        setUser(userWithSchool)
+        localStorage.setItem(TOKEN_KEY, result.token)
+        localStorage.setItem(USER_KEY, JSON.stringify(userWithSchool))
 
-  const signOut = useCallback(async () => {
-    try {
-      if (authState.token && !authState.isOffline) {
-        await signOutMutation({
-          token: authState.token,
-          device_id: getDeviceId(),
-        })
+        const dashboardPath = (result.user.role as UserRole) === 'school_admin'
+          ? '/dashboard/school'
+          : `/dashboard/${result.user.role}`;
+        router.push(dashboardPath)
+        toast.success("Signed in successfully!")
       }
-    } catch (error) {
-    } finally {
-      clearAuthData()
-      setAuthState({
-        user: null,
-        token: null,
-        isLoading: false,
-        isOffline: authState.isOffline,
-        isAuthenticated: false,
-        isOfflineValid: false,
-      })
-
-      toast.success("Signed out successfully")
-      router.push("/")
-    }
-  }, [authState.token, authState.isOffline, signOutMutation, router])
-
-  const requestMagicLink = useCallback(async (email: string, purpose: string) => {
-    try {
-      await requestMagicLinkMutation({ email, purpose })
-      toast.success("Magic link sent to your email!")
     } catch (error: any) {
-      toast.error(error.message || "Failed to send magic link")
+      console.error("Phone sign in error:", error)
+      toast.error(error.message || "Failed to sign in")
       throw error
+    } finally {
+      setIsLoading(false)
     }
-  }, [requestMagicLinkMutation])
+  }
 
-  const verifyMagicLink = useCallback(async (token: string) => {
+  const refreshToken = async () => {
+    if (!token) return
+
     try {
-      setAuthState(prev => ({ ...prev, isLoading: true }))
-
-      const result = await verifyMagicLinkMutation({
+      const result = await refreshTokenMutation({
         token,
         device_info: getDeviceInfo(),
       })
 
-      const offlineExpiry = Date.now() + (2 * 24 * 60 * 60 * 1000)
-      persistAuthData(result.token, result.user, offlineExpiry)
-
-      setAuthState(prev => ({
-        ...prev,
-        token: result.token,
-        user: result.user,
-        isAuthenticated: true,
-        isOfflineValid: true,
-        isLoading: false,
-      }))
-
-      toast.success("Signed in successfully!")
-
-      // Redirect to dashboard
-      const dashboardPath = getDashboardPath(result.user.role)
-      router.push(dashboardPath)
-
-    } catch (error: any) {
-      setAuthState(prev => ({ ...prev, isLoading: false }))
-      toast.error(error.message || "Invalid or expired magic link")
-      throw error
-    }
-  }, [verifyMagicLinkMutation, router])
-
-  const refreshToken = useCallback(async () => {
-    if (!authState.token || authState.isOffline) return
-
-    try {
-      const result = await refreshTokenMutation({
-        token: authState.token,
-        device_info: getDeviceInfo(),
-      })
-
-      const offlineExpiry = Date.now() + (2 * 24 * 60 * 60 * 1000)
-      if (authState.user) {
-        persistAuthData(result.token, authState.user, offlineExpiry)
+      if (result.success && result.token) {
+        setToken(result.token)
+        localStorage.setItem(TOKEN_KEY, result.token)
       }
-
-      setAuthState(prev => ({
-        ...prev,
-        token: result.token,
-        isOfflineValid: true,
-      }))
     } catch (error) {
-      await signOut()
+      console.error("Token refresh error:", error)
+      handleSignOut()
     }
-  }, [authState.token, authState.isOffline, authState.user, refreshTokenMutation, signOut])
+  }
 
-  const updateOfflineStatus = useCallback((isOffline: boolean) => {
-    setAuthState(prev => ({ ...prev, isOffline }))
-  }, [])
-
-
-  useEffect(() => {
-    if (!authState.token || authState.isOffline) return
-
-    const interval = setInterval(() => {
-      refreshToken()
-    }, 6 * 60 * 60 * 1000)
-
-    return () => clearInterval(interval)
-  }, [authState.token, authState.isOffline, refreshToken])
-
-  const contextValue: AuthContextType = {
-    user: authState.user,
-    token: authState.token,
-    isLoading: authState.isLoading,
-    isOffline: authState.isOffline,
-    isAuthenticated: authState.isAuthenticated,
-    isOfflineValid: authState.isOfflineValid,
+  const value: AuthContextType = {
+    user,
+    token,
+    isAuthenticated: !!token && !!user,
+    isLoading,
+    signUp,
     signIn,
     signInWithPhone,
-    signUp,
-    signOut,
-    requestMagicLink,
-    verifyMagicLink,
+    signOut: handleSignOut,
     refreshToken,
-    updateOfflineStatus,
   }
 
   return (
-    <AuthContext.Provider value={contextValue}>
+    <AuthContext.Provider value={value}>
       {children}
-      </AuthContext.Provider>
+    </AuthContext.Provider>
   )
 }
 
-function getDashboardPath(role: string): string {
-  switch (role) {
-    case "student":
-      return "/dashboard/student"
-    case "school_admin":
-      return "/dashboard/school"
-    case "volunteer":
-      return "/dashboard/volunteer"
-    case "admin":
-      return "/dashboard/admin"
-    default:
-      return "/dashboard"
-  }
-}
-
-export function useAuth(): AuthContextType {
+export function useAuth() {
   const context = useContext(AuthContext)
-  if (!context) {
+  if (context === undefined) {
     throw new Error("useAuth must be used within an AuthProvider")
   }
   return context
 }
 
-export function useRequireAuth(requiredRole?: string) {
-  const auth = useAuth()
+export function useRequireAuth(requiredRole?: UserRole) {
+  const { user, isAuthenticated, isLoading } = useAuth()
   const router = useRouter()
-  const pathname = usePathname()
 
   useEffect(() => {
-    if (auth.isLoading) return
-
-    if (!auth.isAuthenticated && !auth.isOfflineValid) {
+    if (!isLoading && !isAuthenticated) {
       router.push("/")
       return
     }
 
-    if (auth.user && requiredRole && auth.user.role !== requiredRole) {
-      const correctDashboard = getDashboardPath(auth.user.role)
-      if (pathname !== correctDashboard) {
-        router.push(correctDashboard)
-      }
+    if (!isLoading && user && requiredRole && user.role !== requiredRole) {
+      toast.error("Access denied. Insufficient permissions.")
+      router.push("/")
       return
     }
+  }, [isAuthenticated, isLoading, user, requiredRole, router])
 
-    if (auth.user && !auth.user.verified) {
-      toast.warning("Your account is pending admin approval. Some features may be limited.")
-    }
-  }, [auth.isLoading, auth.isAuthenticated, auth.isOfflineValid, auth.user, requiredRole, router, pathname])
-
-  return auth
+  return {
+    user,
+    isAuthenticated,
+    isLoading,
+    hasRequiredRole: !requiredRole || (user?.role === requiredRole),
+  }
 }
 
 export function useRoleAccess() {
   const { user } = useAuth()
 
-  const hasRole = useCallback((role: string | string[]) => {
-    if (!user) return false
-    if (Array.isArray(role)) {
-      return role.includes(user.role)
-    }
-    return user.role === role
-  }, [user])
+  const isAdmin = () => user?.role === "admin"
+  const isSchoolAdmin = () => user?.role === "school_admin"
+  const isVolunteer = () => user?.role === "volunteer"
+  const isStudent = () => user?.role === "student"
+  const isVerified = () => user?.verified === true
+  const isActive = () => user?.status === "active"
 
-  const isAdmin = useCallback(() => hasRole("admin"), [hasRole])
-  const isSchoolAdmin = useCallback(() => hasRole("school_admin"), [hasRole])
-  const isVolunteer = useCallback(() => hasRole("volunteer"), [hasRole])
-  const isStudent = useCallback(() => hasRole("student"), [hasRole])
-  const isVerified = useCallback(() => user?.verified ?? false, [user])
+  const canAccessAdminFeatures = () => isAdmin()
+  const canAccessSchoolFeatures = () => isAdmin() || isSchoolAdmin()
+  const canAccessVolunteerFeatures = () => isAdmin() || isVolunteer()
+  const canAccessStudentFeatures = () => isAdmin() || isSchoolAdmin() || isStudent()
 
   return {
-    hasRole,
+    user,
     isAdmin,
     isSchoolAdmin,
     isVolunteer,
     isStudent,
     isVerified,
+    isActive,
+    canAccessAdminFeatures,
+    canAccessSchoolFeatures,
+    canAccessVolunteerFeatures,
+    canAccessStudentFeatures,
   }
 }
 
 export function useOfflineSync() {
-  const { isOffline, isOfflineValid } = useAuth()
+  const [isOffline, setIsOffline] = useState(false)
+  const [isOfflineValid, setIsOfflineValid] = useState(false)
+  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "error">("idle")
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOffline(false)
+      setSyncStatus("syncing")
+      setTimeout(() => setSyncStatus("idle"), 2000)
+    }
+
+    const handleOffline = () => {
+      setIsOffline(true)
+      const hasOfflineData = localStorage.getItem(TOKEN_KEY) && localStorage.getItem(USER_KEY)
+      setIsOfflineValid(!!hasOfflineData)
+    }
+
+    window.addEventListener("online", handleOnline)
+    window.addEventListener("offline", handleOffline)
+
+    setIsOffline(!navigator.onLine)
+    if (!navigator.onLine) {
+      const hasOfflineData = localStorage.getItem(TOKEN_KEY) && localStorage.getItem(USER_KEY)
+      setIsOfflineValid(!!hasOfflineData)
+    }
+
+    return () => {
+      window.removeEventListener("online", handleOnline)
+      window.removeEventListener("offline", handleOffline)
+    }
+  }, [])
 
   return {
     isOffline,
     isOfflineValid,
-    canUseApp: !isOffline || isOfflineValid,
-    syncStatus: isOffline
-      ? (isOfflineValid ? "offline_valid" : "offline_expired")
-      : "online"
+    syncStatus,
   }
 }

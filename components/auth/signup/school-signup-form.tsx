@@ -17,12 +17,20 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Eye, EyeOff, ArrowRight, Loader2 } from "lucide-react"
 import { toast } from "sonner"
-import { useAuthActions } from "@convex-dev/auth/react"
 import { motion } from "framer-motion"
-import Image from "next/image";
-import { Label } from "@/components/ui/label";
+import Image from "next/image"
+import { Label } from "@/components/ui/label"
+import { useAuth } from "@/hooks/useAuth"
+import { LocationSelector } from "@/components/location-selector"
 
 const formSchema = z.object({
   name: z.string().min(2, { message: "Full name is required" }),
@@ -30,6 +38,20 @@ const formSchema = z.object({
   password: z.string().min(8, { message: "Password must be at least 8 characters" }),
   phone: z.string().min(10, { message: "Valid phone number is required" }),
   position: z.string().min(2, { message: "Position is required" }),
+  // School fields
+  schoolName: z.string().min(2, { message: "School name is required" }),
+  schoolType: z.enum(["Private", "Public", "Government Aided", "International"], {
+    required_error: "Please select school type"
+  }),
+  country: z.string().min(1, { message: "Country is required" }),
+  province: z.string().min(1, { message: "Province is required" }),
+  district: z.string().min(1, { message: "District is required" }),
+  sector: z.string().optional(),
+  cell: z.string().optional(),
+  village: z.string().optional(),
+  contactName: z.string().min(2, { message: "Contact name is required" }),
+  contactEmail: z.string().email({ message: "Valid contact email is required" }),
+  contactPhone: z.string().optional(),
 })
 
 type FormValues = z.infer<typeof formSchema>
@@ -41,7 +63,7 @@ const SchoolAdminSignUpForm = () => {
   const [error, setError] = useState<string | null>(null)
   const [agreeTerms, setAgreeTerms] = useState(false)
 
-  const { signIn } = useAuthActions()
+  const { signUp } = useAuth()
   const router = useRouter()
 
   const form = useForm<FormValues>({
@@ -52,11 +74,22 @@ const SchoolAdminSignUpForm = () => {
       password: "",
       phone: "",
       position: "",
+      schoolName: "",
+      schoolType: undefined,
+      country: "",
+      province: "",
+      district: "",
+      sector: "",
+      cell: "",
+      village: "",
+      contactName: "",
+      contactEmail: "",
+      contactPhone: "",
     },
   })
 
   const nextStep = async () => {
-    let fieldsToValidate: ("name" | "email" | "password" | "phone" | "position")[] = [];
+    let fieldsToValidate: (keyof FormValues)[] = [];
 
     switch(step) {
       case 1:
@@ -64,6 +97,12 @@ const SchoolAdminSignUpForm = () => {
         break;
       case 2:
         fieldsToValidate = ["phone", "position"];
+        break;
+      case 3:
+        fieldsToValidate = ["schoolName", "schoolType", "country", "province", "district"];
+        break;
+      case 4:
+        fieldsToValidate = ["contactName", "contactEmail"];
         break;
     }
 
@@ -87,20 +126,30 @@ const SchoolAdminSignUpForm = () => {
     setError(null)
 
     try {
-      const formData = new FormData()
-      formData.set("flow", "signUp")
-      formData.set("email", values.email)
-      formData.set("password", values.password)
-      formData.set("name", values.name)
-      formData.set("role", "school_admin")
-      formData.set("phone", values.phone)
-      formData.set("position", values.position)
-
-      await signIn("password", formData)
+      await signUp({
+        name: values.name,
+        email: values.email,
+        password: values.password,
+        role: "school_admin",
+        phone: values.phone,
+        position: values.position,
+        school_data: {
+          name: values.schoolName,
+          type: values.schoolType,
+          country: values.country,
+          province: values.province,
+          district: values.district,
+          sector: values.sector,
+          cell: values.cell,
+          village: values.village,
+          contact_name: values.contactName,
+          contact_email: values.contactEmail,
+          contact_phone: values.contactPhone,
+        },
+      })
 
       toast.success("Account created successfully!")
-
-      router.push("/dashboard/school")
+      router.push("/")
     } catch (error: any) {
       console.error("Signup error:", error)
       setError(error.message || "Failed to create account. Please try again.")
@@ -113,11 +162,11 @@ const SchoolAdminSignUpForm = () => {
   return (
     <div className="w-full max-w-md space-y-4">
       <Image
-          src="/images/logo.png"
-          alt="iRankHub Logo"
-          width={80}
-          height={80}
-          className="mx-auto md:hidden"
+        src="/images/logo.png"
+        alt="iRankHub Logo"
+        width={80}
+        height={80}
+        className="mx-auto md:hidden"
       />
       <div className="text-center">
         <h2 className="text-lg font-bold dark:text-primary-foreground">School Admin Sign Up</h2>
@@ -260,6 +309,218 @@ const SchoolAdminSignUpForm = () => {
                 )}
               />
 
+              <div className="flex space-x-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={prevStep}
+                  disabled={loading}
+                  className="flex-1"
+                >
+                  Back
+                </Button>
+                <Button
+                  type="button"
+                  onClick={nextStep}
+                  disabled={loading}
+                  className="flex-1"
+                >
+                  Next Step
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            </motion.div>
+          )}
+
+          {step === 3 && (
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-4"
+            >
+              <FormField
+                control={form.control}
+                name="schoolName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>School Name</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Enter school name"
+                        {...field}
+                        disabled={loading}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="schoolType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>School Type</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={loading}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select school type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="Private">Private</SelectItem>
+                        <SelectItem value="Public">Public</SelectItem>
+                        <SelectItem value="Government Aided">Government Aided</SelectItem>
+                        <SelectItem value="International">International</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Location Selector */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">School Location</Label>
+                <LocationSelector
+                  country={form.watch("country")}
+                  province={form.watch("province")}
+                  district={form.watch("district")}
+                  sector={form.watch("sector")}
+                  cell={form.watch("cell")}
+                  village={form.watch("village")}
+                  onCountryChange={(country) => {
+                    form.setValue("country", country)
+                    form.setValue("province", "")
+                    form.setValue("district", "")
+                    form.setValue("sector", "")
+                    form.setValue("cell", "")
+                    form.setValue("village", "")
+                  }}
+                  onProvinceChange={(province) => {
+                    form.setValue("province", province)
+                    form.setValue("district", "")
+                    form.setValue("sector", "")
+                    form.setValue("cell", "")
+                    form.setValue("village", "")
+                  }}
+                  onDistrictChange={(district) => {
+                    form.setValue("district", district)
+                    form.setValue("sector", "")
+                    form.setValue("cell", "")
+                    form.setValue("village", "")
+                  }}
+                  onSectorChange={(sector) => {
+                    form.setValue("sector", sector || "")
+                    form.setValue("cell", "")
+                    form.setValue("village", "")
+                  }}
+                  onCellChange={(cell) => {
+                    form.setValue("cell", cell || "")
+                    form.setValue("village", "")
+                  }}
+                  onVillageChange={(village) => {
+                    form.setValue("village", village || "")
+                  }}
+                  countryError={form.formState.errors.country?.message}
+                  provinceError={form.formState.errors.province?.message}
+                  districtError={form.formState.errors.district?.message}
+                  sectorError={form.formState.errors.sector?.message}
+                  cellError={form.formState.errors.cell?.message}
+                  villageError={form.formState.errors.village?.message}
+                  includeRwandaDetails={form.watch("country") === "RW"}
+                />
+              </div>
+
+              <div className="flex space-x-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={prevStep}
+                  disabled={loading}
+                  className="flex-1"
+                >
+                  Back
+                </Button>
+                <Button
+                  type="button"
+                  onClick={nextStep}
+                  disabled={loading}
+                  className="flex-1"
+                >
+                  Next Step
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            </motion.div>
+          )}
+
+          {step === 4 && (
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-4"
+            >
+              <FormField
+                control={form.control}
+                name="contactName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Contact Person Name</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Contact person's full name"
+                        {...field}
+                        disabled={loading}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="contactEmail"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Contact Email</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="email"
+                        placeholder="contact@school.com"
+                        {...field}
+                        disabled={loading}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="contactPhone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Contact Phone (Optional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="+250 7XXXXXXXX"
+                        {...field}
+                        disabled={loading}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               <div className="flex items-center space-x-2 pt-2">
                 <Checkbox
                   id="terms"
@@ -304,6 +565,12 @@ const SchoolAdminSignUpForm = () => {
                 </Button>
               </div>
             </motion.div>
+          )}
+
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/20 text-red-700 dark:text-red-300 p-3 rounded-md text-sm">
+              {error}
+            </div>
           )}
         </form>
       </Form>

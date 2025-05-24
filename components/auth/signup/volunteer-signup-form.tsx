@@ -26,20 +26,26 @@ import {
 } from "@/components/ui/select"
 import { Eye, EyeOff, ArrowRight, Loader2 } from "lucide-react"
 import { toast } from "sonner"
-import { useAuthActions } from "@convex-dev/auth/react"
 import { motion } from "framer-motion"
-import Image from "next/image";
-import { Label } from "@/components/ui/label";
+import Image from "next/image"
+import { useAuth } from "@/hooks/useAuth"
+import { VolunteerSchoolSelector } from "@/components/school-selector"
+import { FileUpload } from "@/components/file-upload"
+import DatePicker from "@/components/date-picker"
+import { Id } from "@/convex/_generated/dataModel"
+import { format } from "date-fns"
 
 const formSchema = z.object({
   name: z.string().min(2, { message: "Full name is required" }),
   email: z.string().email({ message: "Invalid email address" }),
   password: z.string().min(8, { message: "Password must be at least 8 characters" }),
-  dateOfBirth: z.string({ required_error: "Date of birth is required" }),
+  dateOfBirth: z.date({ required_error: "Date of birth is required" }),
   gender: z.enum(["male", "female", "non_binary"], {
     required_error: "Please select a gender"
   }),
   nationalId: z.string().min(5, { message: "National ID/Passport is required" }),
+  highSchoolAttended: z.string().min(2, { message: "High school attended is required" }),
+  safeguardingCertificate: z.string().min(1, { message: "Safeguarding certificate is required" }),
 })
 
 type FormValues = z.infer<typeof formSchema>
@@ -50,8 +56,9 @@ const VolunteerSignUpForm = () => {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [agreeTerms, setAgreeTerms] = useState(false)
+  const [safeguardingCertificateId, setSafeguardingCertificateId] = useState<Id<"_storage"> | null>(null)
 
-  const { signIn } = useAuthActions()
+  const { signUp } = useAuth()
   const router = useRouter()
 
   const form = useForm<FormValues>({
@@ -60,14 +67,16 @@ const VolunteerSignUpForm = () => {
       name: "",
       email: "",
       password: "",
-      dateOfBirth: "",
+      dateOfBirth: undefined,
       gender: undefined,
       nationalId: "",
+      highSchoolAttended: "",
+      safeguardingCertificate: "",
     },
   })
 
   const nextStep = async () => {
-    let fieldsToValidate: ("name" | "email" | "password" | "dateOfBirth" | "gender" | "nationalId")[] = [];
+    let fieldsToValidate: (keyof FormValues)[] = [];
 
     switch(step) {
       case 1:
@@ -75,6 +84,9 @@ const VolunteerSignUpForm = () => {
         break;
       case 2:
         fieldsToValidate = ["dateOfBirth", "gender", "nationalId"];
+        break;
+      case 3:
+        fieldsToValidate = ["highSchoolAttended", "safeguardingCertificate"];
         break;
     }
 
@@ -88,9 +100,20 @@ const VolunteerSignUpForm = () => {
     setStep(step - 1);
   };
 
+  const handleFileUploaded = (storageId: Id<"_storage">) => {
+    setSafeguardingCertificateId(storageId)
+    form.setValue("safeguardingCertificate", storageId)
+    form.clearErrors("safeguardingCertificate")
+  }
+
   const handleSignUp = async (values: FormValues) => {
     if (!agreeTerms) {
       toast.error("Please agree to the terms and conditions")
+      return
+    }
+
+    if (!safeguardingCertificateId) {
+      toast.error("Safeguarding certificate is required")
       return
     }
 
@@ -98,22 +121,20 @@ const VolunteerSignUpForm = () => {
     setError(null)
 
     try {
-      // Create the formData with volunteer fields
-      const formData = new FormData()
-      formData.set("flow", "signUp")
-      formData.set("email", values.email)
-      formData.set("password", values.password)
-      formData.set("name", values.name)
-      formData.set("role", "volunteer")
-      formData.set("dateOfBirth", values.dateOfBirth)
-      formData.set("gender", values.gender)
-      formData.set("nationalId", values.nationalId)
-
-      await signIn("password", formData)
+      await signUp({
+        name: values.name,
+        email: values.email,
+        password: values.password,
+        role: "volunteer",
+        date_of_birth: format(values.dateOfBirth, "yyyy-MM-dd"),
+        gender: values.gender,
+        national_id: values.nationalId,
+        high_school_attended: values.highSchoolAttended,
+        safeguarding_certificate: safeguardingCertificateId,
+      })
 
       toast.success("Account created successfully!")
-
-      router.push("/dashboard/volunteer")
+      router.push("/")
     } catch (error: any) {
       console.error("Signup error:", error)
       setError(error.message || "Failed to create account. Please try again.")
@@ -126,11 +147,11 @@ const VolunteerSignUpForm = () => {
   return (
     <div className="w-full max-w-md space-y-4">
       <Image
-          src="/images/logo.png"
-          alt="iRankHub Logo"
-          width={80}
-          height={80}
-          className="mx-auto md:hidden"
+        src="/images/logo.png"
+        alt="iRankHub Logo"
+        width={80}
+        height={80}
+        className="mx-auto md:hidden"
       />
       <div className="text-center">
         <h2 className="text-lg font-bold dark:text-primary-foreground">Volunteer Sign Up</h2>
@@ -245,10 +266,11 @@ const VolunteerSignUpForm = () => {
                   <FormItem>
                     <FormLabel>Date of Birth</FormLabel>
                     <FormControl>
-                      <Input
-                        type="date"
-                        {...field}
+                      <DatePicker
+                        date={field.value}
+                        onDateChange={(date) => field.onChange(date)}
                         disabled={loading}
+                        placeholder="Select your birth date"
                       />
                     </FormControl>
                     <FormMessage />
@@ -301,6 +323,75 @@ const VolunteerSignUpForm = () => {
                 )}
               />
 
+              <div className="flex space-x-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={prevStep}
+                  disabled={loading}
+                  className="flex-1"
+                >
+                  Back
+                </Button>
+                <Button
+                  type="button"
+                  onClick={nextStep}
+                  disabled={loading}
+                  className="flex-1"
+                >
+                  Next Step
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            </motion.div>
+          )}
+
+          {step === 3 && (
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-4"
+            >
+              <FormField
+                control={form.control}
+                name="highSchoolAttended"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>High School Attended</FormLabel>
+                    <FormControl>
+                      <VolunteerSchoolSelector
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        placeholder="Enter your high school name..."
+                        disabled={loading}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="safeguardingCertificate"
+                render={() => (
+                  <FormItem>
+                    <FileUpload
+                      onFileUploaded={handleFileUploaded}
+                      acceptedTypes={[".pdf", ".jpg", ".jpeg", ".png"]}
+                      maxSizeInMB={5}
+                      label="Safeguarding Certificate"
+                      description="Upload your safeguarding certificate. This is required for all volunteers."
+                      required={true}
+                      disabled={loading}
+                    />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               <div className="flex items-center space-x-2 pt-2">
                 <Checkbox
                   id="terms"
@@ -308,17 +399,16 @@ const VolunteerSignUpForm = () => {
                   onCheckedChange={(checked) => setAgreeTerms(checked as boolean)}
                   disabled={loading}
                 />
-                <Label
+                <label
                   htmlFor="terms"
                   className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                 >
-                  I agree to the
+                  I agree to the{" "}
                   <Link href="/terms" className="text-primary hover:underline">
                     terms and conditions
                   </Link>
-                </Label>
+                </label>
               </div>
-
 
               <div className="flex space-x-2 pt-2">
                 <Button
@@ -333,7 +423,7 @@ const VolunteerSignUpForm = () => {
                 <Button
                   type="submit"
                   className="flex-1"
-                  disabled={loading || !agreeTerms}
+                  disabled={loading || !agreeTerms || !safeguardingCertificateId}
                 >
                   {loading ? (
                     <span className="flex items-center justify-center">
@@ -346,6 +436,12 @@ const VolunteerSignUpForm = () => {
                 </Button>
               </div>
             </motion.div>
+          )}
+
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/20 text-red-700 dark:text-red-300 p-3 rounded-md text-sm">
+              {error}
+            </div>
           )}
         </form>
       </Form>

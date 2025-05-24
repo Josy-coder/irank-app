@@ -6,7 +6,7 @@ import { motion } from "framer-motion"
 import Image from "next/image"
 
 export default function VolunteerSignUp() {
-  const [volunteerImage, setVolunteerImage] = useState<string>("/images/judge-volunteer.jpg")
+  const [volunteerImage, setVolunteerImage] = useState<string>("")
 
   const volunteerImages = [
     "/images/volunteer1.jpg",

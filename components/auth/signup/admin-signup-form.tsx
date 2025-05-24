@@ -19,10 +19,10 @@ import {
 } from "@/components/ui/form"
 import { Eye, EyeOff, ArrowRight, Loader2 } from "lucide-react"
 import { toast } from "sonner"
-import { useAuthActions } from "@convex-dev/auth/react"
 import { motion } from "framer-motion"
-import Image from "next/image";
-import { Label } from "@/components/ui/label";
+import Image from "next/image"
+import { Label } from "@/components/ui/label"
+import { useAuth } from "@/hooks/useAuth"
 
 const formSchema = z.object({
   name: z.string().min(2, { message: "Full name is required" }),
@@ -41,7 +41,7 @@ const AdminSignUpForm = () => {
   const [error, setError] = useState<string | null>(null)
   const [agreeTerms, setAgreeTerms] = useState(false)
 
-  const { signIn } = useAuthActions()
+  const { signUp } = useAuth()
   const router = useRouter()
 
   const form = useForm<FormValues>({
@@ -87,20 +87,17 @@ const AdminSignUpForm = () => {
     setError(null)
 
     try {
-      const formData = new FormData()
-      formData.set("flow", "signUp")
-      formData.set("email", values.email)
-      formData.set("password", values.password)
-      formData.set("name", values.name)
-      formData.set("role", "admin")
-      formData.set("phone", values.phone)
-      formData.set("position", values.position)
-
-      await signIn("password", formData)
+      await signUp({
+        name: values.name,
+        email: values.email,
+        password: values.password,
+        role: "admin",
+        phone: values.phone,
+        position: values.position,
+      })
 
       toast.success("Account created successfully!")
-
-      router.push("/dashboard/admin")
+      router.push("/")
     } catch (error: any) {
       console.error("Signup error:", error)
       setError(error.message || "Failed to create account. Please try again.")
@@ -113,11 +110,11 @@ const AdminSignUpForm = () => {
   return (
     <div className="w-full max-w-md space-y-4">
       <Image
-          src="/images/logo.png"
-          alt="iRankHub Logo"
-          width={80}
-          height={80}
-          className="mx-auto md:hidden"
+        src="/images/logo.png"
+        alt="iRankHub Logo"
+        width={80}
+        height={80}
+        className="mx-auto md:hidden"
       />
       <div className="text-center">
         <h2 className="text-lg font-bold dark:text-primary-foreground">Admin Sign Up</h2>
@@ -304,6 +301,12 @@ const AdminSignUpForm = () => {
                 </Button>
               </div>
             </motion.div>
+          )}
+
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/20 text-red-700 dark:text-red-300 p-3 rounded-md text-sm">
+              {error}
+            </div>
           )}
         </form>
       </Form>

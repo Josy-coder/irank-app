@@ -10,8 +10,8 @@ import { AdvancedOfflineBanner } from "@/components/offline-banner";
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'iRankHub - World Schools Debate Platform',
-  description: 'A real-time, scalable platform for World Schools Debate and other formats',
+  title: 'iRankHub - Debate Platform',
+  description: 'Your Voice, Your Ideas, Your Impact – More Than Just Debates',
   icons: {
     icon: "/icons/favicon.ico",
   },

@@ -45,20 +45,6 @@ export default function AdminSignUp() {
                 </ul>
               </div>
 
-              <div className="bg-white/80 dark:bg-gray-800/80 p-4 rounded-lg shadow flex items-center space-x-4">
-                <div className="h-12 w-12 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
-                  A
-                </div>
-                <div>
-                  <h3 className="font-medium text-primary">
-                    Admin Account
-                  </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-300">
-                    For platform administrators
-                  </p>
-                </div>
-              </div>
-
               <div className="bg-white/80 dark:bg-gray-800/80 p-4 rounded-lg shadow">
                 <p className="text-sm text-gray-600 dark:text-gray-300">
                   &#34;Help build and maintain the platform that connects debaters worldwide. Your role is crucial in creating educational opportunities.&#34;

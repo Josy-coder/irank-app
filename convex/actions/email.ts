@@ -215,7 +215,6 @@ export const sendTournamentInvitationEmail = action({
   },
 });
 
-// Email template functions
 function getEmailContent(purpose: string, magicLinkUrl: string) {
   const baseUrl = process.env.CONVEX_SITE_URL || 'http://localhost:3000';
 

@@ -186,22 +186,6 @@ function SchoolSelector({
   )
 }
 
-// Hook for debouncing search input
-function useDebounce<T>(value: T, delay: number): T {
-  const [debouncedValue, setDebouncedValue] = React.useState<T>(value)
-
-  React.useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value)
-    }, delay)
-
-    return () => {
-      clearTimeout(handler)
-    }
-  }, [value, delay])
-
-  return debouncedValue
-}
 
 interface VolunteerSchoolSelectorProps {
   value?: string
@@ -222,7 +206,6 @@ function VolunteerSchoolSelector({
   const [search, setSearch] = React.useState(value || "")
   const debouncedSearch = useDebounce(search, 300)
 
-  // Query schools for suggestions
   const schoolsQuery = useQuery(api.functions.schools.getSchoolsForSelection, {
     search: debouncedSearch,
     limit: 20,

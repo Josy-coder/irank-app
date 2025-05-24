@@ -26,10 +26,12 @@ import {
 } from "@/components/ui/select"
 import { Eye, EyeOff, ArrowRight, Loader2 } from "lucide-react"
 import { toast } from "sonner"
-import { useAuthActions } from "@convex-dev/auth/react"
 import { motion } from "framer-motion"
-import Image from "next/image";
-import { Label } from "@/components/ui/label";
+import Image from "next/image"
+import { Label } from "@/components/ui/label"
+import { useAuth } from "@/hooks/useAuth"
+import { SchoolSelector } from "@/components/school-selector"
+import { Id } from "@/convex/_generated/dataModel"
 
 const formSchema = z.object({
   name: z.string().min(2, { message: "Full name is required" }),
@@ -40,6 +42,9 @@ const formSchema = z.object({
     required_error: "Please select a gender"
   }),
   grade: z.string().min(1, { message: "Grade/Class is required" }),
+  school_id: z.string().min(1, { message: "School selection is required" }),
+  security_question: z.string().min(5, { message: "Security question is required" }),
+  security_answer: z.string().min(2, { message: "Security answer is required" }),
 })
 
 type FormValues = z.infer<typeof formSchema>
@@ -51,7 +56,7 @@ const StudentSignUpForm = () => {
   const [error, setError] = useState<string | null>(null)
   const [agreeTerms, setAgreeTerms] = useState(false)
 
-  const { signIn } = useAuthActions()
+  const { signUp } = useAuth()
   const router = useRouter()
 
   const form = useForm<FormValues>({
@@ -63,11 +68,14 @@ const StudentSignUpForm = () => {
       phone: "",
       gender: undefined,
       grade: "",
+      school_id: "",
+      security_question: "",
+      security_answer: "",
     },
   })
 
   const nextStep = async () => {
-    let fieldsToValidate: ("name" | "email" | "password" | "phone" | "gender" | "grade")[] = [];
+    let fieldsToValidate: (keyof FormValues)[] = [];
 
     switch(step) {
       case 1:
@@ -75,6 +83,12 @@ const StudentSignUpForm = () => {
         break;
       case 2:
         fieldsToValidate = ["phone", "gender", "grade"];
+        break;
+      case 3:
+        fieldsToValidate = ["school_id"];
+        break;
+      case 4:
+        fieldsToValidate = ["security_question", "security_answer"];
         break;
     }
 
@@ -98,21 +112,21 @@ const StudentSignUpForm = () => {
     setError(null)
 
     try {
-      const formData = new FormData()
-      formData.set("flow", "signUp")
-      formData.set("email", values.email)
-      formData.set("password", values.password)
-      formData.set("name", values.name)
-      formData.set("role", "student")
-      formData.set("phone", values.phone)
-      formData.set("gender", values.gender)
-      formData.set("grade", values.grade)
-
-      await signIn("password", formData)
+      await signUp({
+        name: values.name,
+        email: values.email,
+        password: values.password,
+        role: "student",
+        phone: values.phone,
+        gender: values.gender,
+        grade: values.grade,
+        school_id: values.school_id as Id<"schools">,
+        security_question: values.security_question,
+        security_answer: values.security_answer,
+      })
 
       toast.success("Account created successfully!")
-
-      router.push("/dashboard/student")
+      router.push("/")
     } catch (error: any) {
       console.error("Signup error:", error)
       setError(error.message || "Failed to create account. Please try again.")
@@ -122,14 +136,25 @@ const StudentSignUpForm = () => {
     }
   }
 
+  const securityQuestions = [
+    "What was the name of your first pet?",
+    "What is your mother's maiden name?",
+    "What was the name of your elementary school?",
+    "What is your favorite book?",
+    "In what city were you born?",
+    "What is your favorite color?",
+    "What was your first car?",
+    "What is your favorite food?",
+  ]
+
   return (
     <div className="w-full max-w-md space-y-4">
       <Image
-          src="/images/logo.png"
-          alt="iRankHub Logo"
-          width={80}
-          height={80}
-          className="mx-auto md:hidden"
+        src="/images/logo.png"
+        alt="iRankHub Logo"
+        width={80}
+        height={80}
+        className="mx-auto md:hidden"
       />
       <div className="text-center">
         <h2 className="text-lg font-bold dark:text-primary-foreground">Student Sign Up</h2>
@@ -299,6 +324,134 @@ const StudentSignUpForm = () => {
                 )}
               />
 
+              <div className="flex space-x-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={prevStep}
+                  disabled={loading}
+                  className="flex-1"
+                >
+                  Back
+                </Button>
+                <Button
+                  type="button"
+                  onClick={nextStep}
+                  disabled={loading}
+                  className="flex-1"
+                >
+                  Next Step
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            </motion.div>
+          )}
+
+          {step === 3 && (
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-4"
+            >
+              <FormField
+                control={form.control}
+                name="school_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Select Your School</FormLabel>
+                    <FormControl>
+                      <SchoolSelector
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        placeholder="Search for your school..."
+                        disabled={loading}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="flex space-x-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={prevStep}
+                  disabled={loading}
+                  className="flex-1"
+                >
+                  Back
+                </Button>
+                <Button
+                  type="button"
+                  onClick={nextStep}
+                  disabled={loading}
+                  className="flex-1"
+                >
+                  Next Step
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            </motion.div>
+          )}
+
+          {step === 4 && (
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-4"
+            >
+              <FormField
+                control={form.control}
+                name="security_question"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Security Question</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                      disabled={loading}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a security question" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {securityQuestions.map((question, index) => (
+                          <SelectItem key={index} value={question}>
+                            {question}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="security_answer"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Security Answer</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Enter your answer"
+                        {...field}
+                        disabled={loading}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               <div className="flex items-center space-x-2 pt-2">
                 <Checkbox
                   id="terms"
@@ -316,7 +469,6 @@ const StudentSignUpForm = () => {
                   </Link>
                 </Label>
               </div>
-
 
               <div className="flex space-x-2 pt-2">
                 <Button
@@ -344,6 +496,12 @@ const StudentSignUpForm = () => {
                 </Button>
               </div>
             </motion.div>
+          )}
+
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/20 text-red-700 dark:text-red-300 p-3 rounded-md text-sm">
+              {error}
+            </div>
           )}
         </form>
       </Form>

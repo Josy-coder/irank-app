@@ -1,4 +1,4 @@
-import { action, internalAction, internalMutation, internalQuery, mutation, query } from "../_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import { Doc, Id } from "../_generated/dataModel";
@@ -116,7 +116,6 @@ async function verifySecureToken(token: string): Promise<any> {
       throw new Error('Token expired');
     }
 
-    // Check issuer and audience
     if (payload.iss !== 'iRankHub' || payload.aud !== 'iRankHub-users') {
       throw new Error('Invalid token claims');
     }
@@ -127,14 +126,12 @@ async function verifySecureToken(token: string): Promise<any> {
   }
 }
 
-// Generate secure random token for magic links
 function generateSecureRandomToken(): string {
   const array = new Uint8Array(32);
   crypto.getRandomValues(array);
   return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
-// All your existing functions with the crypto replacement
 export const signUp = mutation({
   args: {
     name: v.string(),
@@ -178,6 +175,7 @@ export const signUp = mutation({
     })),
     high_school_attended: v.optional(v.string()),
     national_id: v.optional(v.string()),
+    safeguarding_certificate: v.optional(v.id("_storage")),
     device_info: v.optional(v.object({
       user_agent: v.optional(v.string()),
       ip_address: v.optional(v.string()),
@@ -264,6 +262,7 @@ export const signUp = mutation({
       position: args.position,
       high_school_attended: args.high_school_attended,
       national_id: args.national_id,
+      safeguarding_certificate: args.safeguarding_certificate,
       mfa_enabled: false,
       biometric_enabled: false,
       failed_login_attempts: 0,
@@ -419,6 +418,7 @@ export const signIn = mutation({
     };
   },
 });
+
 
 export const signInWithPhone = mutation({
   args: {
@@ -730,50 +730,6 @@ export const signOut = mutation({
   },
 });
 
-export const requestMagicLink = action({
-  args: {
-    email: v.string(),
-    purpose: v.union(
-      v.literal("login"),
-      v.literal("password_reset"),
-      v.literal("account_recovery")
-    ),
-  },
-  handler: async (ctx, args) => {
-    const now = Date.now();
-
-    if (args.purpose === "login" || args.purpose === "account_recovery") {
-      const user = await ctx.runQuery(internal.functions.auth.getUserByEmail, {
-        email: args.email,
-      });
-
-      if (!user) {
-        return { success: true, message: "If the email exists, a magic link has been sent." };
-      }
-    }
-
-    const token = generateSecureRandomToken();
-    const expiresAt = now + (15 * 60 * 1000);
-
-    await ctx.runMutation(internal.functions.auth.createMagicLink, {
-      email: args.email,
-      token,
-      purpose: args.purpose,
-      expires_at: expiresAt,
-    });
-
-    await ctx.runAction(internal.functions.auth.sendMagicLinkEmail, {
-      email: args.email,
-      token,
-      purpose: args.purpose,
-    });
-
-    return {
-      success: true,
-      message: "Magic link sent to your email.",
-    };
-  },
-});
 
 export const verifyMagicLink = mutation({
   args: {
@@ -1279,80 +1235,6 @@ export const getPendingApprovals = query({
     };
   },
 });
-
-export const sendMagicLinkEmail = internalAction({
-  args: {
-    email: v.string(),
-    token: v.string(),
-    purpose: v.union(
-      v.literal("login"),
-      v.literal("password_reset"),
-      v.literal("account_recovery")
-    ),
-  },
-  handler: async (ctx, args) => {
-
-    const baseUrl = process.env.CONVEX_SITE_URL || "http://localhost:3000";
-    const magicLinkUrl = `${baseUrl}/auth/magic-link?token=${args.token}`;
-
-    const emailContent = {
-      to: args.email,
-      subject: getPurposeSubject(args.purpose),
-      html: generateEmailTemplate(args.purpose, magicLinkUrl),
-    };
-
-    // TODO: Integrate with Resend or your email service
-    console.log("Magic link email:", emailContent);
-
-
-    return { success: true };
-  },
-});
-
-function getPurposeSubject(purpose: string): string {
-  switch (purpose) {
-    case "login":
-      return "iRankHub - Magic Link Login";
-    case "password_reset":
-      return "iRankHub - Reset Your Password";
-    case "account_recovery":
-      return "iRankHub - Recover Your Account";
-    default:
-      return "iRankHub - Account Access";
-  }
-}
-
-function generateEmailTemplate(purpose: string, magicLinkUrl: string): string {
-  const heading = purpose === "login" ? "Sign in to iRankHub" :
-    purpose === "password_reset" ? "Reset your password" :
-      "Recover your account";
-
-  const description = purpose === "login" ? "Click the link below to sign in to your account:" :
-    purpose === "password_reset" ? "Click the link below to reset your password:" :
-      "Click the link below to recover your account:";
-
-  return `
-    <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif;">
-      <img src="${process.env.CONVEX_SITE_URL || 'http://localhost:3000'}/images/logo.png" alt="iRankHub Logo" style="display: block; margin: 0 auto 20px; width: 120px;">
-      <div style="background-color: #f9f9f9; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
-        <h2 style="color: #333; margin-top: 0;">${heading}</h2>
-        <p style="color: #666; line-height: 1.5;">${description}</p>
-        <div style="text-align: center; margin: 30px 0;">
-          <a href="${magicLinkUrl}" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
-            ${purpose === "login" ? "Sign In" : purpose === "password_reset" ? "Reset Password" : "Recover Account"}
-          </a>
-        </div>
-        <p style="color: #666; font-size: 14px;">This link will expire in 15 minutes. If you didn't request this link, you can safely ignore this email.</p>
-        <p style="color: #666; font-size: 14px;">If the button doesn't work, copy and paste this link into your browser:</p>
-        <p style="color: #007bff; font-size: 14px; word-break: break-all;">${magicLinkUrl}</p>
-      </div>
-      <div style="color: #999; font-size: 13px; text-align: center;">
-        <p>&copy; iRankHub. All rights reserved.</p>
-        <p>Kigali, Rwanda</p>
-      </div>
-    </div>
-  `;
-}
 
 export const updateSecurityQuestion = mutation({
   args: {

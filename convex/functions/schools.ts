@@ -1,4 +1,3 @@
-// convex/functions/schools.ts
 import { mutation, query } from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
@@ -60,7 +59,8 @@ export const getSchools = query({
 
     if (args.type) {
       filteredQuery = baseQuery.withIndex("by_type_status", (q) =>
-        q.eq("type", args.type).eq("status", effectiveStatus)
+        q.eq("type", args.type as "Private" | "Public" | "Government Aided" | "International")
+          .eq("status", effectiveStatus)
       );
     } else {
       filteredQuery = baseQuery.withIndex("by_status", (q) =>
@@ -76,17 +76,21 @@ export const getSchools = query({
 
     let locationFilteredQuery = filteredQuery;
 
-    if (args.country) {
-      if (args.province) {
+    if (typeof args.country === "string") {
+      const country = args.country;
+
+      if (typeof args.province === "string") {
+        const province = args.province;
         locationFilteredQuery = baseQuery.withIndex("by_country_province", (q) =>
-          q.eq("country", args.country).eq("province", args.province)
+          q.eq("country", country).eq("province", province)
         );
       } else {
         locationFilteredQuery = baseQuery.withIndex("by_country", (q) =>
-          q.eq("country", args.country)
+          q.eq("country", country)
         );
       }
     }
+
 
     if (args.search && args.search.trim() !== "") {
       const searchQuery = baseQuery.withSearchIndex("search_schools", (q) =>
@@ -110,7 +114,6 @@ export const getSchools = query({
     } else {
       const finalQuery = locationFilteredQuery || filteredQuery;
 
-      // Add status and verified filters to the final query
       const filteredResults = await finalQuery
         .filter(q =>
           q.and(
@@ -161,12 +164,11 @@ export const getSchoolsForAdmin = query({
     admin_token: v.string(),
   },
   handler: async (ctx, args) => {
-    // Verify admin session
-    const sessionResult = await ctx.runQuery(internal.functions.auth.verifySession, {
+    const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
       token: args.admin_token,
     });
 
-    if (!sessionResult.valid || sessionResult.user.role !== "admin") {
+    if (!sessionResult.valid || sessionResult.user?.role !== "admin") {
       throw new Error("Admin access required");
     }
 
@@ -174,17 +176,21 @@ export const getSchoolsForAdmin = query({
 
     let filteredQuery;
 
-    if (args.status && args.type) {
+    if (typeof args.status === "string" && typeof args.type === "string") {
+      const status = args.status;
+      const type = args.type;
       filteredQuery = baseQuery.withIndex("by_type_status", (q) =>
-        q.eq("type", args.type).eq("status", args.status)
+        q.eq("type", type).eq("status", status)
       );
-    } else if (args.status) {
+    } else if (typeof args.status === "string") {
+      const status = args.status;
       filteredQuery = baseQuery.withIndex("by_status", (q) =>
-        q.eq("status", args.status)
+        q.eq("status", status)
       );
-    } else if (args.verified !== undefined) {
+    } else if (typeof args.verified === "boolean") {
+      const verified = args.verified;
       filteredQuery = baseQuery.withIndex("by_verified", (q) =>
-        q.eq("verified", args.verified)
+        q.eq("verified", verified)
       );
     } else {
       filteredQuery = baseQuery;
@@ -205,7 +211,6 @@ export const getSchoolsForAdmin = query({
           cursor: args.page > 1 ? String(args.page) : null
         });
 
-      // Get created_by user info for each school
       const schoolsWithCreators = await Promise.all(
         paginatedSchools.page.map(async (school) => {
           let creator = null;
@@ -240,7 +245,6 @@ export const getSchoolsForAdmin = query({
           cursor: args.page > 1 ? String(args.page) : null
         });
 
-      // Get created_by user info for each school
       const schoolsWithCreators = await Promise.all(
         paginatedSchools.page.map(async (school) => {
           let creator = null;
@@ -291,12 +295,11 @@ export const createSchool = mutation({
     admin_token: v.string(),
   },
   handler: async (ctx, args) => {
-    // Verify admin session
-    const sessionResult = await ctx.runQuery(internal.functions.auth.verifySession, {
+    const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
       token: args.admin_token,
     });
 
-    if (!sessionResult.valid || sessionResult.user.role !== "admin") {
+    if (!sessionResult.valid || sessionResult.user?.role !== "admin") {
       throw new Error("Admin access required");
     }
 
@@ -316,7 +319,7 @@ export const createSchool = mutation({
       contact_phone: args.contact_phone,
       logo_url: args.logo_url,
       status: args.status || "active",
-      verified: args.verified || true, // Admin created schools are auto-verified
+      verified: args.verified || true,
       created_at: now,
     });
 
@@ -356,9 +359,8 @@ export const updateSchool = mutation({
     verified: v.optional(v.boolean()),
     token: v.string(),
   },
-  handler: async (ctx, args) => {
-    // Verify session
-    const sessionResult = await ctx.runQuery(internal.functions.auth.verifySession, {
+  handler: async (ctx, args): Promise<string> => {
+    const sessionResult: any = await ctx.runMutation(internal.functions.auth.verifySession, {
       token: args.token,
     });
 
@@ -371,14 +373,11 @@ export const updateSchool = mutation({
       throw new Error("School not found");
     }
 
-    // Check permissions
     if (sessionResult.user.role === "school_admin") {
-      // School admin can only update their own school
       if (sessionResult.user.school_id !== args.id) {
         throw new Error("You can only update your own school");
       }
 
-      // School admins cannot update status or verification
       if (args.status !== undefined || args.verified !== undefined) {
         throw new Error("Only administrators can update school status or verification");
       }
@@ -405,7 +404,6 @@ export const updateSchool = mutation({
     if (args.contact_phone !== undefined) updateData.contact_phone = args.contact_phone;
     if (args.logo_url !== undefined) updateData.logo_url = args.logo_url;
 
-    // Only admin can update these fields
     if (sessionResult.user.role === "admin") {
       if (args.type !== undefined) updateData.type = args.type;
       if (args.status !== undefined) updateData.status = args.status;
@@ -437,12 +435,11 @@ export const deleteSchool = mutation({
     admin_token: v.string(),
   },
   handler: async (ctx, args) => {
-    // Verify admin session
-    const sessionResult = await ctx.runQuery(internal.functions.auth.verifySession, {
+    const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
       token: args.admin_token,
     });
 
-    if (!sessionResult.valid || sessionResult.user.role !== "admin") {
+    if (!sessionResult.valid || sessionResult.user?.role !== "admin") {
       throw new Error("Admin access required");
     }
 
@@ -451,7 +448,6 @@ export const deleteSchool = mutation({
       throw new Error("School not found");
     }
 
-    // Check if school has associated users
     const associatedUsers = await ctx.db
       .query("users")
       .withIndex("by_school_id", (q) => q.eq("school_id", args.id))
@@ -461,7 +457,6 @@ export const deleteSchool = mutation({
       throw new Error("Cannot delete school with associated users. Please transfer or remove users first.");
     }
 
-    // Check if school has associated teams
     const associatedTeams = await ctx.db
       .query("teams")
       .withIndex("by_school_id", (q) => q.eq("school_id", args.id))
@@ -497,12 +492,11 @@ export const approveSchool = mutation({
     admin_token: v.string(),
   },
   handler: async (ctx, args) => {
-    // Verify admin session
-    const sessionResult = await ctx.runQuery(internal.functions.auth.verifySession, {
+    const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
       token: args.admin_token,
     });
 
-    if (!sessionResult.valid || sessionResult.user.role !== "admin") {
+    if (!sessionResult.valid || sessionResult.user?.role !== "admin") {
       throw new Error("Admin access required");
     }
 
@@ -526,8 +520,6 @@ export const approveSchool = mutation({
           verified: true,
           status: "active",
         });
-
-        // Create notification for school admin
         await ctx.db.insert("notifications", {
           user_id: school.created_by,
           title: "School Approved",
@@ -565,7 +557,6 @@ export const getSchoolsForSelection = query({
     const search = args.search?.trim() || "";
 
     if (search.length < 2) {
-      // Return top schools by name when no search
       const schools = await ctx.db
         .query("schools")
         .withIndex("by_verified", (q) => q.eq("verified", true))
@@ -583,7 +574,6 @@ export const getSchoolsForSelection = query({
       }));
     }
 
-    // Search schools by name
     const schools = await ctx.db
       .query("schools")
       .withSearchIndex("search_schools", (q) =>
@@ -612,19 +602,16 @@ export const getSchoolStatistics = query({
     admin_token: v.string(),
   },
   handler: async (ctx, args) => {
-    // Verify admin session
-    const sessionResult = await ctx.runQuery(internal.functions.auth.verifySession, {
+    const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
       token: args.admin_token,
     });
 
-    if (!sessionResult.valid || sessionResult.user.role !== "admin") {
+    if (!sessionResult.valid || sessionResult.user?.role !== "admin") {
       throw new Error("Admin access required");
     }
 
-    // Get all schools
     const allSchools = await ctx.db.query("schools").collect();
 
-    // Calculate statistics
     const stats = {
       total: allSchools.length,
       active: allSchools.filter(s => s.status === "active").length,
@@ -642,12 +629,10 @@ export const getSchoolStatistics = query({
       recent_registrations: 0,
     };
 
-    // Group by country
     allSchools.forEach(school => {
       stats.by_country[school.country] = (stats.by_country[school.country] || 0) + 1;
     });
 
-    // Count recent registrations (last 30 days)
     const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
     stats.recent_registrations = allSchools.filter(s =>
       s.created_at && s.created_at > thirtyDaysAgo
@@ -667,19 +652,17 @@ export const getPendingSchoolApprovals = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    // Verify admin session
-    const sessionResult = await ctx.runQuery(internal.functions.auth.verifySession, {
+    const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
       token: args.admin_token,
     });
 
-    if (!sessionResult.valid || sessionResult.user.role !== "admin") {
+    if (!sessionResult.valid || sessionResult.user?.role !== "admin") {
       throw new Error("Admin access required");
     }
 
     const page = args.page || 1;
     const limit = args.limit || 20;
 
-    // Get unverified schools
     const pendingSchools = await ctx.db
       .query("schools")
       .withIndex("by_verified", (q) => q.eq("verified", false))
@@ -689,7 +672,6 @@ export const getPendingSchoolApprovals = query({
         cursor: page > 1 ? String(page) : null
       });
 
-    // Get creator info for each school
     const schoolsWithCreators = await Promise.all(
       pendingSchools.page.map(async (school) => {
         let creator = null;
@@ -732,7 +714,7 @@ export const getSchoolsByUser = query({
     token: v.string(),
   },
   handler: async (ctx, args) => {
-    const sessionResult: any = await ctx.runQuery(internal.functions.auth.verifySession, {
+    const sessionResult: any = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
       token: args.token,
     });
 
@@ -741,7 +723,6 @@ export const getSchoolsByUser = query({
     }
 
     if (sessionResult.user.role === "school_admin") {
-      // Get user's school
       if (!sessionResult.user.school_id) {
         return [];
       }
@@ -754,15 +735,14 @@ export const getSchoolsByUser = query({
       const studentCount = await ctx.db
         .query("users")
         .withIndex("by_school_id_role", (q) =>
-          q.eq("school_id", school._id).eq("role", "student")
+          q.eq("school_id", school._id as any).eq("role", "student")
         )
         .collect()
         .then(users => users.length);
 
-      // Get team count
       const teamCount = await ctx.db
         .query("teams")
-        .withIndex("by_school_id", (q) => q.eq("school_id", school._id))
+        .withIndex("by_school_id", (q) => q.eq("school_id", school._id as any))
         .collect()
         .then(teams => teams.length);
 
@@ -772,26 +752,24 @@ export const getSchoolsByUser = query({
         team_count: teamCount,
       }];
     } else if (sessionResult.user.role === "admin") {
-      // Admin can see all schools
       const schools = await ctx.db
         .query("schools")
         .withIndex("by_created_by", (q) => q.eq("created_by", sessionResult.user.id))
         .collect();
 
-      // Get counts for each school
-      const schoolsWithCounts = await Promise.all(
+      return await Promise.all(
         schools.map(async (school) => {
           const studentCount = await ctx.db
             .query("users")
             .withIndex("by_school_id_role", (q) =>
-              q.eq("school_id", school._id).eq("role", "student")
+              q.eq("school_id", school._id as any).eq("role", "student")
             )
             .collect()
             .then(users => users.length);
 
           const teamCount = await ctx.db
             .query("teams")
-            .withIndex("by_school_id", (q) => q.eq("school_id", school._id))
+            .withIndex("by_school_id", (q) => q.eq("school_id", school._id as any))
             .collect()
             .then(teams => teams.length);
 
@@ -802,8 +780,6 @@ export const getSchoolsByUser = query({
           };
         })
       );
-
-      return schoolsWithCounts;
     }
 
     return [];
@@ -820,12 +796,11 @@ export const transferSchoolOwnership = mutation({
     admin_token: v.string(),
   },
   handler: async (ctx, args) => {
-    // Verify admin session
-    const sessionResult = await ctx.runQuery(internal.functions.auth.verifySession, {
+    const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
       token: args.admin_token,
     });
 
-    if (!sessionResult.valid || sessionResult.user.role !== "admin") {
+    if (!sessionResult.valid || sessionResult.user?.role !== "admin") {
       throw new Error("Admin access required");
     }
 
@@ -845,7 +820,6 @@ export const transferSchoolOwnership = mutation({
 
     const now = Date.now();
 
-    // Update school ownership
     await ctx.db.patch(args.school_id, {
       created_by: args.new_owner_id,
       updated_at: now,
@@ -869,7 +843,7 @@ export const transferSchoolOwnership = mutation({
       message: `You are now the administrator of ${school.name}.`,
       type: "system",
       is_read: false,
-      expires_at: now + (30 * 24 * 60 * 60 * 1000), // 30 days
+      expires_at: now + (30 * 24 * 60 * 60 * 1000),
       created_at: now,
     });
 
