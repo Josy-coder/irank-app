@@ -129,7 +129,7 @@ const SchoolAdminSignUpForm = () => {
       await signUp({
         name: values.name,
         email: values.email,
-        password: values.password,
+        password_hash: values.password,
         role: "school_admin",
         phone: values.phone,
         position: values.position,
@@ -148,12 +148,10 @@ const SchoolAdminSignUpForm = () => {
         },
       })
 
-      toast.success("Account created successfully!")
       router.push("/")
     } catch (error: any) {
       console.error("Signup error:", error)
       setError(error.message || "Failed to create account. Please try again.")
-      toast.error(error.message || "Failed to create account")
     } finally {
       setLoading(false)
     }

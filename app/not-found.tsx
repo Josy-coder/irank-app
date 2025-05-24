@@ -7,14 +7,14 @@ import { Undo2 } from "lucide-react"
 import Image from "next/image"
 import { Inter } from "next/font/google"
 import { cn } from "@/lib/utils"
-import { useQuery } from "convex/react"
-import { api } from "@/convex/_generated/api"
+import { useAuth } from "@/hooks/useAuth"
+import AppLoader from "@/components/app-loader";
 
 const inter = Inter({ subsets: ['latin'] })
 
 export default function NotFound() {
   const router = useRouter()
-  const currentUser = useQuery(api.functions.users.getCurrentUser)
+  const { user, isAuthenticated, isLoading } = useAuth()
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -22,28 +22,53 @@ export default function NotFound() {
   }, [])
 
   const handleNavigateBack = () => {
-    if (currentUser) {
-      const dashboardPath = `/dashboard/${currentUser.role === 'school_admin' ? 'school' : currentUser.role}`
+    if (isAuthenticated && user) {
+      let dashboardPath: string
+
+      switch (user.role) {
+        case "admin":
+          dashboardPath = "/dashboard/admin"
+          break
+        case "school_admin":
+          dashboardPath = "/dashboard/school"
+          break
+        case "volunteer":
+          dashboardPath = "/dashboard/volunteer"
+          break
+        case "student":
+          dashboardPath = "/dashboard/student"
+          break
+        default:
+          dashboardPath = "/"
+      }
+
       router.push(dashboardPath)
     } else {
       router.push("/")
     }
   }
 
-  if (!mounted) {
-    return null
+  if (!mounted || isLoading) {
+    return (
+        <AppLoader />
+    )
   }
 
   return (
     <div className="bg-background min-h-screen grid place-content-center">
-      <h1 className={cn("text-lg sm:text-2xl md:text-4xl text-center font-bold mb-2 text-foreground ", inter.className)}>Oops!</h1>
-      <h2 className={cn("text-base sm:text-xl md:text-3xl mb-8 text-center font-semibold text-foreground ", inter.className)}>Welcome to 70&apos;s</h2>
+      <h1 className={cn("text-lg sm:text-2xl md:text-4xl text-center font-bold mb-2 text-foreground", inter.className)}>
+        Oops!
+      </h1>
+      <h2 className={cn("text-base sm:text-xl md:text-3xl mb-8 text-center font-semibold text-foreground", inter.className)}>
+        Welcome to 70&apos;s
+      </h2>
+
       <div className="w-[600px] h-[400px] relative">
         <div className="w-full h-full z-0 relative">
           <Image
             src="/images/dots-and-stars.png"
             alt="Background pattern"
-            layout="fill"
+            fill
             className="w-full h-full object-cover"
           />
         </div>
@@ -52,21 +77,32 @@ export default function NotFound() {
             <Image
               src="/images/peeps.png"
               alt="70's themed people"
-              layout="fill"
-              objectFit="contain"
+              fill
+              className="object-contain"
             />
           </div>
         </div>
       </div>
+
       <div className="mx-auto mt-4 flex items-center">
         <Button
           onClick={handleNavigateBack}
           className="flex items-center justify-center"
         >
           <Undo2 size={20} className="mr-2" />
-          Back 2020s
+          {isAuthenticated && user ? (
+            `Back to ${user.role === 'school_admin' ? 'School' : user.role.charAt(0).toUpperCase() + user.role.slice(1)} Dashboard`
+          ) : (
+            "Back to Home"
+          )}
         </Button>
       </div>
+
+      {process.env.NODE_ENV === 'development' && isAuthenticated && user && (
+        <div className="mt-4 text-center text-sm text-muted-foreground">
+          Logged in as: {user.name} ({user.role})
+        </div>
+      )}
     </div>
   )
 }

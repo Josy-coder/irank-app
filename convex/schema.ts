@@ -5,8 +5,8 @@ export default defineSchema({
   auth_sessions: defineTable({
     user_id: v.id("users"),
     session_token: v.string(),
-    device_id: v.optional(v.string()),
     device_info: v.optional(v.object({
+      device_id: v.optional(v.string()),
       user_agent: v.optional(v.string()),
       ip_address: v.optional(v.string()),
       platform: v.optional(v.string()),
@@ -19,7 +19,7 @@ export default defineSchema({
     .index("by_user_id", ["user_id"])
     .index("by_session_token", ["session_token"])
     .index("by_expires_at", ["expires_at"])
-    .index("by_user_id_device_id", ["user_id", "device_id"]),
+    .index("by_user_id_device_id", ["user_id", "device_info.device_id"]),
 
   magic_links: defineTable({
     email: v.string(),

@@ -29,17 +29,6 @@ type CurrentUserResponse = {
   } | null;
 } | null;
 
-async function hashPassword(password: string): Promise<string> {
-  const bcrypt = await import('bcryptjs');
-  const saltRounds = 12;
-  return await bcrypt.hash(password, saltRounds);
-}
-
-async function verifyPassword(password: string, hash: string): Promise<boolean> {
-  const bcrypt = await import('bcryptjs');
-  return await bcrypt.compare(password, hash);
-}
-
 async function generateSecureToken(payload: any): Promise<string> {
   const header = {
     alg: "HS256",
@@ -73,7 +62,13 @@ async function generateSecureToken(payload: any): Promise<string> {
     new TextEncoder().encode(`${encodedHeader}.${encodedPayload}`)
   );
 
-  const encodedSignature = btoa(String.fromCharCode(...new Uint8Array(signature)));
+  const byteArray = new Uint8Array(signature);
+  let binary = '';
+  for (let i = 0; i < byteArray.length; i++) {
+    binary += String.fromCharCode(byteArray[i]);
+  }
+  const encodedSignature = btoa(binary);
+
 
   return `${encodedHeader}.${encodedPayload}.${encodedSignature}`;
 }
@@ -86,7 +81,7 @@ async function verifySecureToken(token: string): Promise<any> {
       throw new Error('Invalid token format');
     }
 
-    const secret = process.env.JWT_SECRET_KEY || 'your-secret-key-change-in-production';
+    const secret = process.env.JWT_SECRET_KEY!;
     const key = await crypto.subtle.importKey(
       'raw',
       new TextEncoder().encode(secret),
@@ -126,18 +121,12 @@ async function verifySecureToken(token: string): Promise<any> {
   }
 }
 
-function generateSecureRandomToken(): string {
-  const array = new Uint8Array(32);
-  crypto.getRandomValues(array);
-  return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
-}
-
 export const signUp = mutation({
   args: {
     name: v.string(),
     email: v.string(),
     phone: v.optional(v.string()),
-    password: v.string(),
+    password_hash: v.string(),
     role: v.union(
       v.literal("student"),
       v.literal("school_admin"),
@@ -153,7 +142,7 @@ export const signUp = mutation({
     school_id: v.optional(v.id("schools")),
     grade: v.optional(v.string()),
     security_question: v.optional(v.string()),
-    security_answer: v.optional(v.string()),
+    security_answer_hash: v.optional(v.string()),
     position: v.optional(v.string()),
     school_data: v.optional(v.object({
       name: v.string(),
@@ -210,7 +199,7 @@ export const signUp = mutation({
       if (!args.school_id) {
         throw new Error("School selection is required for students");
       }
-      if (!args.phone || !args.security_question || !args.security_answer) {
+      if (!args.phone || !args.security_question || !args.security_answer_hash) {
         throw new Error("Phone and security question are required for students");
       }
     }
@@ -224,8 +213,6 @@ export const signUp = mutation({
         throw new Error("High school and national ID are required for volunteers");
       }
     }
-
-    const password_hash = await hashPassword(args.password);
 
     let school_id = args.school_id;
     if (args.role === "school_admin" && args.school_data) {
@@ -251,7 +238,7 @@ export const signUp = mutation({
       name: args.name,
       email: args.email,
       phone: args.phone,
-      password_hash,
+      password_hash: args.password_hash,
       role: args.role,
       school_id,
       status: "inactive",
@@ -269,12 +256,11 @@ export const signUp = mutation({
       created_at: now,
     });
 
-    if (args.role === "student" && args.security_question && args.security_answer) {
-      const answer_hash = await hashPassword(args.security_answer.toLowerCase().trim());
+    if (args.role === "student" && args.security_question && args.security_answer_hash) {
       await ctx.db.insert("security_questions", {
         user_id: userId,
         question: args.security_question,
-        answer_hash,
+        answer_hash: args.security_answer_hash,
         created_at: now,
       });
     }
@@ -311,7 +297,7 @@ export const signUp = mutation({
 export const signIn = mutation({
   args: {
     email: v.string(),
-    password: v.string(),
+    password_hash: v.string(),
     device_info: v.optional(v.object({
       user_agent: v.optional(v.string()),
       ip_address: v.optional(v.string()),
@@ -337,7 +323,7 @@ export const signIn = mutation({
       throw new Error(`Account locked. Try again in ${remainingTime} minutes.`);
     }
 
-    const isValidPassword = await verifyPassword(args.password, user.password_hash);
+    const isValidPassword = user.password_hash === args.password_hash;
 
     if (!isValidPassword) {
       const failedAttempts = (user.failed_login_attempts || 0) + 1;
@@ -384,7 +370,6 @@ export const signIn = mutation({
     await ctx.db.insert("auth_sessions", {
       user_id: user._id,
       session_token: sessionToken,
-      device_id: args.device_info?.device_id,
       device_info: args.device_info,
       expires_at: expiresAt,
       last_used_at: now,
@@ -419,13 +404,12 @@ export const signIn = mutation({
   },
 });
 
-
 export const signInWithPhone = mutation({
   args: {
     name_search: v.string(),
     selected_user_id: v.id("users"),
     phone: v.string(),
-    security_answer: v.string(),
+    security_answer_hash: v.string(),
     device_info: v.optional(v.object({
       user_agent: v.optional(v.string()),
       ip_address: v.optional(v.string()),
@@ -456,10 +440,7 @@ export const signInWithPhone = mutation({
       throw new Error("Security question not found");
     }
 
-    const isValidAnswer = await verifyPassword(
-      args.security_answer.toLowerCase().trim(),
-      securityQuestion.answer_hash
-    );
+    const isValidAnswer = securityQuestion.answer_hash === args.security_answer_hash;
 
     if (!isValidAnswer) {
       const failedAttempts = (user.failed_login_attempts || 0) + 1;
@@ -499,7 +480,6 @@ export const signInWithPhone = mutation({
     await ctx.db.insert("auth_sessions", {
       user_id: user._id,
       session_token: sessionToken,
-      device_id: args.device_info?.device_id,
       device_info: args.device_info,
       expires_at: expiresAt,
       last_used_at: now,
@@ -716,7 +696,7 @@ export const signOut = mutation({
         const deviceSessions = await ctx.db
           .query("auth_sessions")
           .withIndex("by_user_id_device_id", (q) =>
-            q.eq("user_id", session.user_id).eq("device_id", args.device_id!)
+            q.eq("user_id", session.user_id).eq("device_info.device_id", args.device_id!)
           )
           .collect();
 
@@ -790,7 +770,6 @@ export const verifyMagicLink = mutation({
     await ctx.db.insert("auth_sessions", {
       user_id: user._id,
       session_token: sessionToken,
-      device_id: args.device_info?.device_id,
       device_info: args.device_info,
       expires_at: expiresAt,
       last_used_at: now,
@@ -798,7 +777,6 @@ export const verifyMagicLink = mutation({
       created_at: now,
     });
 
-    // Update last login
     await ctx.db.patch(user._id, {
       last_login_at: now,
     });
@@ -830,10 +808,70 @@ export const verifyMagicLink = mutation({
   },
 });
 
+export const updateSecurityQuestion = mutation({
+  args: {
+    question: v.string(),
+    answer_hash: v.string(),
+    current_password_hash: v.string(),
+    token: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
+      token: args.token,
+    });
+
+    if (!sessionResult.valid || sessionResult.user?.role !== "student") {
+      throw new Error("Student access required");
+    }
+
+    const user = await ctx.db.get(sessionResult.user.id);
+    if (!user || !("password_hash" in user)) {
+      throw new Error("Invalid user record");
+    }
+
+    const isPasswordValid = user.password_hash === args.current_password_hash;
+    if (!isPasswordValid) {
+      throw new Error("Current password is incorrect");
+    }
+
+    const existingQuestion = await ctx.db
+      .query("security_questions")
+      .withIndex("by_user_id", (q) => q.eq("user_id", user._id))
+      .first();
+
+    const now = Date.now();
+
+    if (existingQuestion) {
+      await ctx.db.patch(existingQuestion._id, {
+        question: args.question,
+        answer_hash: args.answer_hash,
+        updated_at: now,
+      });
+    } else {
+      await ctx.db.insert("security_questions", {
+        user_id: user._id,
+        question: args.question,
+        answer_hash: args.answer_hash,
+        created_at: now,
+      });
+    }
+
+    await ctx.runMutation(internal.functions.audit.createAuditLog, {
+      user_id: user._id,
+      action: "user_updated",
+      resource_type: "users",
+      resource_id: user._id,
+      description: "Student updated security question",
+    });
+
+    return { success: true };
+  },
+});
+
 export const changePassword = mutation({
   args: {
-    current_password: v.string(),
-    new_password: v.string(),
+    current_password_hash: v.string(),
+    new_password_hash: v.string(),
     token: v.string(),
   },
   handler: async (ctx, args) => {
@@ -850,18 +888,15 @@ export const changePassword = mutation({
       throw new Error("User not found or invalid user record");
     }
 
-    const isCurrentPasswordValid = await verifyPassword(args.current_password, user.password_hash);
+    const isCurrentPasswordValid = user.password_hash === args.current_password_hash;
     if (!isCurrentPasswordValid) {
       throw new Error("Current password is incorrect");
     }
 
-    const newPasswordHash = await hashPassword(args.new_password);
-
     await ctx.db.patch(user._id, {
-      password_hash: newPasswordHash,
+      password_hash: args.new_password_hash,
       password_changed_at: Date.now(),
     });
-
     const userSessions = await ctx.db
       .query("auth_sessions")
       .withIndex("by_user_id", (q) => q.eq("user_id", user._id))
@@ -1233,71 +1268,6 @@ export const getPendingApprovals = query({
       hasMore: pendingUsers.continueCursor !== null,
       nextPage: pendingUsers.continueCursor,
     };
-  },
-});
-
-export const updateSecurityQuestion = mutation({
-  args: {
-    question: v.string(),
-    answer: v.string(),
-    current_password: v.string(),
-    token: v.string(),
-  },
-  handler: async (ctx, args) => {
-    // Verify session
-    const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
-      token: args.token,
-    });
-
-    if (!sessionResult.valid || sessionResult.user?.role !== "student") {
-      throw new Error("Student access required");
-    }
-
-    const user = await ctx.db.get(sessionResult.user.id);
-    if (!user || !("password_hash" in user)) {
-      throw new Error("Invalid user record");
-    }
-
-    const isPasswordValid = await verifyPassword(args.current_password, user.password_hash);
-    if (!isPasswordValid) {
-      throw new Error("Current password is incorrect");
-    }
-
-    const answerHash = await hashPassword(args.answer.toLowerCase().trim());
-
-    const existingQuestion = await ctx.db
-      .query("security_questions")
-      .withIndex("by_user_id", (q) => q.eq("user_id", user._id))
-      .first();
-
-    const now = Date.now();
-
-    if (existingQuestion) {
-
-      await ctx.db.patch(existingQuestion._id, {
-        question: args.question,
-        answer_hash: answerHash,
-        updated_at: now,
-      });
-    } else {
-
-      await ctx.db.insert("security_questions", {
-        user_id: user._id,
-        question: args.question,
-        answer_hash: answerHash,
-        created_at: now,
-      });
-    }
-
-    await ctx.runMutation(internal.functions.audit.createAuditLog, {
-      user_id: user._id,
-      action: "user_updated",
-      resource_type: "users",
-      resource_id: user._id,
-      description: "Student updated security question",
-    });
-
-    return { success: true };
   },
 });
 

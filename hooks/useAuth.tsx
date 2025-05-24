@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { api } from "@/convex/_generated/api"
 import { Id } from "@/convex/_generated/dataModel"
 import { toast } from "sonner"
+import { hashPassword } from "@/lib/password";
 
 type UserRole = "student" | "school_admin" | "volunteer" | "admin"
 
@@ -51,14 +52,14 @@ type SignUpData = {
   name: string
   email: string
   phone?: string
-  password: string
+  password_hash: string
   role: UserRole
   gender?: "male" | "female" | "non_binary"
   date_of_birth?: string
   school_id?: Id<"schools">
   grade?: string
   security_question?: string
-  security_answer?: string
+  security_answer_hash?: string
   position?: string
   school_data?: {
     name: string
@@ -174,8 +175,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signUp = async (userData: SignUpData) => {
     try {
       setIsLoading(true)
+
+      const password_hash = await hashPassword(userData.password_hash);
+      const security_answer_hash = userData.security_answer_hash
+        ? await hashPassword(userData.security_answer_hash.toLowerCase().trim())
+        : undefined;
+
       const result = await signUpMutation({
         ...userData,
+        password_hash,
+        security_answer_hash,
         device_info: getDeviceInfo(),
       })
 
@@ -191,13 +200,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false)
     }
   }
-
   const signIn = async (email: string, password: string, rememberMe = false) => {
     try {
       setIsLoading(true)
+
+      const password_hash = await hashPassword(password)
+
       const result = await signInMutation({
         email,
-        password,
+        password_hash,
         remember_me: rememberMe,
         device_info: getDeviceInfo(),
       })
@@ -205,10 +216,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (result.success && result.token && result.user) {
         setToken(result.token)
 
-        // Transform the result to match our User type
         const userWithSchool: User = {
           ...result.user,
-          school: null, // We'll need to fetch school data separately if needed
+          school: null,
         } as User
 
         setUser(userWithSchool)
@@ -233,8 +243,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithPhone = async (data: PhoneSignInData) => {
     try {
       setIsLoading(true)
+      const security_answer_hash = await hashPassword(data.security_answer.toLowerCase().trim())
+
       const result = await signInWithPhoneMutation({
         ...data,
+        security_answer_hash,
         device_info: getDeviceInfo(),
       })
 

@@ -140,51 +140,6 @@ const SignInForm = ({ role }: SignInFormProps) => {
     }
   }
 
-  const getRoleHeading = () => {
-    switch (role) {
-      case "student":
-        return "Welcome Back, Student!"
-      case "school_admin":
-        return "School Admin Portal"
-      case "volunteer":
-        return "Volunteer Sign In"
-      case "admin":
-        return "Admin Dashboard Access"
-      default:
-        return "Sign In to iRankHub"
-    }
-  }
-
-  const getRoleImage = () => {
-    switch (role) {
-      case "student":
-        return "/images/student-signup.png"
-      case "school_admin":
-        return "/images/school-signup.png"
-      case "volunteer":
-        return "/images/volunteer1.jpg"
-      case "admin":
-        return "/images/admin-signup.png"
-      default:
-        return "/images/volunteer3.jpg"
-    }
-  }
-
-  const getRoleDescription = () => {
-    switch (role) {
-      case "student":
-        return "Access your debate competitions and track your progress"
-      case "school_admin":
-        return "Manage your school's debate teams and tournament participation"
-      case "volunteer":
-        return "Access your judging assignments and feedback history"
-      case "admin":
-        return "Manage the iRankHub platform and user accounts"
-      default:
-        return "Sign in to continue"
-    }
-  }
-
   return (
     <div className="flex min-h-screen ">
       <div className="w-full flex items-center justify-center p-6">
