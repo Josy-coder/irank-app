@@ -18,6 +18,7 @@ interface DatePickerProps {
   disabled?: boolean
   placeholder?: string
   className?: string
+  maxDate?: Date
 }
 
 export default function DatePicker({
@@ -25,7 +26,8 @@ export default function DatePicker({
                                      onDateChange,
                                      disabled,
                                      placeholder = "Pick a date",
-                                     className
+                                     className,
+                                     maxDate
                                    }: DatePickerProps) {
   return (
     <Popover>
@@ -48,7 +50,7 @@ export default function DatePicker({
           mode="single"
           selected={date}
           onSelect={onDateChange}
-          disabled={(date) => date > new Date() || date < new Date("1900-01-01")}
+          disabled={(date) => date > (maxDate || new Date()) || date < new Date("1900-01-01")}
           autoFocus
         />
       </PopoverContent>

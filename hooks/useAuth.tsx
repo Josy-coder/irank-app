@@ -83,7 +83,7 @@ type PhoneSignInData = {
   name_search: string
   selected_user_id: Id<"users">
   phone: string
-  security_answer: string
+  security_answer_hash: string
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -243,7 +243,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithPhone = async (data: PhoneSignInData) => {
     try {
       setIsLoading(true)
-      const security_answer_hash = await hashPassword(data.security_answer.toLowerCase().trim())
+      const security_answer_hash = await hashPassword(data.security_answer_hash.toLowerCase().trim())
 
       const result = await signInWithPhoneMutation({
         ...data,

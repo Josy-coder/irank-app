@@ -22,7 +22,14 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs"
-import { Eye, EyeOff, Loader2, Search } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Eye, EyeOff, Loader2, Search, Users } from "lucide-react"
 import { Label } from "@/components/ui/label"
 import { motion } from "framer-motion"
 import Image from "next/image"
@@ -30,6 +37,7 @@ import { useAuth } from "@/hooks/useAuth"
 import { useQuery } from "convex/react"
 import { api } from "@/convex/_generated/api"
 import { useDebounce } from "@/hooks/use-debounce"
+import { cn } from "@/lib/utils"
 
 type UserRole = "student" | "school_admin" | "volunteer" | "admin"
 
@@ -60,6 +68,7 @@ const SignInForm = ({ role }: SignInFormProps) => {
   const [authMethod, setAuthMethod] = useState<"email" | "phone">("email")
   const [, setSelectedStudent] = useState<any>(null)
   const [securityQuestion, setSecurityQuestion] = useState<string>("")
+  const [dialogOpen, setDialogOpen] = useState(false)
 
   const { signIn, signInWithPhone } = useAuth()
 
@@ -130,7 +139,7 @@ const SignInForm = ({ role }: SignInFormProps) => {
         name_search: values.nameSearch,
         selected_user_id: values.selectedUserId as any,
         phone: values.phone,
-        security_answer: values.securityAnswer,
+        security_answer_hash: values.securityAnswer,
       })
     } catch (error: any) {
       console.error("Phone signin error:", error)
@@ -139,6 +148,15 @@ const SignInForm = ({ role }: SignInFormProps) => {
       setLoading(false)
     }
   }
+
+  const handleStudentSelect = (student: any) => {
+    phoneForm.setValue("selectedUserId", student.id)
+    setSelectedStudent(student)
+    setDialogOpen(false)
+  }
+
+  const displayedStudents = studentsQuery?.slice(0, 3) || []
+  const hasMoreStudents = studentsQuery && studentsQuery.length > 3
 
   return (
     <div className="flex min-h-screen ">
@@ -297,17 +315,18 @@ const SignInForm = ({ role }: SignInFormProps) => {
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Select Your Account</FormLabel>
-                              <div className="space-y-2 max-h-32 overflow-y-auto border rounded-md">
-                                {studentsQuery.map((student) => (
+                              <div className="space-y-2">
+                                {/* Display first 3 students */}
+                                {displayedStudents.map((student) => (
                                   <div
                                     key={student.id}
-                                    className={`p-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 ${
-                                      field.value === student.id ? 'bg-blue-50 dark:bg-blue-900' : ''
-                                    }`}
-                                    onClick={() => {
-                                      field.onChange(student.id)
-                                      setSelectedStudent(student)
-                                    }}
+                                    className={cn(
+                                      "p-3 cursor-pointer rounded-lg border-2 transition-all duration-200",
+                                      field.value === student.id
+                                        ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+                                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800'
+                                    )}
+                                    onClick={() => handleStudentSelect(student)}
                                   >
                                     <p className="font-medium">{student.name}</p>
                                     <p className="text-xs text-muted-foreground">
@@ -315,6 +334,46 @@ const SignInForm = ({ role }: SignInFormProps) => {
                                     </p>
                                   </div>
                                 ))}
+
+                                {/* Show more button */}
+                                {hasMoreStudents && (
+                                  <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                                    <DialogTrigger asChild>
+                                      <Button
+                                        variant="outline"
+                                        className="w-full"
+                                        type="button"
+                                      >
+                                        <Users className="w-4 h-4 mr-2" />
+                                        Show {studentsQuery!.length - 3} more students
+                                      </Button>
+                                    </DialogTrigger>
+                                    <DialogContent className="max-w-md max-h-[60vh]">
+                                      <DialogHeader>
+                                        <DialogTitle>Select Your Account</DialogTitle>
+                                      </DialogHeader>
+                                      <div className="space-y-2 max-h-96 overflow-y-auto">
+                                        {studentsQuery!.map((student) => (
+                                          <div
+                                            key={student.id}
+                                            className={cn(
+                                              "p-3 cursor-pointer rounded-lg border-2 transition-all duration-200",
+                                              field.value === student.id
+                                                ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+                                                : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800'
+                                            )}
+                                            onClick={() => handleStudentSelect(student)}
+                                          >
+                                            <p className="font-medium">{student.name}</p>
+                                            <p className="text-xs text-muted-foreground">
+                                              Phone ending: ...{student.phone}
+                                            </p>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </DialogContent>
+                                  </Dialog>
+                                )}
                               </div>
                               <FormMessage />
                             </FormItem>

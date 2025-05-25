@@ -1,7 +1,6 @@
 "use client"
 
-import { useRequireAuth } from "@/hooks/useAuth"
-import AppLoader from "@/components/app-loader"
+import { useRequireAuth } from "@/hooks/useAuth";
 
 export default function VolunteerDashboardLayout({
                                                    children,
@@ -10,8 +9,8 @@ export default function VolunteerDashboardLayout({
 }) {
   const auth = useRequireAuth("volunteer")
 
-  if (auth.isLoading) {
-    return <AppLoader />
+  if (!auth.isAuthenticated) {
+    return <div>Unauthorized</div>;
   }
 
   return <>{children}</>

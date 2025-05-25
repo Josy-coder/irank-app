@@ -1,7 +1,6 @@
 "use client"
 
 import { useRequireAuth } from "@/hooks/useAuth"
-import AppLoader from "@/components/app-loader"
 
 export default function AdminDashboardLayout({
                                                children,
@@ -10,9 +9,10 @@ export default function AdminDashboardLayout({
 }) {
   const auth = useRequireAuth("admin")
 
-  if (auth.isLoading) {
-    return <AppLoader />
+  if (!auth.isAuthenticated) {
+    return <div>Unauthorized</div>;
   }
+
 
   return <>{children}</>
 }

@@ -6,7 +6,7 @@ export default function AdminDashboard() {
   const { user } = useAuth()
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 md:p-6">
       <div>
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
           Admin Dashboard

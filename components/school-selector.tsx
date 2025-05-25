@@ -22,7 +22,6 @@ import { api } from "@/convex/_generated/api"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useDebounce } from "@/hooks/use-debounce"
 
-
 interface SchoolSelectorProps {
   value?: string
   onValueChange: (value: string | undefined) => void
@@ -40,7 +39,6 @@ function SchoolSelector({
                           emptyMessage = "No schools found.",
                           className,
                           disabled = false,
-                          required = false,
                         }: SchoolSelectorProps) {
   const [open, setOpen] = React.useState(false)
   const [search, setSearch] = React.useState("")
@@ -111,7 +109,7 @@ function SchoolSelector({
           </div>
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-full p-0" align="start">
+      <PopoverContent className="w-full p-0 max-w-sm" align="start">
         <Command shouldFilter={false}>
           <CommandInput
             placeholder="Search schools..."
@@ -119,7 +117,7 @@ function SchoolSelector({
             onValueChange={setSearch}
             className="h-9"
           />
-          <CommandList>
+          <CommandList className="max-h-64">
             {isLoading ? (
               <div className="p-2">
                 <div className="space-y-2">
@@ -186,7 +184,6 @@ function SchoolSelector({
   )
 }
 
-
 interface VolunteerSchoolSelectorProps {
   value?: string
   onValueChange: (value: string) => void
@@ -204,6 +201,7 @@ function VolunteerSchoolSelector({
                                  }: VolunteerSchoolSelectorProps) {
   const [open, setOpen] = React.useState(false)
   const [search, setSearch] = React.useState(value || "")
+  const [justSelected, setJustSelected] = React.useState(false)
   const debouncedSearch = useDebounce(search, 300)
 
   const schoolsQuery = useQuery(api.functions.schools.getSchoolsForSelection, {
@@ -212,10 +210,25 @@ function VolunteerSchoolSelector({
   })
 
   const schools = schoolsQuery || []
+  const isLoading = schoolsQuery === undefined
 
   React.useEffect(() => {
     setSearch(value || "")
   }, [value])
+
+  // Auto-open popover when typing and there are suggestions, but not if just selected
+  React.useEffect(() => {
+    if (debouncedSearch.length > 1 && schools.length > 0 && !justSelected) {
+      setOpen(true)
+    }
+  }, [debouncedSearch, schools.length, justSelected])
+
+  // Clear justSelected flag when user starts typing again
+  React.useEffect(() => {
+    if (justSelected && search !== value) {
+      setJustSelected(false)
+    }
+  }, [search, value, justSelected])
 
   const handleSelect = (selectedValue: string) => {
     const school = schools.find(s => s.id === selectedValue)
@@ -224,11 +237,16 @@ function VolunteerSchoolSelector({
       setSearch(school.name)
     }
     setOpen(false)
+    setJustSelected(true)
   }
 
   const handleInputChange = (newValue: string) => {
     setSearch(newValue)
     onValueChange(newValue)
+    // If user is typing after a selection, allow auto-open again
+    if (justSelected) {
+      setJustSelected(false)
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -236,11 +254,20 @@ function VolunteerSchoolSelector({
       e.preventDefault()
       onValueChange(search)
       setOpen(false)
+      setJustSelected(true)
+    }
+    if (e.key === "Escape") {
+      setOpen(false)
     }
   }
 
+  // Simplified popover control - only close when explicitly needed
+  const handleOpenChange = (newOpen: boolean) => {
+    setOpen(newOpen)
+  }
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <div className="relative">
           <input
@@ -248,7 +275,6 @@ function VolunteerSchoolSelector({
             value={search}
             onChange={(e) => handleInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
-            onFocus={() => setOpen(true)}
             placeholder={placeholder}
             disabled={disabled}
             className={cn(
@@ -259,10 +285,24 @@ function VolunteerSchoolSelector({
           <ChevronsUpDown className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50" />
         </div>
       </PopoverTrigger>
-      <PopoverContent className="w-full p-0" align="start">
+      <PopoverContent className="w-full p-0 max-w-sm" align="start">
         <Command shouldFilter={false}>
-          <CommandList>
-            {schools.length > 0 && debouncedSearch.length > 1 && (
+          <CommandList className="max-h-64">
+            {isLoading && debouncedSearch.length > 1 ? (
+              <div className="p-2">
+                <div className="space-y-2">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="flex items-center space-x-2">
+                      <Skeleton className="h-4 w-4 rounded" />
+                      <div className="space-y-1 flex-1">
+                        <Skeleton className="h-4 w-[200px]" />
+                        <Skeleton className="h-3 w-[150px]" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : schools.length > 0 && debouncedSearch.length > 1 && !justSelected ? (
               <>
                 <CommandGroup heading="Suggestions">
                   {schools.slice(0, 5).map((school) => (
@@ -273,9 +313,9 @@ function VolunteerSchoolSelector({
                       className="flex items-center gap-2 p-3"
                     >
                       <Building2 className="h-4 w-4 text-muted-foreground" />
-                      <div className="flex flex-col items-start">
-                        <span className="font-medium">{school.name}</span>
-                        <span className="text-xs text-muted-foreground">
+                      <div className="flex flex-col items-start min-w-0 flex-1">
+                        <span className="font-medium truncate w-full">{school.name}</span>
+                        <span className="text-xs text-muted-foreground truncate w-full">
                           {school.type} • {school.location}
                         </span>
                       </div>
@@ -288,14 +328,13 @@ function VolunteerSchoolSelector({
                   </div>
                 </div>
               </>
-            )}
-            {debouncedSearch.length > 0 && schools.length === 0 && (
+            ) : debouncedSearch.length > 0 && schools.length === 0 && !isLoading && !justSelected ? (
               <div className="px-3 py-6 text-center">
                 <div className="text-sm text-muted-foreground">
                   No matching schools found. Press Enter to use &#34;{debouncedSearch}&#34;.
                 </div>
               </div>
-            )}
+            ) : null}
           </CommandList>
         </Command>
       </PopoverContent>
@@ -403,7 +442,7 @@ function GenericSelector<T>({
           </div>
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-full p-0" align="start">
+      <PopoverContent className="w-full p-0 max-w-sm" align="start">
         <Command shouldFilter={false}>
           <CommandInput
             placeholder={searchPlaceholder}
@@ -411,7 +450,7 @@ function GenericSelector<T>({
             onValueChange={onSearchChange}
             className="h-9"
           />
-          <CommandList>
+          <CommandList className="max-h-64">
             {isLoading ? (
               <div className="p-2">
                 <div className="space-y-2">
@@ -489,41 +528,6 @@ function GenericSelector<T>({
   )
 }
 
-// Example usage of Generic Selector for schools
-export function SchoolSelectorUsingGeneric() {
-  const [selectedSchoolId, setSelectedSchoolId] = React.useState<string>()
-  const [search, setSearch] = React.useState("")
-  const debouncedSearch = useDebounce(search, 300)
-
-  const schoolsQuery = useQuery(api.functions.schools.getSchoolsForSelection, {
-    search: debouncedSearch,
-    limit: 50,
-  })
-
-  const schools = schoolsQuery || []
-  const isLoading = schoolsQuery === undefined
-
-  return (
-    <GenericSelector
-      value={selectedSchoolId}
-      onValueChange={setSelectedSchoolId}
-      items={schools}
-      isLoading={isLoading}
-      searchValue={search}
-      onSearchChange={setSearch}
-      getItemValue={(school) => school.id}
-      getItemLabel={(school) => school.name}
-      getItemDescription={(school) => `${school.type} • ${school.location}`}
-      getItemIcon={() => <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />}
-      placeholder="Select school..."
-      emptyMessage="No schools found. Contact your administrator."
-      searchPlaceholder="Search schools..."
-      className="max-w-md"
-    />
-  )
-}
-
-// User Selector Component (for admin use)
 interface User {
   id: string
   name: string
@@ -549,14 +553,6 @@ function UserSelector({
                         disabled = false,
                       }: UserSelectorProps) {
   const [search, setSearch] = React.useState("")
-  const debouncedSearch = useDebounce(search, 300)
-
-  // This would need to be implemented in your users API
-  // const usersQuery = useQuery(api.functions.users.getUsersForSelection, {
-  //   search: debouncedSearch,
-  //   role: role,
-  //   limit: 50,
-  // })
 
   const users: User[] = []
   const isLoading = false
@@ -605,13 +601,6 @@ function LeagueSelector({
                           disabled = false,
                         }: LeagueSelectorProps) {
   const [search, setSearch] = React.useState("")
-  const debouncedSearch = useDebounce(search, 300)
-
-  // This would need to be implemented in your leagues API
-  // const leaguesQuery = useQuery(api.functions.leagues.getLeaguesForSelection, {
-  //   search: debouncedSearch,
-  //   limit: 50,
-  // })
 
   const leagues: League[] = []
   const isLoading = false
@@ -637,7 +626,6 @@ function LeagueSelector({
   )
 }
 
-// Tournament Selector Component
 interface Tournament {
   id: string
   name: string
@@ -661,13 +649,6 @@ function TournamentSelector({
                               disabled = false,
                             }: TournamentSelectorProps) {
   const [search, setSearch] = React.useState("")
-  const debouncedSearch = useDebounce(search, 300)
-
-  // This would need to be implemented in your tournaments API
-  // const tournamentsQuery = useQuery(api.functions.tournaments.getTournamentsForSelection, {
-  //   search: debouncedSearch,
-  //   limit: 50,
-  // })
 
   const tournaments: Tournament[] = []
   const isLoading = false
