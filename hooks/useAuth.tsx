@@ -226,8 +226,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem(USER_KEY, JSON.stringify(userWithSchool))
 
         const dashboardPath = result.user.role === 'school_admin'
-          ? '/dashboard/school'
-          : `/dashboard/${result.user.role}`
+          ? '/school/dashboard'
+          : `/${result.user.role}/dashboard`
         router.push(dashboardPath)
         toast.success("Signed in successfully!")
       }
@@ -264,8 +264,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem(USER_KEY, JSON.stringify(userWithSchool))
 
         const dashboardPath = (result.user.role as UserRole) === 'school_admin'
-          ? '/dashboard/school'
-          : `/dashboard/${result.user.role}`;
+          ? '/school/dashboard'
+          : `/${result.user.role}/dashboard`;
         router.push(dashboardPath)
         toast.success("Signed in successfully!")
       }

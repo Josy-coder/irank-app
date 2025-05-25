@@ -27,16 +27,16 @@ export default function NotFound() {
 
       switch (user.role) {
         case "admin":
-          dashboardPath = "/dashboard/admin"
+          dashboardPath = "/admin/dashboard"
           break
         case "school_admin":
-          dashboardPath = "/dashboard/school"
+          dashboardPath = "/school/dashboard"
           break
         case "volunteer":
-          dashboardPath = "/dashboard/volunteer"
+          dashboardPath = "/volunteer/dashboard"
           break
         case "student":
-          dashboardPath = "/dashboard/student"
+          dashboardPath = "/student/dashboard"
           break
         default:
           dashboardPath = "/"
