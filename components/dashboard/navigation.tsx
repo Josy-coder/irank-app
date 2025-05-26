@@ -570,28 +570,27 @@ export function DashboardNavigation() {
       <div className="md:hidden fixed top-0 left-0 right-0 bg-white/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-700 z-50">
         <div className="px-4 py-3 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="bg-white rounded-lg p-2">
+            <div className="bg-white rounded-lg p-1">
               <Image
                 src="/images/logo.png"
                 alt="iRankHub Logo"
-                width={24}
-                height={24}
+                width={36}
+                height={36}
               />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
+              <h1 className="text-base font-semibold text-gray-900 dark:text-white">
                 iRankHub
               </h1>
             </div>
           </div>
 
           <div className="flex items-center space-x-3">
-            {/* Notification Bell */}
             <div className="relative">
-              <div className="w-8 h-8 bg-gray-500 rounded-full flex items-center justify-center">
-                <Bell className="h-4 w-4 text-white" />
+              <div className="w-8 h-8 bg-white border border-[#E2E8F0] rounded-full flex items-center justify-center">
+                <Bell className="h-5 w-5 text-muted-foreground" />
               </div>
-              <div className="absolute -top-1 -right-1 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
+              <div className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full flex items-center justify-center">
                 <span className="text-xs font-medium text-white">3</span>
               </div>
             </div>

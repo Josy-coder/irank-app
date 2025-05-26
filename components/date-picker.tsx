@@ -19,6 +19,9 @@ interface DatePickerProps {
   placeholder?: string
   className?: string
   maxDate?: Date
+  minDate?: Date
+  error?: string
+  showYearSwitcher?: boolean
 }
 
 export default function DatePicker({
@@ -27,33 +30,47 @@ export default function DatePicker({
                                      disabled,
                                      placeholder = "Pick a date",
                                      className,
-                                     maxDate
+                                     maxDate,
+                                     minDate,
+                                     error,
+                                     showYearSwitcher = true
                                    }: DatePickerProps) {
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          disabled={disabled}
-          className={cn(
-            "w-full justify-start text-left font-normal",
-            !date && "text-muted-foreground",
-            className
-          )}
-        >
-          <CalendarIcon className="mr-2 h-4 w-4" />
-          {date ? format(date, "PPP") : <span>{placeholder}</span>}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
-        <Calendar
-          mode="single"
-          selected={date}
-          onSelect={onDateChange}
-          disabled={(date) => date > (maxDate || new Date()) || date < new Date("1900-01-01")}
-          autoFocus
-        />
-      </PopoverContent>
-    </Popover>
+    <div className="space-y-2">
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            disabled={disabled}
+            className={cn(
+              "w-full justify-start text-left font-normal",
+              !date && "text-muted-foreground",
+              error && "border-destructive",
+              className
+            )}
+          >
+            <CalendarIcon className="mr-2 h-4 w-4" />
+            {date ? format(date, "PPP") : <span>{placeholder}</span>}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="start">
+          <Calendar
+            mode="single"
+            selected={date}
+            onSelect={onDateChange}
+            disabled={(date) => {
+              const isAfterMax = maxDate ? date > maxDate : false
+              const isBeforeMin = minDate ? date < minDate : date < new Date("1900-01-01")
+              return isAfterMax || isBeforeMin
+            }}
+            showYearSwitcher={showYearSwitcher}
+            autoFocus
+          />
+        </PopoverContent>
+      </Popover>
+      {error && (
+        <p className="text-destructive text-xs mt-1">{error}</p>
+      )}
+    </div>
   )
 }

@@ -224,6 +224,7 @@ function Calendar({
         ),
         MonthGrid: ({ className, children, ...props }) => (
           <MonthGrid
+            // eslint-disable-next-line react/no-children-prop
             children={children}
             className={className}
             displayYears={displayYears}
@@ -396,7 +397,12 @@ function CaptionLabel({
   if (!showYearSwitcher) return <span {...props}>{children}</span>
   return (
     <Button
-      className="h-7 w-full truncate text-sm font-medium"
+      className={cn(
+        "h-7 w-full truncate text-sm font-medium",
+        "border border-muted-foreground/20 hover:border-muted-foreground/40",
+        "transition-all duration-200 hover:bg-accent/50",
+        "focus-visible:ring-2 focus-visible:ring-accent-foreground/20"
+      )}
       variant="ghost"
       size="sm"
       onClick={() => setNavView((prev) => (prev === "days" ? "years" : "days"))}

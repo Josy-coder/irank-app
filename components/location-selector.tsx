@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/popover"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Check, ChevronsUpDown, MapPin } from "lucide-react"
+import { Check, ChevronsUpDown, MapPin, Plus } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 import { Country, State, City } from 'country-state-city'
@@ -79,7 +79,9 @@ export function LocationSelector({
     const [villages, setVillages] = useState<LocationItem[]>([])
     const [loading, setLoading] = useState(true)
 
+    const [customProvince, setCustomProvince] = useState("")
     const [customCity, setCustomCity] = useState("")
+    const [showCustomProvince, setShowCustomProvince] = useState(false)
     const [showCustomCity, setShowCustomCity] = useState(false)
 
     const [countryOpen, setCountryOpen] = useState(false)
@@ -111,6 +113,7 @@ export function LocationSelector({
         const fetchProvinces = async () => {
             if (!country) {
                 setProvinces([])
+                setShowCustomProvince(false)
                 return
             }
 
@@ -119,9 +122,16 @@ export function LocationSelector({
 
                 if (country === "RW" && includeRwandaDetails) {
                     provinceList = Provinces().map(name => ({ name, isoCode: name }))
+                    setShowCustomProvince(false)
                 } else {
                     const stateList = State.getStatesOfCountry(country)
                     provinceList = stateList.map(s => ({ name: s.name, isoCode: s.isoCode }))
+
+                    if (provinceList.length === 0) {
+                        setShowCustomProvince(true)
+                    } else {
+                        setShowCustomProvince(false)
+                    }
                 }
 
                 setProvinces(provinceList)
@@ -132,9 +142,13 @@ export function LocationSelector({
                 if (onCellChange) onCellChange("")
                 if (onVillageChange) onVillageChange("")
                 setCustomCity("")
+                setCustomProvince("")
                 setShowCustomCity(false)
             } catch (error) {
                 console.error("Error fetching provinces:", error)
+                if (country !== "RW") {
+                    setShowCustomProvince(true)
+                }
             }
         }
 
@@ -154,18 +168,19 @@ export function LocationSelector({
 
                 if (country === "RW" && includeRwandaDetails) {
                     districtList = Districts(province).map(name => ({ name, isoCode: name }))
+                    setShowCustomCity(false)
                 } else {
                     const cityList = City.getCitiesOfState(country, province)
                     districtList = cityList.map(c => ({ name: c.name, isoCode: c.name }))
+
+                    if (districtList.length === 0) {
+                        setShowCustomCity(true)
+                    } else {
+                        setShowCustomCity(false)
+                    }
                 }
 
                 setDistricts(districtList)
-
-                if (districtList.length === 0 && country !== "RW") {
-                    setShowCustomCity(true)
-                } else {
-                    setShowCustomCity(false)
-                }
 
                 onDistrictChange("")
                 if (onSectorChange) onSectorChange("")
@@ -174,7 +189,9 @@ export function LocationSelector({
                 setCustomCity("")
             } catch (error) {
                 console.error("Error fetching districts:", error)
-                setShowCustomCity(true) // Show custom input on error
+                if (country !== "RW") {
+                    setShowCustomCity(true)
+                }
             }
         }
 
@@ -244,6 +261,11 @@ export function LocationSelector({
         fetchVillages()
     }, [country, province, district, sector, cell, includeRwandaDetails])
 
+    const handleCustomProvinceChange = (value: string) => {
+        setCustomProvince(value)
+        onProvinceChange(value)
+    }
+
     const handleCustomCityChange = (value: string) => {
         setCustomCity(value)
         onDistrictChange(value)
@@ -275,7 +297,7 @@ export function LocationSelector({
                 role="combobox"
                 aria-expanded={open}
                 className={cn(
-                  "w-full justify-between",
+                  "w-full justify-between h-[34px]",
                   error && "border-destructive",
                   disabled && "opacity-50 cursor-not-allowed"
                 )}
@@ -316,6 +338,104 @@ export function LocationSelector({
       </Popover>
     )
 
+    const SearchableSelectWithCustom = ({
+                                            value,
+                                            onValueChange,
+                                            placeholder,
+                                            items,
+                                            open,
+                                            onOpenChange,
+                                            error,
+                                            disabled = false,
+                                            onCustomSelect
+                                        }: {
+        value: string
+        onValueChange: (value: string) => void
+        placeholder: string
+        items: LocationItem[]
+        open: boolean
+        onOpenChange: (open: boolean) => void
+        error?: string
+        disabled?: boolean
+        onCustomSelect?: () => void
+    }) => (
+      <Popover open={open} onOpenChange={onOpenChange}>
+          <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={open}
+                className={cn(
+                  "w-full justify-between h-[34px]",
+                  error && "border-destructive",
+                  disabled && "opacity-50 cursor-not-allowed"
+                )}
+                disabled={disabled}
+              >
+                    <span className="truncate">
+                        {value ? items.find(item => item.isoCode === value)?.name || value : placeholder}
+                    </span>
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-full p-0" align="start">
+              <Command>
+                  <CommandInput placeholder={`Search ${placeholder.toLowerCase()}...`} />
+                  <CommandEmpty>
+                      <div className="p-2 text-center">
+                          <p className="text-sm text-muted-foreground mb-2">
+                              No {placeholder.toLowerCase()} found.
+                          </p>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                                onCustomSelect?.()
+                                onOpenChange(false)
+                            }}
+                            className="w-full"
+                          >
+                              Add custom {placeholder.toLowerCase()}
+                          </Button>
+                      </div>
+                  </CommandEmpty>
+                  <CommandGroup className="max-h-64 overflow-auto">
+                      {items.map((item) => (
+                        <CommandItem
+                          key={item.isoCode}
+                          value={item.name}
+                          onSelect={() => {
+                              onValueChange(item.isoCode)
+                              onOpenChange(false)
+                          }}
+                        >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                value === item.isoCode ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            {item.name}
+                        </CommandItem>
+                      ))}
+                      {items.length > 0 && (
+                        <CommandItem
+                          onSelect={() => {
+                              onCustomSelect?.()
+                              onOpenChange(false)
+                          }}
+                          className="border-t"
+                        >
+                            <Plus className="mr-2 h-4 w-4" />
+                            Add custom {placeholder.toLowerCase()}
+                        </CommandItem>
+                      )}
+                  </CommandGroup>
+              </Command>
+          </PopoverContent>
+      </Popover>
+    )
+
     if (loading) {
         return (
           <div className="space-y-4">
@@ -324,7 +444,6 @@ export function LocationSelector({
           </div>
         );
     }
-
 
     return (
       <div className="space-y-4">
@@ -351,16 +470,30 @@ export function LocationSelector({
                   <Label htmlFor="province" className="text-sm font-medium dark:text-primary-foreground">
                       {country === "RW" ? "Province" : "State/Province/Region"}
                   </Label>
-                  <SearchableSelect
-                    value={province}
-                    onValueChange={onProvinceChange}
-                    placeholder={`Select ${country === "RW" ? "province" : "state/province/region"}`}
-                    items={provinces}
-                    open={provinceOpen}
-                    onOpenChange={setProvinceOpen}
-                    error={provinceError}
-                    disabled={!country}
-                  />
+                  {showCustomProvince ? (
+                    <div className="relative">
+                        <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder={`Enter ${country === "RW" ? "province" : "state/province/region"} name`}
+                          value={customProvince}
+                          onChange={(e) => handleCustomProvinceChange(e.target.value)}
+                          className={cn("pl-10", provinceError && "border-destructive")}
+                          disabled={!country}
+                        />
+                    </div>
+                  ) : (
+                    <SearchableSelectWithCustom
+                      value={province}
+                      onValueChange={onProvinceChange}
+                      placeholder={`Select ${country === "RW" ? "province" : "state/province/region"}`}
+                      items={provinces}
+                      open={provinceOpen}
+                      onOpenChange={setProvinceOpen}
+                      error={provinceError}
+                      disabled={!country}
+                      onCustomSelect={() => setShowCustomProvince(true)}
+                    />
+                  )}
                   {provinceError && (
                     <p className="text-destructive text-xs mt-1">{provinceError}</p>
                   )}
@@ -374,7 +507,7 @@ export function LocationSelector({
                     <div className="relative">
                         <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
-                          placeholder="Enter city name"
+                          placeholder={`Enter ${country === "RW" ? "district" : "city/district"} name`}
                           value={customCity}
                           onChange={(e) => handleCustomCityChange(e.target.value)}
                           className={cn("pl-10", districtError && "border-destructive")}
@@ -382,7 +515,7 @@ export function LocationSelector({
                         />
                     </div>
                   ) : (
-                    <SearchableSelect
+                    <SearchableSelectWithCustom
                       value={district}
                       onValueChange={onDistrictChange}
                       placeholder={`Select ${country === "RW" ? "district" : "city/district"}`}
@@ -391,6 +524,7 @@ export function LocationSelector({
                       onOpenChange={setDistrictOpen}
                       error={districtError}
                       disabled={!province}
+                      onCustomSelect={() => setShowCustomCity(true)}
                     />
                   )}
                   {districtError && (

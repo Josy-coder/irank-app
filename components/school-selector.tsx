@@ -75,7 +75,7 @@ function SchoolSelector({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className={cn("w-full justify-between", className)}
+          className={cn("w-full justify-between h-[34px]", className)}
           disabled={disabled}
         >
           <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -144,7 +144,7 @@ function SchoolSelector({
                   </div>
                   {debouncedSearch.length === 0 && (
                     <div className="text-xs text-muted-foreground">
-                      Can&#39;t find your school? Contact your administrator.
+                      Can&#39;t find your school? <br/> Contact the administrator.
                     </div>
                   )}
                 </div>
@@ -200,8 +200,7 @@ function VolunteerSchoolSelector({
                                    disabled = false,
                                  }: VolunteerSchoolSelectorProps) {
   const [open, setOpen] = React.useState(false)
-  const [search, setSearch] = React.useState(value || "")
-  const [justSelected, setJustSelected] = React.useState(false)
+  const [search, setSearch] = React.useState("")
   const debouncedSearch = useDebounce(search, 300)
 
   const schoolsQuery = useQuery(api.functions.schools.getSchoolsForSelection, {
@@ -212,83 +211,52 @@ function VolunteerSchoolSelector({
   const schools = schoolsQuery || []
   const isLoading = schoolsQuery === undefined
 
-  React.useEffect(() => {
-    setSearch(value || "")
-  }, [value])
-
-  // Auto-open popover when typing and there are suggestions, but not if just selected
-  React.useEffect(() => {
-    if (debouncedSearch.length > 1 && schools.length > 0 && !justSelected) {
-      setOpen(true)
-    }
-  }, [debouncedSearch, schools.length, justSelected])
-
-  // Clear justSelected flag when user starts typing again
-  React.useEffect(() => {
-    if (justSelected && search !== value) {
-      setJustSelected(false)
-    }
-  }, [search, value, justSelected])
-
-  const handleSelect = (selectedValue: string) => {
-    const school = schools.find(s => s.id === selectedValue)
+  const handleSelectSchool = (schoolId: string) => {
+    const school = schools.find(s => s.id === schoolId)
     if (school) {
       onValueChange(school.name)
-      setSearch(school.name)
     }
     setOpen(false)
-    setJustSelected(true)
   }
 
-  const handleInputChange = (newValue: string) => {
-    setSearch(newValue)
-    onValueChange(newValue)
-    // If user is typing after a selection, allow auto-open again
-    if (justSelected) {
-      setJustSelected(false)
-    }
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      e.preventDefault()
-      onValueChange(search)
-      setOpen(false)
-      setJustSelected(true)
-    }
-    if (e.key === "Escape") {
-      setOpen(false)
-    }
-  }
-
-  // Simplified popover control - only close when explicitly needed
-  const handleOpenChange = (newOpen: boolean) => {
-    setOpen(newOpen)
+  const handleUseCustomName = () => {
+    onValueChange(search)
+    setOpen(false)
   }
 
   return (
-    <Popover open={open} onOpenChange={handleOpenChange}>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <div className="relative">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => handleInputChange(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            disabled={disabled}
-            className={cn(
-              "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
-              className
-            )}
-          />
-          <ChevronsUpDown className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50" />
-        </div>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className={cn(
+            "w-full h-[34px] justify-between text-left font-normal",
+            !value && "text-muted-foreground",
+            className
+          )}
+          disabled={disabled}
+        >
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+            <span className="truncate">
+              {value || placeholder}
+            </span>
+          </div>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-full p-0 max-w-sm" align="start">
+      <PopoverContent className="w-full p-0" align="start">
         <Command shouldFilter={false}>
+          <CommandInput
+            placeholder="Search schools..."
+            value={search}
+            onValueChange={setSearch}
+            className="h-9"
+          />
           <CommandList className="max-h-64">
-            {isLoading && debouncedSearch.length > 1 ? (
+            {isLoading ? (
               <div className="p-2">
                 <div className="space-y-2">
                   {Array.from({ length: 3 }).map((_, i) => (
@@ -302,39 +270,67 @@ function VolunteerSchoolSelector({
                   ))}
                 </div>
               </div>
-            ) : schools.length > 0 && debouncedSearch.length > 1 && !justSelected ? (
+            ) : (
               <>
-                <CommandGroup heading="Suggestions">
-                  {schools.slice(0, 5).map((school) => (
-                    <CommandItem
-                      key={school.id}
-                      value={school.id}
-                      onSelect={handleSelect}
-                      className="flex items-center gap-2 p-3"
-                    >
-                      <Building2 className="h-4 w-4 text-muted-foreground" />
-                      <div className="flex flex-col items-start min-w-0 flex-1">
-                        <span className="font-medium truncate w-full">{school.name}</span>
-                        <span className="text-xs text-muted-foreground truncate w-full">
-                          {school.type} • {school.location}
-                        </span>
+                {schools.length > 0 && (
+                  <CommandGroup heading="Suggestions">
+                    {schools.map((school) => (
+                      <CommandItem
+                        key={school.id}
+                        value={school.id}
+                        onSelect={handleSelectSchool}
+                        className="flex items-center gap-2 p-3"
+                      >
+                        <Building2 className="h-4 w-4 text-muted-foreground" />
+                        <div className="flex flex-col items-start min-w-0 flex-1">
+                          <span className="font-medium truncate w-full">{school.name}</span>
+                          <span className="text-xs text-muted-foreground truncate w-full">
+                            {school.type} • {school.location}
+                          </span>
+                        </div>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                )}
+
+                {debouncedSearch.length > 0 && (
+                  <>
+                    {schools.length > 0 && <div className="border-t" />}
+                    <CommandGroup>
+                      <CommandItem
+                        value={`use-custom-${debouncedSearch}`}
+                        onSelect={handleUseCustomName}
+                        className="flex items-center gap-2 p-3"
+                      >
+                        <Building2 className="h-4 w-4 text-muted-foreground" />
+                        <div className="flex flex-col items-start min-w-0 flex-1">
+                          <span className="font-medium truncate w-full">
+                            Use &quot;{debouncedSearch}&quot;
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {schools.length === 0
+                              ? "No matching schools found"
+                              : "Use custom school name"
+                            }
+                          </span>
+                        </div>
+                      </CommandItem>
+                    </CommandGroup>
+                  </>
+                )}
+
+                {debouncedSearch.length === 0 && schools.length === 0 && (
+                  <CommandEmpty className="py-6 text-center">
+                    <div className="flex flex-col items-center gap-2">
+                      <Search className="h-8 w-8 text-muted-foreground" />
+                      <div className="text-sm text-muted-foreground">
+                        Start typing to search for schools
                       </div>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-                <div className="border-t px-3 py-2">
-                  <div className="text-xs text-muted-foreground">
-                    Don&#39;t see your school? Just type the name and press Enter.
-                  </div>
-                </div>
+                    </div>
+                  </CommandEmpty>
+                )}
               </>
-            ) : debouncedSearch.length > 0 && schools.length === 0 && !isLoading && !justSelected ? (
-              <div className="px-3 py-6 text-center">
-                <div className="text-sm text-muted-foreground">
-                  No matching schools found. Press Enter to use &#34;{debouncedSearch}&#34;.
-                </div>
-              </div>
-            ) : null}
+            )}
           </CommandList>
         </Command>
       </PopoverContent>
