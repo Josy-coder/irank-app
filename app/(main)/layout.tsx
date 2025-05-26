@@ -14,6 +14,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
+import { AdvancedOfflineBanner } from "@/components/offline-banner";
 
 function generateBreadcrumbs(pathname: string, userRole: string) {
   const segments = pathname.split('/').filter(Boolean)
@@ -86,6 +87,7 @@ export default function DashboardLayout({
 
   return (
     <>
+      <AdvancedOfflineBanner />
       <DashboardNavigation />
       <DashboardContent>{children}</DashboardContent>
     </>

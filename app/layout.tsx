@@ -5,7 +5,6 @@ import { Toaster } from '@/components/ui/sonner'
 import { ConvexClientProvider } from "@/components/ConvexClientProvider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/hooks/useAuth";
-import { AdvancedOfflineBanner } from "@/components/offline-banner";
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -28,7 +27,6 @@ export default function RootLayout({
     <ThemeProvider attribute="class" defaultTheme="light" forcedTheme="light">
       <ConvexClientProvider>
         <AuthProvider>
-          <AdvancedOfflineBanner />
           <div className="min-h-screen">
             {children}
           </div>

@@ -29,6 +29,22 @@ type CurrentUserResponse = {
   } | null;
 } | null;
 
+function getErrorMessage(code: string): string {
+  const errorMap: Record<string, string> = {
+    INVALID_CREDENTIALS: "The email or password you entered is incorrect. Please try again.",
+    ACCOUNT_LOCKED: "Your account has been temporarily locked due to too many failed login attempts. Please try again later.",
+    USER_BANNED: "Your account has been suspended. Please contact support.",
+    USER_INACTIVE: "Your account is pending approval. Please wait for admin verification.",
+    MFA_REQUIRED: "Multi-factor authentication is required. Please enter your MFA code.",
+    MFA_INVALID: "The security answer you provided is incorrect. Please try again.",
+    SECURITY_QUESTION_NOT_FOUND: "We couldn't find a security question for this user.",
+  };
+
+  return errorMap[code] || "Something went wrong. Please try again or contact support.";
+}
+
+
+
 async function generateSecureToken(payload: any): Promise<string> {
   const header = {
     alg: "HS256",
@@ -68,7 +84,6 @@ async function generateSecureToken(payload: any): Promise<string> {
     binary += String.fromCharCode(byteArray[i]);
   }
   const encodedSignature = btoa(binary);
-
 
   return `${encodedHeader}.${encodedPayload}.${encodedSignature}`;
 }
@@ -119,6 +134,12 @@ async function verifySecureToken(token: string): Promise<any> {
   } catch (error: any) {
     throw new Error(`Token verification failed: ${error.message}`);
   }
+}
+
+function generateRandomToken(): string {
+  const array = new Uint8Array(32);
+  crypto.getRandomValues(array);
+  return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
 export const signUp = mutation({
@@ -173,124 +194,128 @@ export const signUp = mutation({
     })),
   },
   handler: async (ctx, args) => {
-    const now = Date.now();
+    try {
+      const now = Date.now();
 
-    const existingUser = await ctx.db
-      .query("users")
-      .withIndex("by_email", (q) => q.eq("email", args.email))
-      .first();
-
-    if (existingUser) {
-      throw new Error("Email already registered");
-    }
-
-    if (args.phone) {
-      const existingPhone = await ctx.db
+      const existingUser = await ctx.db
         .query("users")
-        .withIndex("by_phone", (q) => q.eq("phone", args.phone))
+        .withIndex("by_email", (q) => q.eq("email", args.email))
         .first();
 
-      if (existingPhone) {
-        throw new Error("Phone number already registered");
+      if (existingUser) {
+        throw new Error("Email already registered");
       }
-    }
 
-    if (args.role === "student") {
-      if (!args.school_id) {
-        throw new Error("School selection is required for students");
+      if (args.phone) {
+        const existingPhone = await ctx.db
+          .query("users")
+          .withIndex("by_phone", (q) => q.eq("phone", args.phone))
+          .first();
+
+        if (existingPhone) {
+          throw new Error("Phone number already registered");
+        }
       }
-      if (!args.phone || !args.security_question || !args.security_answer_hash) {
-        throw new Error("Phone and security question are required for students");
+
+      if (args.role === "student") {
+        if (!args.school_id) {
+          throw new Error("School selection is required for students");
+        }
+        if (!args.phone || !args.security_question || !args.security_answer_hash) {
+          throw new Error("Phone and security question are required for students");
+        }
       }
-    }
 
-    if (args.role === "school_admin" && !args.school_data) {
-      throw new Error("School information is required for school administrators");
-    }
-
-    if (args.role === "volunteer") {
-      if (!args.high_school_attended || !args.national_id) {
-        throw new Error("High school and national ID are required for volunteers");
+      if (args.role === "school_admin" && !args.school_data) {
+        throw new Error("School information is required for school administrators");
       }
-    }
 
-    let school_id = args.school_id;
-    if (args.role === "school_admin" && args.school_data) {
-      school_id = await ctx.db.insert("schools", {
-        name: args.school_data.name,
-        type: args.school_data.type,
-        country: args.school_data.country,
-        province: args.school_data.province,
-        district: args.school_data.district,
-        sector: args.school_data.sector,
-        cell: args.school_data.cell,
-        village: args.school_data.village,
-        contact_name: args.school_data.contact_name,
-        contact_email: args.school_data.contact_email,
-        contact_phone: args.school_data.contact_phone,
-        status: "active",
-        verified: false,
-        created_at: now,
-      });
-    }
+      if (args.role === "volunteer") {
+        if (!args.high_school_attended || !args.national_id) {
+          throw new Error("High school and national ID are required for volunteers");
+        }
+      }
 
-    const userId = await ctx.db.insert("users", {
-      name: args.name,
-      email: args.email,
-      phone: args.phone,
-      password_hash: args.password_hash,
-      role: args.role,
-      school_id,
-      status: "inactive",
-      verified: false,
-      gender: args.gender,
-      date_of_birth: args.date_of_birth,
-      grade: args.grade,
-      position: args.position,
-      high_school_attended: args.high_school_attended,
-      national_id: args.national_id,
-      safeguarding_certificate: args.safeguarding_certificate,
-      mfa_enabled: false,
-      biometric_enabled: false,
-      failed_login_attempts: 0,
-      created_at: now,
-    });
+      let school_id = args.school_id;
+      if (args.role === "school_admin" && args.school_data) {
+        school_id = await ctx.db.insert("schools", {
+          name: args.school_data.name,
+          type: args.school_data.type,
+          country: args.school_data.country,
+          province: args.school_data.province,
+          district: args.school_data.district,
+          sector: args.school_data.sector,
+          cell: args.school_data.cell,
+          village: args.school_data.village,
+          contact_name: args.school_data.contact_name,
+          contact_email: args.school_data.contact_email,
+          contact_phone: args.school_data.contact_phone,
+          status: "active",
+          verified: false,
+          created_at: now,
+        });
+      }
 
-    if (args.role === "student" && args.security_question && args.security_answer_hash) {
-      await ctx.db.insert("security_questions", {
-        user_id: userId,
-        question: args.security_question,
-        answer_hash: args.security_answer_hash,
-        created_at: now,
-      });
-    }
-
-    if (args.role === "school_admin" && school_id) {
-      await ctx.db.patch(school_id, {
-        created_by: userId,
-      });
-    }
-
-    await ctx.runMutation(internal.functions.audit.createAuditLog, {
-      user_id: userId,
-      action: "user_created",
-      resource_type: "users",
-      resource_id: userId,
-      description: `User ${args.name} (${args.role}) registered`,
-      new_state: JSON.stringify({
+      const userId = await ctx.db.insert("users", {
         name: args.name,
         email: args.email,
+        phone: args.phone,
+        password_hash: args.password_hash,
         role: args.role,
-      }),
-      ip_address: args.device_info?.ip_address,
-      user_agent: args.device_info?.user_agent,
-    });
+        school_id,
+        status: "inactive",
+        verified: false,
+        gender: args.gender,
+        date_of_birth: args.date_of_birth,
+        grade: args.grade,
+        position: args.position,
+        high_school_attended: args.high_school_attended,
+        national_id: args.national_id,
+        safeguarding_certificate: args.safeguarding_certificate,
+        mfa_enabled: false,
+        biometric_enabled: false,
+        failed_login_attempts: 0,
+        created_at: now,
+      });
 
-    return {
-      success: true,
-      userId,
-      message: "Account created successfully. Please wait for admin approval.",
-    };
+      if (args.role === "student" && args.security_question && args.security_answer_hash) {
+        await ctx.db.insert("security_questions", {
+          user_id: userId,
+          question: args.security_question,
+          answer_hash: args.security_answer_hash,
+          created_at: now,
+        });
+      }
+
+      if (args.role === "school_admin" && school_id) {
+        await ctx.db.patch(school_id, {
+          created_by: userId,
+        });
+      }
+
+      await ctx.runMutation(internal.functions.audit.createAuditLog, {
+        user_id: userId,
+        action: "user_created",
+        resource_type: "users",
+        resource_id: userId,
+        description: `User ${args.name} (${args.role}) registered`,
+        new_state: JSON.stringify({
+          name: args.name,
+          email: args.email,
+          role: args.role,
+        }),
+        ip_address: args.device_info?.ip_address,
+        user_agent: args.device_info?.user_agent,
+      });
+
+      return {
+        success: true,
+        userId,
+        message: "Account created successfully. Please wait for admin approval.",
+      };
+    } catch (error: any) {
+      throw new Error(getErrorMessage(error.message));
+    }
   },
 });
 
@@ -305,102 +330,135 @@ export const signIn = mutation({
       device_id: v.optional(v.string()),
     })),
     remember_me: v.optional(v.boolean()),
+    mfa_code: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const now = Date.now();
+    try {
+      const now = Date.now();
 
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_email", (q) => q.eq("email", args.email))
-      .first();
+      const user = await ctx.db
+        .query("users")
+        .withIndex("by_email", (q) => q.eq("email", args.email))
+        .first();
 
-    if (!user) {
-      throw new Error("Invalid email or password");
-    }
-
-    if (user.locked_until && user.locked_until > now) {
-      const remainingTime = Math.ceil((user.locked_until - now) / (60 * 1000));
-      throw new Error(`Account locked. Try again in ${remainingTime} minutes.`);
-    }
-
-    const isValidPassword = user.password_hash === args.password_hash;
-
-    if (!isValidPassword) {
-      const failedAttempts = (user.failed_login_attempts || 0) + 1;
-      const updateData: any = {
-        failed_login_attempts: failedAttempts,
-      };
-
-      if (failedAttempts >= 5) {
-        updateData.locked_until = now + (30 * 60 * 1000);
+      if (!user) {
+        throw new Error("Invalid email or password");
       }
 
-      await ctx.db.patch(user._id, updateData);
-
-      if (failedAttempts >= 5) {
-        throw new Error("Account locked due to too many failed attempts. Try again in 30 minutes.");
+      if (user.locked_until && user.locked_until > now) {
+        const remainingTime = Math.ceil((user.locked_until - now) / (60 * 1000));
+        throw new Error(`Account locked due to too many failed attempts. Try again in ${remainingTime} minutes.`);
       }
 
-      throw new Error("Invalid email or password");
-    }
+      const isValidPassword = user.password_hash === args.password_hash;
 
-    if (user.status === "banned") {
-      throw new Error("Account has been banned. Contact administrator.");
-    }
+      if (!isValidPassword) {
+        const failedAttempts = (user.failed_login_attempts || 0) + 1;
+        const updateData: any = {
+          failed_login_attempts: failedAttempts,
+        };
 
-    await ctx.db.patch(user._id, {
-      failed_login_attempts: 0,
-      locked_until: undefined,
-      last_login_at: now,
-    });
+        if (failedAttempts >= 5) {
+          updateData.locked_until = now + (30 * 60 * 1000);
+        }
 
-    const tokenPayload = {
-      userId: user._id,
-      email: user.email,
-      role: user.role,
-      verified: user.verified,
-      status: user.status,
-    };
+        await ctx.db.patch(user._id, updateData);
 
-    const sessionToken = await generateSecureToken(tokenPayload);
+        if (failedAttempts >= 5) {
+          throw new Error("Account locked due to too many failed attempts. Try again in 30 minutes.");
+        }
 
-    const expiresIn = args.remember_me ? 30 * 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
-    const expiresAt = now + expiresIn;
+        throw new Error("Invalid email or password");
+      }
 
-    await ctx.db.insert("auth_sessions", {
-      user_id: user._id,
-      session_token: sessionToken,
-      device_info: args.device_info,
-      expires_at: expiresAt,
-      last_used_at: now,
-      is_offline_capable: true,
-      created_at: now,
-    });
+      if (user.status === "banned") {
+        throw new Error("Account has been banned. Contact administrator.");
+      }
 
-    await ctx.runMutation(internal.functions.audit.createAuditLog, {
-      user_id: user._id,
-      action: "user_login",
-      resource_type: "users",
-      resource_id: user._id,
-      description: `User ${user.name} logged in`,
-      ip_address: args.device_info?.ip_address,
-      user_agent: args.device_info?.user_agent,
-    });
+      if (user.status === "inactive") {
+        throw new Error("Your account is pending approval. Please wait for admin verification.");
+      }
 
-    return {
-      success: true,
-      token: sessionToken,
-      user: {
-        id: user._id,
-        name: user.name,
+      if (user.mfa_enabled && (!args.mfa_code)) {
+        return {
+          success: false,
+          requiresMFA: true,
+          userId: user._id,
+          message: "Multi-factor authentication required",
+        };
+      }
+
+      if (user.mfa_enabled && args.mfa_code) {
+        const securityQuestion = await ctx.db
+          .query("security_questions")
+          .withIndex("by_user_id", (q) => q.eq("user_id", user._id))
+          .first();
+
+        if (!securityQuestion || securityQuestion.answer_hash !== args.mfa_code) {
+          const failedAttempts = (user.failed_login_attempts || 0) + 1;
+          await ctx.db.patch(user._id, {
+            failed_login_attempts: failedAttempts,
+          });
+          throw new Error("Invalid security answer");
+        }
+      }
+
+      await ctx.db.patch(user._id, {
+        failed_login_attempts: 0,
+        locked_until: undefined,
+        last_login_at: now,
+      });
+
+      const tokenPayload = {
+        userId: user._id,
         email: user.email,
         role: user.role,
-        status: user.status,
         verified: user.verified,
-        school_id: user.school_id,
-      },
-      expiresAt,
-    };
+        status: user.status,
+      };
+
+      const sessionToken = await generateSecureToken(tokenPayload);
+
+      const expiresIn = args.remember_me ? 30 * 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
+      const expiresAt = now + expiresIn;
+
+      await ctx.db.insert("auth_sessions", {
+        user_id: user._id,
+        session_token: sessionToken,
+        device_info: args.device_info,
+        expires_at: expiresAt,
+        last_used_at: now,
+        is_offline_capable: true,
+        created_at: now,
+      });
+
+      await ctx.runMutation(internal.functions.audit.createAuditLog, {
+        user_id: user._id,
+        action: "user_login",
+        resource_type: "users",
+        resource_id: user._id,
+        description: `User ${user.name} logged in`,
+        ip_address: args.device_info?.ip_address,
+        user_agent: args.device_info?.user_agent,
+      });
+
+      return {
+        success: true,
+        token: sessionToken,
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          status: user.status,
+          verified: user.verified,
+          school_id: user.school_id,
+        },
+        expiresAt,
+      };
+    } catch (error: any) {
+      throw new Error(getErrorMessage(error.message));
+    }
   },
 });
 
@@ -418,99 +476,583 @@ export const signInWithPhone = mutation({
     })),
   },
   handler: async (ctx, args) => {
-    const now = Date.now();
+    try {
+      const now = Date.now();
 
-    const user = await ctx.db.get(args.selected_user_id);
+      const user = await ctx.db.get(args.selected_user_id);
 
-    if (!user || user.phone !== args.phone || user.role !== "student") {
-      throw new Error("Invalid credentials");
+      if (!user || user.phone !== args.phone || user.role !== "student") {
+        throw new Error("Invalid credentials");
+      }
+
+      if (user.locked_until && user.locked_until > now) {
+        const remainingTime = Math.ceil((user.locked_until - now) / (60 * 1000));
+        throw new Error(`Account locked due to too many failed attempts. Try again in ${remainingTime} minutes.`);
+      }
+
+      if (user.status === "banned") {
+        throw new Error("Account has been banned. Contact administrator.");
+      }
+
+      if (user.status === "inactive") {
+        throw new Error("Your account is pending approval. Please wait for admin verification.");
+      }
+
+      const securityQuestion = await ctx.db
+        .query("security_questions")
+        .withIndex("by_user_id", (q) => q.eq("user_id", user._id))
+        .first();
+
+      if (!securityQuestion) {
+        throw new Error("Security question not found");
+      }
+
+      const isValidAnswer = securityQuestion.answer_hash === args.security_answer_hash;
+
+      if (!isValidAnswer) {
+        const failedAttempts = (user.failed_login_attempts || 0) + 1;
+        const updateData: any = {
+          failed_login_attempts: failedAttempts,
+        };
+
+        if (failedAttempts >= 5) {
+          updateData.locked_until = now + (30 * 60 * 1000);
+        }
+
+        await ctx.db.patch(user._id, updateData);
+        throw new Error("Invalid security answer");
+      }
+
+      await ctx.db.patch(user._id, {
+        failed_login_attempts: 0,
+        locked_until: undefined,
+        last_login_at: now,
+      });
+
+      const tokenPayload = {
+        userId: user._id,
+        email: user.email,
+        role: user.role,
+        verified: user.verified,
+        status: user.status,
+      };
+
+      const sessionToken = await generateSecureToken(tokenPayload);
+      const expiresAt = now + (7 * 24 * 60 * 60 * 1000);
+
+      await ctx.db.insert("auth_sessions", {
+        user_id: user._id,
+        session_token: sessionToken,
+        device_info: args.device_info,
+        expires_at: expiresAt,
+        last_used_at: now,
+        is_offline_capable: true,
+        created_at: now,
+      });
+
+      await ctx.runMutation(internal.functions.audit.createAuditLog, {
+        user_id: user._id,
+        action: "user_login",
+        resource_type: "users",
+        resource_id: user._id,
+        description: `Student ${user.name} logged in via phone auth`,
+        ip_address: args.device_info?.ip_address,
+        user_agent: args.device_info?.user_agent,
+      });
+
+      return {
+        success: true,
+        token: sessionToken,
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          status: user.status,
+          verified: user.verified,
+          school_id: user.school_id,
+        },
+        expiresAt,
+      };
+    } catch (error: any) {
+      throw new Error(getErrorMessage(error.message));
     }
+  },
+});
 
-    if (user.locked_until && user.locked_until > now) {
-      const remainingTime = Math.ceil((user.locked_until - now) / (60 * 1000));
-      throw new Error(`Account locked. Try again in ${remainingTime} minutes.`);
+export const searchUsersByName = query({
+  args: {
+    name: v.string(),
+  },
+  handler: async (ctx, args) => {
+    try {
+      if (args.name.length < 2) {
+        return [];
+      }
+
+      const users = await ctx.db
+        .query("users")
+        .withSearchIndex("search_users", (q) =>
+          q.search("name", args.name).eq("role", "student").eq("status", "active")
+        )
+        .take(10);
+
+      return users.map(user => ({
+        id: user._id,
+        name: user.name,
+        phone: user.phone?.slice(-4),
+      }));
+    } catch (error: any) {
+      console.error("Error searching users:", error);
+      return [];
+    }
+  },
+});
+
+export const getSecurityQuestion = query({
+  args: {
+    user_id: v.id("users"),
+    phone: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.user_id);
+    if (!user || user.phone !== args.phone || user.role !== "student") {
+      return { error: "Invalid request" };
     }
 
     const securityQuestion = await ctx.db
       .query("security_questions")
-      .withIndex("by_user_id", (q) => q.eq("user_id", user._id))
+      .withIndex("by_user_id", (q) => q.eq("user_id", args.user_id))
       .first();
 
     if (!securityQuestion) {
-      throw new Error("Security question not found");
+      return { error: "Security question not found" };
     }
 
-    const isValidAnswer = securityQuestion.answer_hash === args.security_answer_hash;
+    return { question: securityQuestion.question };
+  },
+});
 
-    if (!isValidAnswer) {
-      const failedAttempts = (user.failed_login_attempts || 0) + 1;
-      const updateData: any = {
-        failed_login_attempts: failedAttempts,
-      };
 
-      if (failedAttempts >= 5) {
-        updateData.locked_until = now + (30 * 60 * 1000);
+export const generateMagicLink = mutation({
+  args: {
+    email: v.string(),
+    purpose: v.union(
+      v.literal("login"),
+      v.literal("password_reset"),
+      v.literal("email_verification"),
+      v.literal("account_recovery")
+    ),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const user = await ctx.db
+        .query("users")
+        .withIndex("by_email", (q) => q.eq("email", args.email))
+        .first();
+
+      if (!user && args.purpose === "login") {
+        throw new Error("User not found");
       }
 
-      await ctx.db.patch(user._id, updateData);
-      throw new Error("Invalid security answer");
+      const now = Date.now();
+      const token = generateRandomToken();
+      const expiresAt = now + (15 * 60 * 1000);
+
+      await ctx.db.insert("magic_links", {
+        email: args.email,
+        token,
+        user_id: user?._id,
+        purpose: args.purpose,
+        expires_at: expiresAt,
+        created_at: now,
+      });
+
+      return {
+        success: true,
+        message: "Magic link sent to your email address.",
+        token
+      };
+    } catch (error: any) {
+      throw new Error(getErrorMessage(error.message));
     }
+  },
+});
 
-    if (user.status === "banned") {
-      throw new Error("Account has been banned. Contact administrator.");
-    }
+export const verifyMagicLink = mutation({
+  args: {
+    token: v.string(),
+    device_info: v.optional(v.object({
+      user_agent: v.optional(v.string()),
+      ip_address: v.optional(v.string()),
+      platform: v.optional(v.string()),
+      device_id: v.optional(v.string()),
+    })),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const now = Date.now();
 
-    await ctx.db.patch(user._id, {
-      failed_login_attempts: 0,
-      locked_until: undefined,
-      last_login_at: now,
-    });
+      const magicLink = await ctx.db
+        .query("magic_links")
+        .withIndex("by_token", (q) => q.eq("token", args.token))
+        .first();
 
-    const tokenPayload = {
-      userId: user._id,
-      email: user.email,
-      role: user.role,
-      verified: user.verified,
-      status: user.status,
-    };
+      if (!magicLink) {
+        throw new Error("Invalid or expired magic link");
+      }
 
-    const sessionToken = await generateSecureToken(tokenPayload);
-    const expiresAt = now + (7 * 24 * 60 * 60 * 1000);
+      if (magicLink.expires_at < now) {
+        await ctx.db.delete(magicLink._id);
+        throw new Error("Magic link has expired");
+      }
 
-    await ctx.db.insert("auth_sessions", {
-      user_id: user._id,
-      session_token: sessionToken,
-      device_info: args.device_info,
-      expires_at: expiresAt,
-      last_used_at: now,
-      is_offline_capable: true,
-      created_at: now,
-    });
+      if (magicLink.used_at) {
+        throw new Error("Magic link has already been used");
+      }
 
-    await ctx.runMutation(internal.functions.audit.createAuditLog, {
-      user_id: user._id,
-      action: "user_login",
-      resource_type: "users",
-      resource_id: user._id,
-      description: `Student ${user.name} logged in via phone auth`,
-      ip_address: args.device_info?.ip_address,
-      user_agent: args.device_info?.user_agent,
-    });
+      const user = await ctx.db
+        .query("users")
+        .withIndex("by_email", (q) => q.eq("email", magicLink.email))
+        .first();
 
-    return {
-      success: true,
-      token: sessionToken,
-      user: {
-        id: user._id,
-        name: user.name,
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      await ctx.db.patch(magicLink._id, {
+        used_at: now,
+      });
+
+      if (magicLink.purpose === "password_reset") {
+        const resetToken = await generateSecureToken({
+          userId: user._id,
+          purpose: "password_reset",
+          exp: now + (60 * 60 * 1000),
+        });
+
+        return {
+          success: true,
+          purpose: "password_reset",
+          resetToken,
+          user: {
+            id: user._id,
+            name: user.name,
+            email: user.email,
+          },
+        };
+      }
+
+      const tokenPayload = {
+        userId: user._id,
         email: user.email,
         role: user.role,
-        status: user.status,
         verified: user.verified,
-        school_id: user.school_id,
-      },
-      expiresAt,
-    };
+        status: user.status,
+      };
+
+      const sessionToken = await generateSecureToken(tokenPayload);
+      const expiresAt = now + (7 * 24 * 60 * 60 * 1000);
+
+      await ctx.db.insert("auth_sessions", {
+        user_id: user._id,
+        session_token: sessionToken,
+        device_info: args.device_info,
+        expires_at: expiresAt,
+        last_used_at: now,
+        is_offline_capable: true,
+        created_at: now,
+      });
+
+      await ctx.db.patch(user._id, {
+        last_login_at: now,
+      });
+
+      await ctx.runMutation(internal.functions.audit.createAuditLog, {
+        user_id: user._id,
+        action: "user_login",
+        resource_type: "users",
+        resource_id: user._id,
+        description: `User ${user.name} logged in via magic link`,
+        ip_address: args.device_info?.ip_address,
+        user_agent: args.device_info?.user_agent,
+      });
+
+      return {
+        success: true,
+        purpose: "login",
+        token: sessionToken,
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          status: user.status,
+          verified: user.verified,
+          school_id: user.school_id,
+        },
+        expiresAt,
+      };
+    } catch (error: any) {
+      throw new Error(getErrorMessage(error.message));
+    }
+  },
+});
+
+export const resetPassword = mutation({
+  args: {
+    reset_token: v.string(),
+    new_password_hash: v.string(),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const payload = await verifySecureToken(args.reset_token);
+
+      if (payload.purpose !== "password_reset") {
+        throw new Error("Invalid reset token");
+      }
+
+      const user = await ctx.db.get(payload.userId);
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      await ctx.db.patch(user._id, {
+        password_hash: args.new_password_hash,
+        password_changed_at: Date.now(),
+        failed_login_attempts: 0,
+        locked_until: undefined,
+      });
+
+      const userSessions = await ctx.db
+        .query("auth_sessions")
+        .withIndex("by_user_id", (q) => q.eq("user_id", user._id as Id<"users">))
+        .collect();
+
+      for (const session of userSessions) {
+        await ctx.db.delete(session._id);
+      }
+
+      await ctx.runMutation(internal.functions.audit.createAuditLog, {
+        user_id: user._id as Id<"users">,
+        action: "user_password_changed",
+        resource_type: "users",
+        resource_id: user._id,
+        description: "User reset password via magic link",
+      });
+
+      return {
+        success: true,
+        message: "Password reset successfully. Please sign in with your new password.",
+      };
+    } catch (error: any) {
+      throw new Error(getErrorMessage(error.message));
+    }
+  },
+});
+
+export const enableMFA = mutation({
+  args: {
+    token: v.string(),
+    current_password_hash: v.string(),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
+        token: args.token,
+      });
+
+      if (!sessionResult.valid || !sessionResult.user) {
+        throw new Error("Invalid session");
+      }
+
+      const user = await ctx.db.get(sessionResult.user.id);
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      if (user.password_hash !== args.current_password_hash) {
+        throw new Error("Current password is incorrect");
+      }
+
+      if (!["school_admin", "volunteer", "admin"].includes(user.role)) {
+        throw new Error("MFA is only available for school administrators, volunteers, and administrators");
+      }
+
+      await ctx.db.patch(user._id, {
+        mfa_enabled: true,
+      });
+
+      await ctx.runMutation(internal.functions.audit.createAuditLog, {
+        user_id: user._id,
+        action: "user_updated",
+        resource_type: "users",
+        resource_id: user._id,
+        description: "User enabled multi-factor authentication",
+      });
+
+      return {
+        success: true,
+        message: "Multi-factor authentication has been enabled for your account.",
+      };
+
+    } catch (error: any) {
+      throw new Error(getErrorMessage(error.message));
+    }
+  },
+});
+
+
+export const disableMFA = mutation({
+  args: {
+    token: v.string(),
+    current_password_hash: v.string(),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
+        token: args.token,
+      });
+
+      if (!sessionResult.valid || !sessionResult.user) {
+        throw new Error("Invalid session");
+      }
+
+      const user = await ctx.db.get(sessionResult.user.id);
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      if (user.password_hash !== args.current_password_hash) {
+        throw new Error("Current password is incorrect");
+      }
+
+      await ctx.db.patch(user._id, {
+        mfa_enabled: false,
+      });
+
+      await ctx.runMutation(internal.functions.audit.createAuditLog, {
+        user_id: user._id,
+        action: "user_updated",
+        resource_type: "users",
+        resource_id: user._id,
+        description: "User disabled multi-factor authentication",
+      });
+
+      return {
+        success: true,
+        message: "Multi-factor authentication has been disabled for your account.",
+      };
+    } catch (error: any) {
+      throw new Error(getErrorMessage(error.message));
+    }
+  },
+});
+
+export const enableBiometric = mutation({
+  args: {
+    token: v.string(),
+    credential_id: v.string(),
+    public_key: v.string(),
+    device_name: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
+        token: args.token,
+      });
+
+      if (!sessionResult.valid || !sessionResult.user) {
+        throw new Error("Invalid session");
+      }
+
+      const user = await ctx.db.get(sessionResult.user.id);
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      await ctx.db.patch(user._id, {
+        biometric_enabled: true,
+      });
+
+      await ctx.db.insert("biometric_credentials", {
+        user_id: user._id,
+        credential_id: args.credential_id,
+        public_key: args.public_key,
+        device_name: args.device_name || "Unknown Device",
+        created_at: Date.now(),
+      });
+
+      await ctx.runMutation(internal.functions.audit.createAuditLog, {
+        user_id: user._id,
+        action: "user_updated",
+        resource_type: "users",
+        resource_id: user._id,
+        description: "User enabled biometric authentication",
+      });
+
+      return {
+        success: true,
+        message: "Biometric authentication has been enabled for this device.",
+      };
+    } catch (error: any) {
+      throw new Error(getErrorMessage(error.message));
+    }
+  },
+});
+
+export const disableBiometric = mutation({
+  args: {
+    token: v.string(),
+    current_password_hash: v.string(),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
+        token: args.token,
+      });
+
+      if (!sessionResult.valid || !sessionResult.user) {
+        throw new Error("Invalid session");
+      }
+
+      const user = await ctx.db.get(sessionResult.user.id);
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      if (user.password_hash !== args.current_password_hash) {
+        throw new Error("Current password is incorrect");
+      }
+
+      await ctx.db.patch(user._id, {
+        biometric_enabled: false,
+      });
+
+      const credentials = await ctx.db
+        .query("biometric_credentials")
+        .withIndex("by_user_id", (q) => q.eq("user_id", user._id))
+        .collect();
+
+      for (const credential of credentials) {
+        await ctx.db.delete(credential._id);
+      }
+
+      await ctx.runMutation(internal.functions.audit.createAuditLog, {
+        user_id: user._id,
+        action: "user_updated",
+        resource_type: "users",
+        resource_id: user._id,
+        description: "User disabled biometric authentication",
+      });
+
+      return {
+        success: true,
+        message: "Biometric authentication has been disabled for your account.",
+      };
+    } catch (error: any) {
+      throw new Error(getErrorMessage(error.message));
+    }
   },
 });
 
@@ -527,6 +1069,10 @@ export const verifySessionReadOnly = internalQuery({
 
       if (!session) {
         return { valid: false, error: "Session not found" };
+      }
+
+      if (payload.userId && payload.userId !== session.user_id) {
+        return { valid: false, error: "Token user mismatch" };
       }
 
       const now = Date.now();
@@ -579,6 +1125,10 @@ export const verifySession = internalMutation({
         return { valid: false, error: "Session not found" };
       }
 
+      if (payload.userId && payload.userId !== session.user_id) {
+        return { valid: false, error: "Token user mismatch" };
+      }
+
       const now = Date.now();
 
       if (session.expires_at < now) {
@@ -618,193 +1168,50 @@ export const verifySession = internalMutation({
   },
 });
 
-export const searchUsersByName = query({
-  args: {
-    name: v.string(),
-  },
-  handler: async (ctx, args) => {
-    if (args.name.length < 2) {
-      return [];
-    }
-
-    const users = await ctx.db
-      .query("users")
-      .withSearchIndex("search_users", (q) =>
-        q.search("name", args.name).eq("role", "student")
-      )
-      .take(10);
-
-    return users.map(user => ({
-      id: user._id,
-      name: user.name,
-      phone: user.phone?.slice(-4),
-    }));
-  },
-});
-
-export const getSecurityQuestion = query({
-  args: {
-    user_id: v.id("users"),
-    phone: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const user = await ctx.db.get(args.user_id);
-    if (!user || user.phone !== args.phone || user.role !== "student") {
-      throw new Error("Invalid request");
-    }
-
-    const securityQuestion = await ctx.db
-      .query("security_questions")
-      .withIndex("by_user_id", (q) => q.eq("user_id", args.user_id))
-      .first();
-
-    if (!securityQuestion) {
-      throw new Error("Security question not found");
-    }
-
-    return {
-      question: securityQuestion.question,
-    };
-  },
-});
-
 export const signOut = mutation({
   args: {
     token: v.string(),
     device_id: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const session = await ctx.db
-      .query("auth_sessions")
-      .withIndex("by_session_token", (q) =>
-        q.eq("session_token", args.token)
-      )
-      .first();
+    try {
+      const session = await ctx.db
+        .query("auth_sessions")
+        .withIndex("by_session_token", (q) =>
+          q.eq("session_token", args.token)
+        )
+        .first();
 
-    if (session) {
-      await ctx.runMutation(internal.functions.audit.createAuditLog, {
-        user_id: session.user_id,
-        action: "user_logout",
-        resource_type: "users",
-        resource_id: session.user_id,
-        description: "User logged out",
-      });
+      if (session) {
+        await ctx.runMutation(internal.functions.audit.createAuditLog, {
+          user_id: session.user_id,
+          action: "user_logout",
+          resource_type: "users",
+          resource_id: session.user_id,
+          description: "User logged out",
+        });
 
-      await ctx.db.delete(session._id);
+        await ctx.db.delete(session._id);
 
-      if (args.device_id) {
-        const deviceSessions = await ctx.db
-          .query("auth_sessions")
-          .withIndex("by_user_id_device_id", (q) =>
-            q.eq("user_id", session.user_id).eq("device_info.device_id", args.device_id!)
-          )
-          .collect();
+        if (args.device_id) {
+          const deviceSessions = await ctx.db
+            .query("auth_sessions")
+            .withIndex("by_user_id_device_id", (q) =>
+              q.eq("user_id", session.user_id).eq("device_info.device_id", args.device_id!)
+            )
+            .collect();
 
-        for (const deviceSession of deviceSessions) {
-          await ctx.db.delete(deviceSession._id);
+          for (const deviceSession of deviceSessions) {
+            await ctx.db.delete(deviceSession._id);
+          }
         }
       }
+
+      return { success: true };
+    } catch (error: any) {
+      console.error("Sign out error:", error);
+      return { success: true };
     }
-
-    return { success: true };
-  },
-});
-
-
-export const verifyMagicLink = mutation({
-  args: {
-    token: v.string(),
-    device_info: v.optional(v.object({
-      user_agent: v.optional(v.string()),
-      ip_address: v.optional(v.string()),
-      platform: v.optional(v.string()),
-      device_id: v.optional(v.string()),
-    })),
-  },
-  handler: async (ctx, args) => {
-    const now = Date.now();
-
-    const magicLink = await ctx.db
-      .query("magic_links")
-      .withIndex("by_token", (q) => q.eq("token", args.token))
-      .first();
-
-    if (!magicLink) {
-      throw new Error("Invalid or expired magic link");
-    }
-
-    if (magicLink.expires_at < now) {
-      await ctx.db.delete(magicLink._id);
-      throw new Error("Magic link has expired");
-    }
-
-    if (magicLink.used_at) {
-      throw new Error("Magic link has already been used");
-    }
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_email", (q) => q.eq("email", magicLink.email))
-      .first();
-
-    if (!user) {
-      throw new Error("User not found");
-    }
-
-    await ctx.db.patch(magicLink._id, {
-      used_at: now,
-    });
-
-    const tokenPayload = {
-      userId: user._id,
-      email: user.email,
-      role: user.role,
-      verified: user.verified,
-      status: user.status,
-      iat: now,
-    };
-
-    const sessionToken = await generateSecureToken(tokenPayload);
-    const expiresAt = now + (7 * 24 * 60 * 60 * 1000);
-
-    await ctx.db.insert("auth_sessions", {
-      user_id: user._id,
-      session_token: sessionToken,
-      device_info: args.device_info,
-      expires_at: expiresAt,
-      last_used_at: now,
-      is_offline_capable: true,
-      created_at: now,
-    });
-
-    await ctx.db.patch(user._id, {
-      last_login_at: now,
-    });
-
-    await ctx.runMutation(internal.functions.audit.createAuditLog, {
-      user_id: user._id,
-      action: "user_login",
-      resource_type: "users",
-      resource_id: user._id,
-      description: `User ${user.name} logged in via magic link`,
-      ip_address: args.device_info?.ip_address,
-      user_agent: args.device_info?.user_agent,
-    });
-
-    return {
-      success: true,
-      token: sessionToken,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        status: user.status,
-        verified: user.verified,
-        school_id: user.school_id,
-      },
-      expiresAt,
-    };
   },
 });
 
@@ -816,55 +1223,59 @@ export const updateSecurityQuestion = mutation({
     token: v.string(),
   },
   handler: async (ctx, args) => {
-    const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
-      token: args.token,
-    });
-
-    if (!sessionResult.valid || sessionResult.user?.role !== "student") {
-      throw new Error("Student access required");
-    }
-
-    const user = await ctx.db.get(sessionResult.user.id);
-    if (!user || !("password_hash" in user)) {
-      throw new Error("Invalid user record");
-    }
-
-    const isPasswordValid = user.password_hash === args.current_password_hash;
-    if (!isPasswordValid) {
-      throw new Error("Current password is incorrect");
-    }
-
-    const existingQuestion = await ctx.db
-      .query("security_questions")
-      .withIndex("by_user_id", (q) => q.eq("user_id", user._id))
-      .first();
-
-    const now = Date.now();
-
-    if (existingQuestion) {
-      await ctx.db.patch(existingQuestion._id, {
-        question: args.question,
-        answer_hash: args.answer_hash,
-        updated_at: now,
+    try {
+      const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
+        token: args.token,
       });
-    } else {
-      await ctx.db.insert("security_questions", {
+
+      if (!sessionResult.valid || sessionResult.user?.role !== "student") {
+        throw new Error("Student access required");
+      }
+
+      const user = await ctx.db.get(sessionResult.user.id);
+      if (!user || !("password_hash" in user)) {
+        throw new Error("Invalid user record");
+      }
+
+      const isPasswordValid = user.password_hash === args.current_password_hash;
+      if (!isPasswordValid) {
+        throw new Error("Current password is incorrect");
+      }
+
+      const existingQuestion = await ctx.db
+        .query("security_questions")
+        .withIndex("by_user_id", (q) => q.eq("user_id", user._id))
+        .first();
+
+      const now = Date.now();
+
+      if (existingQuestion) {
+        await ctx.db.patch(existingQuestion._id, {
+          question: args.question,
+          answer_hash: args.answer_hash,
+          updated_at: now,
+        });
+      } else {
+        await ctx.db.insert("security_questions", {
+          user_id: user._id,
+          question: args.question,
+          answer_hash: args.answer_hash,
+          created_at: now,
+        });
+      }
+
+      await ctx.runMutation(internal.functions.audit.createAuditLog, {
         user_id: user._id,
-        question: args.question,
-        answer_hash: args.answer_hash,
-        created_at: now,
+        action: "user_updated",
+        resource_type: "users",
+        resource_id: user._id,
+        description: "Student updated security question",
       });
+
+      return { success: true, message: "Security question updated successfully." };
+    } catch (error: any) {
+      throw new Error(getErrorMessage(error.message));
     }
-
-    await ctx.runMutation(internal.functions.audit.createAuditLog, {
-      user_id: user._id,
-      action: "user_updated",
-      resource_type: "users",
-      resource_id: user._id,
-      description: "Student updated security question",
-    });
-
-    return { success: true };
   },
 });
 
@@ -875,48 +1286,53 @@ export const changePassword = mutation({
     token: v.string(),
   },
   handler: async (ctx, args) => {
-    const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
-      token: args.token,
-    });
+    try {
+      const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
+        token: args.token,
+      });
 
-    if (!sessionResult.valid || !sessionResult.user) {
-      throw new Error("Invalid session");
-    }
-
-    const user = await ctx.db.get(sessionResult.user.id);
-    if (!user || !("password_hash" in user)) {
-      throw new Error("User not found or invalid user record");
-    }
-
-    const isCurrentPasswordValid = user.password_hash === args.current_password_hash;
-    if (!isCurrentPasswordValid) {
-      throw new Error("Current password is incorrect");
-    }
-
-    await ctx.db.patch(user._id, {
-      password_hash: args.new_password_hash,
-      password_changed_at: Date.now(),
-    });
-    const userSessions = await ctx.db
-      .query("auth_sessions")
-      .withIndex("by_user_id", (q) => q.eq("user_id", user._id))
-      .collect();
-
-    for (const session of userSessions) {
-      if (session.session_token !== args.token) {
-        await ctx.db.delete(session._id);
+      if (!sessionResult.valid || !sessionResult.user) {
+        throw new Error("Invalid session");
       }
+
+      const user = await ctx.db.get(sessionResult.user.id);
+      if (!user || !("password_hash" in user)) {
+        throw new Error("User not found or invalid user record");
+      }
+
+      const isCurrentPasswordValid = user.password_hash === args.current_password_hash;
+      if (!isCurrentPasswordValid) {
+        throw new Error("Current password is incorrect");
+      }
+
+      await ctx.db.patch(user._id, {
+        password_hash: args.new_password_hash,
+        password_changed_at: Date.now(),
+      });
+
+      const userSessions = await ctx.db
+        .query("auth_sessions")
+        .withIndex("by_user_id", (q) => q.eq("user_id", user._id))
+        .collect();
+
+      for (const session of userSessions) {
+        if (session.session_token !== args.token) {
+          await ctx.db.delete(session._id);
+        }
+      }
+
+      await ctx.runMutation(internal.functions.audit.createAuditLog, {
+        user_id: user._id,
+        action: "user_password_changed",
+        resource_type: "users",
+        resource_id: user._id,
+        description: "User changed password",
+      });
+
+      return { success: true, message: "Password changed successfully." };
+    } catch (error: any) {
+      throw new Error(getErrorMessage(error.message));
     }
-
-    await ctx.runMutation(internal.functions.audit.createAuditLog, {
-      user_id: user._id,
-      action: "user_password_changed",
-      resource_type: "users",
-      resource_id: user._id,
-      description: "User changed password",
-    });
-
-    return { success: true };
   },
 });
 
@@ -966,7 +1382,6 @@ export const cleanupExpired = mutation({
       await ctx.db.delete(session._id);
     }
 
-    // Clean up expired magic links
     const expiredMagicLinks = await ctx.db
       .query("magic_links")
       .withIndex("by_expires_at", (q) => q.lt("expires_at", now))
@@ -995,56 +1410,60 @@ export const cleanupExpired = mutation({
   },
 });
 
-
 export const getCurrentUser = query({
   args: {
     token: v.string(),
   },
   handler: async (ctx, args): Promise<CurrentUserResponse> => {
-    const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
-      token: args.token,
-    });
+    try {
+      const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
+        token: args.token,
+      });
 
-    if (!sessionResult.valid || !sessionResult.user) return null;
+      if (!sessionResult.valid || !sessionResult.user) return null;
 
-    const user = await ctx.db.get<"users">(sessionResult.user.id);
-    if (!user || !("name" in user)) return null;
+      const user = await ctx.db.get<"users">(sessionResult.user.id);
+      if (!user || !("name" in user)) return null;
 
-    let school: Doc<"schools"> | null = null;
-    if (user.school_id) {
-      const schoolDoc = await ctx.db.get<"schools">(user.school_id);
-      if (schoolDoc && "name" in schoolDoc) {
-        school = schoolDoc as Doc<"schools">;
-      }
-    }
-
-    return {
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      role: user.role,
-      status: user.status,
-      verified: user.verified,
-      gender: user.gender,
-      date_of_birth: user.date_of_birth,
-      grade: user.grade,
-      position: user.position,
-      high_school_attended: user.high_school_attended,
-      profile_image: user.profile_image,
-      mfa_enabled: user.mfa_enabled,
-      biometric_enabled: user.biometric_enabled,
-      last_login_at: user.last_login_at,
-      school: school
-        ? {
-          id: school._id,
-          name: school.name,
-          type: school.type,
-          status: school.status,
-          verified: school.verified,
+      let school: Doc<"schools"> | null = null;
+      if (user.school_id) {
+        const schoolDoc = await ctx.db.get<"schools">(user.school_id);
+        if (schoolDoc && "name" in schoolDoc) {
+          school = schoolDoc as Doc<"schools">;
         }
-        : null,
-    };
+      }
+
+      return {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        status: user.status,
+        verified: user.verified,
+        gender: user.gender,
+        date_of_birth: user.date_of_birth,
+        grade: user.grade,
+        position: user.position,
+        high_school_attended: user.high_school_attended,
+        profile_image: user.profile_image,
+        mfa_enabled: user.mfa_enabled,
+        biometric_enabled: user.biometric_enabled,
+        last_login_at: user.last_login_at,
+        school: school
+          ? {
+            id: school._id,
+            name: school.name,
+            type: school.type,
+            status: school.status,
+            verified: school.verified,
+          }
+          : null,
+      };
+    } catch (error: any) {
+      console.error("Get current user error:", error);
+      return null;
+    }
   },
 });
 
@@ -1059,54 +1478,58 @@ export const refreshToken = mutation({
     })),
   },
   handler: async (ctx, args) => {
-    const now = Date.now();
+    try {
+      const now = Date.now();
 
-    const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
-      token: args.token,
-    });
+      const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
+        token: args.token,
+      });
 
-    if (!sessionResult.valid || !sessionResult.user) {
-      throw new Error("Invalid session");
+      if (!sessionResult.valid || !sessionResult.user) {
+        throw new Error("Invalid session");
+      }
+
+      const user = await ctx.db.get<"users">(sessionResult.user.id);
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      const currentSession = await ctx.db
+        .query("auth_sessions")
+        .withIndex("by_session_token", (q) => q.eq("session_token", args.token))
+        .first();
+
+      if (!currentSession) {
+        throw new Error("Session not found");
+      }
+
+      const tokenPayload = {
+        userId: user._id,
+        email: user.email,
+        role: user.role,
+        verified: user.verified,
+        status: user.status,
+        iat: now,
+      };
+
+      const newSessionToken = await generateSecureToken(tokenPayload);
+      const expiresAt = now + (7 * 24 * 60 * 60 * 1000);
+
+      await ctx.db.patch(currentSession._id, {
+        session_token: newSessionToken,
+        expires_at: expiresAt,
+        last_used_at: now,
+        device_info: args.device_info || currentSession.device_info,
+      });
+
+      return {
+        success: true,
+        token: newSessionToken,
+        expiresAt,
+      };
+    } catch (error: any) {
+      throw new Error(getErrorMessage(error.message));
     }
-
-    const user = await ctx.db.get<"users">(sessionResult.user.id);
-    if (!user) {
-      throw new Error("User not found");
-    }
-
-    const currentSession = await ctx.db
-      .query("auth_sessions")
-      .withIndex("by_session_token", (q) => q.eq("session_token", args.token))
-      .first();
-
-    if (!currentSession) {
-      throw new Error("Session not found");
-    }
-
-    const tokenPayload = {
-      userId: user._id,
-      email: user.email,
-      role: user.role,
-      verified: user.verified,
-      status: user.status,
-      iat: now,
-    };
-
-    const newSessionToken = await generateSecureToken(tokenPayload);
-    const expiresAt = now + (7 * 24 * 60 * 60 * 1000);
-
-    await ctx.db.patch(currentSession._id, {
-      session_token: newSessionToken,
-      expires_at: expiresAt,
-      last_used_at: now,
-      device_info: args.device_info || currentSession.device_info,
-    });
-
-    return {
-      success: true,
-      token: newSessionToken,
-      expiresAt,
-    };
   },
 });
 
@@ -1116,49 +1539,53 @@ export const approveUser = mutation({
     admin_token: v.string(),
   },
   handler: async (ctx, args) => {
-    const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
-      token: args.admin_token,
-    });
-
-    if (!sessionResult.valid || sessionResult.user?.role !== "admin") {
-      throw new Error("Admin access required");
-    }
-
-    const userToApprove = await ctx.db.get(args.user_id);
-    if (!userToApprove) {
-      throw new Error("User not found");
-    }
-
-    await ctx.db.patch(args.user_id, {
-      verified: true,
-      status: "active",
-    });
-
-    if (userToApprove.role === "school_admin" && userToApprove.school_id) {
-      await ctx.db.patch(userToApprove.school_id, {
-        verified: true,
+    try {
+      const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
+        token: args.admin_token,
       });
+
+      if (!sessionResult.valid || sessionResult.user?.role !== "admin") {
+        throw new Error("Admin access required");
+      }
+
+      const userToApprove = await ctx.db.get(args.user_id);
+      if (!userToApprove) {
+        throw new Error("User not found");
+      }
+
+      await ctx.db.patch(args.user_id, {
+        verified: true,
+        status: "active",
+      });
+
+      if (userToApprove.role === "school_admin" && userToApprove.school_id) {
+        await ctx.db.patch(userToApprove.school_id, {
+          verified: true,
+        });
+      }
+
+      await ctx.runMutation(internal.functions.audit.createAuditLog, {
+        user_id: sessionResult.user.id,
+        action: "user_updated",
+        resource_type: "users",
+        resource_id: args.user_id,
+        description: `Admin approved user ${userToApprove.name}`,
+      });
+
+      await ctx.db.insert("notifications", {
+        user_id: args.user_id,
+        title: "Account Approved",
+        message: "Your account has been approved by an administrator. You can now access all features.",
+        type: "auth",
+        is_read: false,
+        expires_at: Date.now() + (30 * 24 * 60 * 60 * 1000),
+        created_at: Date.now(),
+      });
+
+      return { success: true, message: "User approved successfully." };
+    } catch (error: any) {
+      throw new Error(getErrorMessage(error.message));
     }
-
-    await ctx.runMutation(internal.functions.audit.createAuditLog, {
-      user_id: sessionResult.user.id,
-      action: "user_updated",
-      resource_type: "users",
-      resource_id: args.user_id,
-      description: `Admin approved user ${userToApprove.name}`,
-    });
-
-    await ctx.db.insert("notifications", {
-      user_id: args.user_id,
-      title: "Account Approved",
-      message: "Your account has been approved by an administrator. You can now access all features.",
-      type: "auth",
-      is_read: false,
-      expires_at: Date.now() + (30 * 24 * 60 * 60 * 1000),
-      created_at: Date.now(),
-    });
-
-    return { success: true };
   },
 });
 
@@ -1169,47 +1596,49 @@ export const banUser = mutation({
     admin_token: v.string(),
   },
   handler: async (ctx, args) => {
+    try {
+      const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
+        token: args.admin_token,
+      });
 
-    const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
-      token: args.admin_token,
-    });
+      if (!sessionResult.valid || sessionResult.user?.role !== "admin") {
+        throw new Error("Admin access required");
+      }
 
-    if (!sessionResult.valid || sessionResult.user?.role !== "admin") {
-      throw new Error("Admin access required");
+      const userToBan = await ctx.db.get(args.user_id);
+      if (!userToBan) {
+        throw new Error("User not found");
+      }
+
+      if (userToBan.role === "admin") {
+        throw new Error("Cannot ban other administrators");
+      }
+
+      await ctx.db.patch(args.user_id, {
+        status: "banned",
+      });
+
+      const userSessions = await ctx.db
+        .query("auth_sessions")
+        .withIndex("by_user_id", (q) => q.eq("user_id", args.user_id))
+        .collect();
+
+      for (const session of userSessions) {
+        await ctx.db.delete(session._id);
+      }
+
+      await ctx.runMutation(internal.functions.audit.createAuditLog, {
+        user_id: sessionResult.user.id,
+        action: "user_deleted",
+        resource_type: "users",
+        resource_id: args.user_id,
+        description: `Admin banned user ${userToBan.name}. Reason: ${args.reason}`,
+      });
+
+      return { success: true, message: "User banned successfully." };
+    } catch (error: any) {
+      throw new Error(getErrorMessage(error.message));
     }
-
-
-    const userToBan = await ctx.db.get(args.user_id);
-    if (!userToBan) {
-      throw new Error("User not found");
-    }
-
-    if (userToBan.role === "admin") {
-      throw new Error("Cannot ban other administrators");
-    }
-
-    await ctx.db.patch(args.user_id, {
-      status: "banned",
-    });
-
-    const userSessions = await ctx.db
-      .query("auth_sessions")
-      .withIndex("by_user_id", (q) => q.eq("user_id", args.user_id))
-      .collect();
-
-    for (const session of userSessions) {
-      await ctx.db.delete(session._id);
-    }
-
-    await ctx.runMutation(internal.functions.audit.createAuditLog, {
-      user_id: sessionResult.user.id,
-      action: "user_deleted",
-      resource_type: "users",
-      resource_id: args.user_id,
-      description: `Admin banned user ${userToBan.name}. Reason: ${args.reason}`,
-    });
-
-    return { success: true };
   },
 });
 
@@ -1220,54 +1649,58 @@ export const getPendingApprovals = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
-      token: args.admin_token,
-    });
-
-    if (!sessionResult.valid || sessionResult.user?.role !== "admin") {
-      throw new Error("Admin access required");
-    }
-
-    const page = args.page || 1;
-    const limit = args.limit || 20;
-
-    const pendingUsers = await ctx.db
-      .query("users")
-      .withIndex("by_verified", (q) => q.eq("verified", false))
-      .order("desc")
-      .paginate({
-        numItems: limit,
-        cursor: page > 1 ? String(page) : null
+    try {
+      const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
+        token: args.admin_token,
       });
 
-    const usersWithSchools = await Promise.all(
-      pendingUsers.page.map(async (user) => {
-        let school = null;
-        if (user.school_id) {
-          school = await ctx.db.get(user.school_id);
-        }
+      if (!sessionResult.valid || sessionResult.user?.role !== "admin") {
+        throw new Error("Admin access required");
+      }
 
-        return {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          status: user.status,
-          created_at: user.created_at,
-          school: school ? {
-            id: school._id,
-            name: school.name,
-            type: school.type,
-          } : null,
-        };
-      })
-    );
+      const page = args.page || 1;
+      const limit = args.limit || 20;
 
-    return {
-      users: usersWithSchools,
-      hasMore: pendingUsers.continueCursor !== null,
-      nextPage: pendingUsers.continueCursor,
-    };
+      const pendingUsers = await ctx.db
+        .query("users")
+        .withIndex("by_verified", (q) => q.eq("verified", false))
+        .order("desc")
+        .paginate({
+          numItems: limit,
+          cursor: page > 1 ? String(page) : null
+        });
+
+      const usersWithSchools = await Promise.all(
+        pendingUsers.page.map(async (user) => {
+          let school = null;
+          if (user.school_id) {
+            school = await ctx.db.get(user.school_id);
+          }
+
+          return {
+            id: user._id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            status: user.status,
+            created_at: user.created_at,
+            school: school ? {
+              id: school._id,
+              name: school.name,
+              type: school.type,
+            } : null,
+          };
+        })
+      );
+
+      return {
+        users: usersWithSchools,
+        hasMore: pendingUsers.continueCursor !== null,
+        nextPage: pendingUsers.continueCursor,
+      };
+    } catch (error: any) {
+      throw new Error(getErrorMessage(error.message));
+    }
   },
 });
 
@@ -1282,7 +1715,6 @@ type AuthSession = {
   is_offline_capable: boolean;
 };
 
-// Define the return type for the mapped session info
 type SessionInfo = {
   id: Id<"auth_sessions">;
   device_info?: unknown;
@@ -1301,30 +1733,34 @@ export const getUserSessions = query({
     ctx,
     args: { token: string }
   ): Promise<SessionInfo[]> => {
+    try {
+      const sessionResult = await ctx.runQuery(
+        internal.functions.auth.verifySessionReadOnly,
+        { token: args.token }
+      );
 
-    const sessionResult = await ctx.runQuery(
-      internal.functions.auth.verifySessionReadOnly,
-      { token: args.token }
-    );
+      if (!sessionResult.valid || !sessionResult.user) {
+        throw new Error("Invalid session");
+      }
 
-    if (!sessionResult.valid || !sessionResult.user) {
-      throw new Error("Invalid session");
+      const sessions: AuthSession[] = await ctx.db
+        .query("auth_sessions")
+        .withIndex("by_user_id", (q) => q.eq("user_id", sessionResult.user.id))
+        .collect();
+
+      return sessions.map((session: AuthSession): SessionInfo => ({
+        id: session._id,
+        device_info: session.device_info,
+        created_at: session.created_at,
+        last_used_at: session.last_used_at,
+        expires_at: session.expires_at,
+        is_current: session.session_token === args.token,
+        is_offline_capable: session.is_offline_capable,
+      }));
+    } catch (error: any) {
+      console.error("Get user sessions error:", error);
+      return [];
     }
-
-    const sessions: AuthSession[] = await ctx.db
-      .query("auth_sessions")
-      .withIndex("by_user_id", (q) => q.eq("user_id", sessionResult.user.id))
-      .collect();
-
-    return sessions.map((session: AuthSession): SessionInfo => ({
-      id: session._id,
-      device_info: session.device_info,
-      created_at: session.created_at,
-      last_used_at: session.last_used_at,
-      expires_at: session.expires_at,
-      is_current: session.session_token === args.token,
-      is_offline_capable: session.is_offline_capable,
-    }));
   },
 });
 
@@ -1334,26 +1770,29 @@ export const revokeSession = mutation({
     token: v.string(),
   },
   handler: async (ctx, args) => {
+    try {
+      const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
+        token: args.token,
+      });
 
-    const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
-      token: args.token,
-    });
+      if (!sessionResult.valid) {
+        throw new Error("Invalid session");
+      }
 
-    if (!sessionResult.valid) {
-      throw new Error("Invalid session");
+      const sessionToRevoke = await ctx.db.get(args.session_id);
+      if (!sessionToRevoke || !sessionResult.user) {
+        throw new Error("Session not found");
+      }
+
+      if (sessionToRevoke.user_id !== sessionResult.user.id) {
+        throw new Error("Unauthorized");
+      }
+
+      await ctx.db.delete(args.session_id);
+
+      return { success: true, message: "Session revoked successfully." };
+    } catch (error: any) {
+      throw new Error(getErrorMessage(error.message));
     }
-
-    const sessionToRevoke = await ctx.db.get(args.session_id);
-    if (!sessionToRevoke || !sessionResult.user) {
-      throw new Error("Session not found");
-    }
-
-    if (sessionToRevoke.user_id !== sessionResult.user.id) {
-      throw new Error("Unauthorized");
-    }
-
-    await ctx.db.delete(args.session_id);
-
-    return { success: true };
   },
 });

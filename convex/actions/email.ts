@@ -2,54 +2,77 @@
 
 import { action } from "../_generated/server";
 import { v } from "convex/values";
+import nodemailer from "nodemailer";
 
-export const sendMagicLinkEmail = action({
-  args: {
-    email: v.string(),
-    token: v.string(),
-    purpose: v.union(
-      v.literal("login"),
-      v.literal("password_reset"),
-      v.literal("account_recovery")
-    ),
-  },
-  handler: async (ctx, args) => {
-    const { Resend } = await import('resend');
+const MAX_RETRIES = 3;
+const RETRY_DELAYS = [1000, 3000, 5000];
 
-    if (!process.env.RESEND_API_KEY) {
-      console.error("RESEND_API_KEY not configured");
-      return { success: false, error: "Email service not configured" };
-    }
+interface EmailQueue {
+  to: string;
+  subject: string;
+  html: string;
+  attempts: number;
+  lastAttempt?: number;
+}
 
-    const resend = new Resend(process.env.RESEND_API_KEY);
+function createTransporter() {
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST || "smtp.gmail.com",
+    port: parseInt(process.env.SMTP_PORT || "587"),
+    secure: process.env.SMTP_SECURE === "true",
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+    pool: true,
+    maxConnections: 5,
+    maxMessages: 100,
+  });
+}
 
-    const baseUrl = process.env.CONVEX_SITE_URL || process.env.NEXT_PUBLIC_CONVEX_URL || "http://localhost:3000";
-    const magicLinkUrl = `${baseUrl}/auth/magic-link?token=${args.token}`;
+async function sendEmailWithRetry(emailData: EmailQueue): Promise<boolean> {
+  const transporter = createTransporter();
 
-    const { subject, html } = getEmailContent(args.purpose, magicLinkUrl);
-
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const { data, error } = await resend.emails.send({
-        from: process.env.RESEND_FROM_EMAIL || 'iRankHub <noreply@irankdebate.com>',
-        to: [args.email],
-        subject,
-        html,
+      await transporter.sendMail({
+        from: process.env.SMTP_FROM || 'iRankHub <info@debaterwanda.org>',
+        to: emailData.to,
+        subject: emailData.subject,
+        html: emailData.html,
       });
 
-      if (error) {
-        console.error("Resend error:", error);
-        return { success: false, error: error.message };
-      }
-
-      console.log("Magic link email sent:", data?.id);
-      return { success: true, emailId: data?.id };
-
+      console.log(`Email sent successfully to ${emailData.to} on attempt ${attempt}`);
+      return true;
     } catch (error: any) {
-      console.error("Failed to send magic link email:", error);
-      return { success: false, error: error.message };
+      console.error(`Email attempt ${attempt} failed for ${emailData.to}:`, error.message);
+
+      if (attempt < MAX_RETRIES) {
+        const delay = RETRY_DELAYS[attempt - 1];
+        console.log(`Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
     }
-  },
-});
+  }
+
+  console.error(`Failed to send email to ${emailData.to} after ${MAX_RETRIES} attempts`);
+  return false;
+}
+
+async function sendBatchEmails(emails: EmailQueue[]): Promise<void> {
+  const batchSize = 10;
+
+  for (let i = 0; i < emails.length; i += batchSize) {
+    const batch = emails.slice(i, i + batchSize);
+
+    const promises = batch.map(email => sendEmailWithRetry(email));
+    await Promise.allSettled(promises);
+
+    if (i + batchSize < emails.length) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  }
+}
 
 export const sendWelcomeEmail = action({
   args: {
@@ -58,34 +81,81 @@ export const sendWelcomeEmail = action({
     role: v.string(),
   },
   handler: async (ctx, args) => {
-    const { Resend } = await import('resend');
-
-    if (!process.env.RESEND_API_KEY) {
-      console.error("RESEND_API_KEY not configured");
-      return { success: false, error: "Email service not configured" };
-    }
-
-    const resend = new Resend(process.env.RESEND_API_KEY);
-
     try {
-      const { data, error } = await resend.emails.send({
-        from: process.env.RESEND_FROM_EMAIL || 'iRankHub <noreply@irankdebate.com>',
-        to: [args.email],
+      const html = getWelcomeEmailTemplate(args.name, args.role);
+
+      const emailData: EmailQueue = {
+        to: args.email,
         subject: "Welcome to iRankHub!",
-        html: getWelcomeEmailTemplate(args.name, args.role),
+        html,
+        attempts: 0,
+      };
+
+      sendEmailWithRetry(emailData).catch(error => {
+        console.error("Background email sending failed:", error);
       });
 
-      if (error) {
-        console.error("Resend error:", error);
-        return { success: false, error: error.message };
+      return { success: true, message: "Welcome email queued for sending" };
+    } catch (error: any) {
+      console.error("Failed to queue welcome email:", error);
+      return { success: false, error: "Failed to queue email" };
+    }
+  },
+});
+
+export const sendMagicLinkEmail = action({
+  args: {
+    email: v.string(),
+    token: v.string(),
+    purpose: v.union(
+      v.literal("login"),
+      v.literal("password_reset"),
+      v.literal("email_verification"),
+      v.literal("account_recovery")
+    ),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const baseUrl = process.env.CONVEX_SITE_URL || process.env.NEXT_PUBLIC_CONVEX_URL || "http://localhost:3000";
+      let magicLinkUrl: string;
+      let subject: string;
+
+      switch (args.purpose) {
+        case "login":
+          magicLinkUrl = `${baseUrl}/auth/magic-link?token=${args.token}`;
+          subject = "iRankHub - Magic Link Login";
+          break;
+        case "password_reset":
+          magicLinkUrl = `${baseUrl}/auth/reset-password?token=${args.token}`;
+          subject = "iRankHub - Reset Your Password";
+          break;
+        case "email_verification":
+          magicLinkUrl = `${baseUrl}/auth/verify-email?token=${args.token}`;
+          subject = "iRankHub - Verify Your Email";
+          break;
+        case "account_recovery":
+          magicLinkUrl = `${baseUrl}/auth/recover-account?token=${args.token}`;
+          subject = "iRankHub - Recover Your Account";
+          break;
       }
 
-      console.log("Welcome email sent:", data?.id);
-      return { success: true, emailId: data?.id };
+      const html = getMagicLinkEmailTemplate(args.purpose, magicLinkUrl);
 
+      const emailData: EmailQueue = {
+        to: args.email,
+        subject,
+        html,
+        attempts: 0,
+      };
+
+      sendEmailWithRetry(emailData).catch(error => {
+        console.error("Background magic link email failed:", error);
+      });
+
+      return { success: true, message: "Magic link email queued for sending" };
     } catch (error: any) {
-      console.error("Failed to send welcome email:", error);
-      return { success: false, error: error.message };
+      console.error("Failed to queue magic link email:", error);
+      return { success: false, error: "Failed to queue email" };
     }
   },
 });
@@ -97,35 +167,25 @@ export const sendAccountApprovedEmail = action({
     role: v.string(),
   },
   handler: async (ctx, args) => {
-    const { Resend } = await import('resend');
-
-    if (!process.env.RESEND_API_KEY) {
-      console.error("RESEND_API_KEY not configured");
-      return { success: false, error: "Email service not configured" };
-    }
-
-    const resend = new Resend(process.env.RESEND_API_KEY);
-    const dashboardUrl = `${process.env.CONVEX_SITE_URL || 'http://localhost:3000'}/dashboard/${args.role === 'school_admin' ? 'school' : args.role}`;
-
     try {
-      const { data, error } = await resend.emails.send({
-        from: process.env.RESEND_FROM_EMAIL || 'iRankHub <noreply@irankdebate.com>',
-        to: [args.email],
+      const dashboardUrl = `${process.env.CONVEX_SITE_URL || 'http://localhost:3000'}/${args.role === 'school_admin' ? 'school' : args.role}/dashboard`;
+      const html = getAccountApprovedEmailTemplate(args.name, args.role, dashboardUrl);
+
+      const emailData: EmailQueue = {
+        to: args.email,
         subject: "Your iRankHub Account Has Been Approved!",
-        html: getAccountApprovedEmailTemplate(args.name, args.role, dashboardUrl),
+        html,
+        attempts: 0,
+      };
+
+      sendEmailWithRetry(emailData).catch(error => {
+        console.error("Background approval email failed:", error);
       });
 
-      if (error) {
-        console.error("Resend error:", error);
-        return { success: false, error: error.message };
-      }
-
-      console.log("Account approved email sent:", data?.id);
-      return { success: true, emailId: data?.id };
-
+      return { success: true, message: "Approval email queued for sending" };
     } catch (error: any) {
-      console.error("Failed to send account approved email:", error);
-      return { success: false, error: error.message };
+      console.error("Failed to queue approval email:", error);
+      return { success: false, error: "Failed to queue email" };
     }
   },
 });
@@ -136,103 +196,84 @@ export const sendPasswordResetEmail = action({
     token: v.string(),
   },
   handler: async (ctx, args) => {
-    const { Resend } = await import('resend');
-
-    if (!process.env.RESEND_API_KEY) {
-      console.error("RESEND_API_KEY not configured");
-      return { success: false, error: "Email service not configured" };
-    }
-
-    const resend = new Resend(process.env.RESEND_API_KEY);
-    const resetUrl = `${process.env.CONVEX_SITE_URL || 'http://localhost:3000'}/auth/reset-password?token=${args.token}`;
-
     try {
-      const { data, error } = await resend.emails.send({
-        from: process.env.RESEND_FROM_EMAIL || 'iRankHub <noreply@irankdebate.com>',
-        to: [args.email],
+      const resetUrl = `${process.env.CONVEX_SITE_URL || 'http://localhost:3000'}/auth/reset-password?token=${args.token}`;
+      const html = getPasswordResetEmailTemplate(resetUrl);
+
+      const emailData: EmailQueue = {
+        to: args.email,
         subject: "Reset Your iRankHub Password",
-        html: getPasswordResetEmailTemplate(resetUrl),
+        html,
+        attempts: 0,
+      };
+
+      sendEmailWithRetry(emailData).catch(error => {
+        console.error("Background password reset email failed:", error);
       });
 
-      if (error) {
-        console.error("Resend error:", error);
-        return { success: false, error: error.message };
-      }
-
-      console.log("Password reset email sent:", data?.id);
-      return { success: true, emailId: data?.id };
-
+      return { success: true, message: "Password reset email queued for sending" };
     } catch (error: any) {
-      console.error("Failed to send password reset email:", error);
-      return { success: false, error: error.message };
+      console.error("Failed to queue password reset email:", error);
+      return { success: false, error: "Failed to queue email" };
     }
   },
 });
 
-export const sendTournamentInvitationEmail = action({
+export const sendBulkNotificationEmails = action({
   args: {
-    email: v.string(),
-    name: v.string(),
-    tournament_name: v.string(),
-    tournament_date: v.string(),
-    invitation_url: v.string(),
+    recipients: v.array(v.object({
+      email: v.string(),
+      name: v.string(),
+      customData: v.optional(v.any()),
+    })),
+    subject: v.string(),
+    template: v.string(),
   },
   handler: async (ctx, args) => {
-    const { Resend } = await import('resend');
-
-    if (!process.env.RESEND_API_KEY) {
-      console.error("RESEND_API_KEY not configured");
-      return { success: false, error: "Email service not configured" };
-    }
-
-    const resend = new Resend(process.env.RESEND_API_KEY);
-
     try {
-      const { data, error } = await resend.emails.send({
-        from: process.env.RESEND_FROM_EMAIL || 'iRankHub <noreply@irankdebate.com>',
-        to: [args.email],
-        subject: `Invitation: ${args.tournament_name}`,
-        html: getTournamentInvitationEmailTemplate(
-          args.name,
-          args.tournament_name,
-          args.tournament_date,
-          args.invitation_url
-        ),
+      const emails: EmailQueue[] = args.recipients.map(recipient => ({
+        to: recipient.email,
+        subject: args.subject,
+        html: getCustomEmailTemplate(args.template, recipient.name, recipient.customData),
+        attempts: 0,
+      }));
+
+      sendBatchEmails(emails).catch(error => {
+        console.error("Background batch email sending failed:", error);
       });
 
-      if (error) {
-        console.error("Resend error:", error);
-        return { success: false, error: error.message };
-      }
-
-      console.log("Tournament invitation email sent:", data?.id);
-      return { success: true, emailId: data?.id };
-
+      return {
+        success: true,
+        message: `${emails.length} emails queued for sending`,
+        count: emails.length
+      };
     } catch (error: any) {
-      console.error("Failed to send tournament invitation email:", error);
-      return { success: false, error: error.message };
+      console.error("Failed to queue batch emails:", error);
+      return { success: false, error: "Failed to queue batch emails" };
     }
   },
 });
 
-function getEmailContent(purpose: string, magicLinkUrl: string) {
+function getMagicLinkEmailTemplate(purpose: string, magicLinkUrl: string): string {
   const baseUrl = process.env.CONVEX_SITE_URL || 'http://localhost:3000';
 
   const configs = {
     login: {
-      subject: "iRankHub - Magic Link Login",
       heading: "Sign in to iRankHub",
       description: "Click the link below to sign in to your account:",
       buttonText: "Sign In",
     },
     password_reset: {
-      subject: "iRankHub - Reset Your Password",
       heading: "Reset your password",
       description: "Click the link below to reset your password:",
       buttonText: "Reset Password",
     },
+    email_verification: {
+      heading: "Verify your email",
+      description: "Click the link below to verify your email address:",
+      buttonText: "Verify Email",
+    },
     account_recovery: {
-      subject: "iRankHub - Recover Your Account",
       heading: "Recover your account",
       description: "Click the link below to recover your account:",
       buttonText: "Recover Account",
@@ -241,7 +282,7 @@ function getEmailContent(purpose: string, magicLinkUrl: string) {
 
   const config = configs[purpose as keyof typeof configs];
 
-  const html = `
+  return `
     <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif; background-color: #f8fafc;">
       <div style="background-color: white; border-radius: 12px; padding: 40px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
         <div style="text-align: center; margin-bottom: 30px;">
@@ -267,29 +308,19 @@ function getEmailContent(purpose: string, magicLinkUrl: string) {
               font-size: 16px;
               display: inline-block;
               box-shadow: 0 4px 14px 0 rgba(102, 126, 234, 0.39);
-              transition: all 0.3s ease;
             ">
               ${config.buttonText}
             </a>
           </div>
           
           <div style="background-color: #f7fafc; border-radius: 8px; padding: 20px; margin: 32px 0;">
-            // Continuing from where we left off in convex/actions/email.ts
-
             <p style="color: #718096; font-size: 14px; margin: 0;">
               <strong>Security tip:</strong> This link will expire in 15 minutes for your security.
             </p>
           </div>
           
-          <p style="color: #718096; font-size: 14px; line-height: 1.6; margin-bottom: 8px;">
-            If you didn't request this ${purpose === 'login' ? 'login link' : 'password reset'}, you can safely ignore this email.
-          </p>
-          
           <p style="color: #718096; font-size: 14px; line-height: 1.6;">
-            If the button doesn't work, copy and paste this link into your browser:
-          </p>
-          <p style="color: #667eea; font-size: 12px; word-break: break-all; background-color: #f7fafc; padding: 8px; border-radius: 4px; font-family: monospace;">
-            ${magicLinkUrl}
+            If you didn't request this, you can safely ignore this email.
           </p>
         </div>
         
@@ -297,20 +328,15 @@ function getEmailContent(purpose: string, magicLinkUrl: string) {
           <p style="color: #a0aec0; font-size: 12px; margin: 0;">
             &copy; ${new Date().getFullYear()} iRankHub. All rights reserved.
           </p>
-          <p style="color: #a0aec0; font-size: 12px; margin: 4px 0 0 0;">
-            World Schools Debate Platform • Kigali, Rwanda
-          </p>
         </div>
       </div>
     </div>
   `;
-
-  return { subject: config.subject, html };
 }
 
 function getWelcomeEmailTemplate(name: string, role: string): string {
   const baseUrl = process.env.CONVEX_SITE_URL || 'http://localhost:3000';
-  const dashboardUrl = `${baseUrl}/dashboard/${role === 'school_admin' ? 'school' : role}`;
+  const dashboardUrl = `${baseUrl}/${role === 'school_admin' ? 'school' : role}/dashboard`;
 
   const roleMessages = {
     student: {
@@ -402,20 +428,9 @@ function getWelcomeEmailTemplate(name: string, role: string): string {
           </a>
         </div>
         
-        <div style="background-color: #f7fafc; border-radius: 8px; padding: 20px; margin: 32px 0;">
-          <h3 style="color: #2d3748; font-size: 16px; margin-bottom: 12px;">Need Help?</h3>
-          <p style="color: #718096; font-size: 14px; margin: 0;">
-            Check out our <a href="${baseUrl}/help" style="color: #667eea;">help center</a> or 
-            contact us at <a href="mailto:support@irankdebate.com" style="color: #667eea;">support@irankdebate.com</a>
-          </p>
-        </div>
-        
         <div style="border-top: 1px solid #e2e8f0; padding-top: 20px; margin-top: 40px; text-align: center;">
           <p style="color: #a0aec0; font-size: 12px; margin: 0;">
             &copy; ${new Date().getFullYear()} iRankHub. All rights reserved.
-          </p>
-          <p style="color: #a0aec0; font-size: 12px; margin: 4px 0 0 0;">
-            World Schools Debate Platform • Kigali, Rwanda
           </p>
         </div>
       </div>
@@ -468,16 +483,6 @@ function getAccountApprovedEmailTemplate(name: string, role: string, dashboardUr
           ">
             Access Your Dashboard
           </a>
-        </div>
-        
-        <div style="background-color: #f7fafc; border-radius: 8px; padding: 20px; margin: 32px 0;">
-          <h3 style="color: #2d3748; font-size: 16px; margin-bottom: 12px;">What's Next?</h3>
-          <ul style="color: #718096; font-size: 14px; line-height: 1.8; padding-left: 20px; margin: 0;">
-            <li>Complete your profile setup</li>
-            <li>Explore available tournaments</li>
-            <li>Connect with the debate community</li>
-            <li>Start your debate journey!</li>
-          </ul>
         </div>
         
         <div style="border-top: 1px solid #e2e8f0; padding-top: 20px; margin-top: 40px; text-align: center;">
@@ -542,185 +547,12 @@ function getPasswordResetEmailTemplate(resetUrl: string): string {
   `;
 }
 
-function getTournamentInvitationEmailTemplate(
-  name: string,
-  tournamentName: string,
-  tournamentDate: string,
-  invitationUrl: string
-): string {
-  const baseUrl = process.env.CONVEX_SITE_URL || 'http://localhost:3000';
+function getCustomEmailTemplate(template: string, name: string, customData?: any): string {
 
   return `
-    <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif; background-color: #f8fafc;">
-      <div style="background-color: white; border-radius: 12px; padding: 40px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-        <div style="text-align: center; margin-bottom: 30px;">
-          <img src="${baseUrl}/images/logo.png" alt="iRankHub Logo" style="width: 120px; height: auto;">
-        </div>
-        
-        <div style="text-align: center; margin-bottom: 30px;">
-          <h1 style="color: #1a202c; font-size: 28px; margin-bottom: 16px; font-weight: 600;">
-            Tournament Invitation
-          </h1>
-          <p style="color: #4a5568; font-size: 18px; margin: 0;">
-            Hello ${name}!
-          </p>
-        </div>
-        
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 24px; margin-bottom: 30px; text-align: center;">
-          <h2 style="color: white; font-size: 24px; margin-bottom: 8px; font-weight: 600;">
-            ${tournamentName}
-          </h2>
-          <p style="color: rgba(255, 255, 255, 0.9); font-size: 16px; margin: 0;">
-            📅 ${tournamentDate}
-          </p>
-        </div>
-        
-        <div style="margin-bottom: 30px;">
-          <p style="color: #4a5568; font-size: 16px; line-height: 1.6; text-align: center;">
-            You've been invited to participate in this exciting debate tournament. 
-            Join debaters from around the world for an incredible intellectual challenge!
-          </p>
-        </div>
-        
-        <div style="text-align: center; margin: 40px 0;">
-          <a href="${invitationUrl}" style="
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 16px 32px;
-            text-decoration: none;
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 16px;
-            display: inline-block;
-            box-shadow: 0 4px 14px 0 rgba(102, 126, 234, 0.39);
-            margin-bottom: 16px;
-          ">
-            View Invitation Details
-          </a>
-          <p style="color: #718096; font-size: 14px; margin: 0;">
-            Click above to view full tournament details and RSVP
-          </p>
-        </div>
-        
-        <div style="background-color: #f7fafc; border-radius: 8px; padding: 20px; margin: 32px 0;">
-          <h3 style="color: #2d3748; font-size: 16px; margin-bottom: 12px;">Tournament Highlights:</h3>
-          <ul style="color: #718096; font-size: 14px; line-height: 1.8; padding-left: 20px; margin: 0;">
-            <li>World Schools Debate format</li>
-            <li>International participation</li>
-            <li>Expert judges and feedback</li>
-            <li>Networking opportunities</li>
-            <li>Prizes and recognition</li>
-          </ul>
-        </div>
-        
-        <div style="background-color: #fef5e7; border: 1px solid #f6ad55; border-radius: 8px; padding: 16px; margin: 32px 0;">
-          <p style="color: #744210; font-size: 14px; margin: 0;">
-            <strong>Action Required:</strong> Please respond to this invitation by the deadline specified in the tournament details.
-          </p>
-        </div>
-        
-        <div style="border-top: 1px solid #e2e8f0; padding-top: 20px; margin-top: 40px; text-align: center;">
-          <p style="color: #a0aec0; font-size: 12px; margin: 0;">
-            &copy; ${new Date().getFullYear()} iRankHub. All rights reserved.
-          </p>
-          <p style="color: #a0aec0; font-size: 12px; margin: 4px 0 0 0;">
-            World Schools Debate Platform • Kigali, Rwanda
-          </p>
-        </div>
-      </div>
+    <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif;">
+      <h1>Hello ${name},</h1>
+      <div>${template}</div>
     </div>
   `;
 }
-
-export const sendNotificationEmail = action({
-  args: {
-    email: v.string(),
-    name: v.string(),
-    subject: v.string(),
-    title: v.string(),
-    message: v.string(),
-    action_url: v.optional(v.string()),
-    action_text: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const { Resend } = await import('resend');
-
-    if (!process.env.RESEND_API_KEY) {
-      console.error("RESEND_API_KEY not configured");
-      return { success: false, error: "Email service not configured" };
-    }
-
-    const resend = new Resend(process.env.RESEND_API_KEY);
-    const baseUrl = process.env.CONVEX_SITE_URL || 'http://localhost:3000';
-
-    const html = `
-      <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif; background-color: #f8fafc;">
-        <div style="background-color: white; border-radius: 12px; padding: 40px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-          <div style="text-align: center; margin-bottom: 30px;">
-            <img src="${baseUrl}/images/logo.png" alt="iRankHub Logo" style="width: 120px; height: auto;">
-          </div>
-          
-          <div style="text-align: center; margin-bottom: 30px;">
-            <h1 style="color: #1a202c; font-size: 28px; margin-bottom: 16px; font-weight: 600;">
-              ${args.title}
-            </h1>
-            <p style="color: #4a5568; font-size: 18px; margin: 0;">
-              Hello ${args.name}!
-            </p>
-          </div>
-          
-          <div style="margin-bottom: 30px;">
-            <p style="color: #4a5568; font-size: 16px; line-height: 1.6; text-align: center;">
-              ${args.message}
-            </p>
-          </div>
-          
-          ${args.action_url && args.action_text ? `
-            <div style="text-align: center; margin: 40px 0;">
-              <a href="${args.action_url}" style="
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
-                padding: 16px 32px;
-                text-decoration: none;
-                border-radius: 8px;
-                font-weight: 600;
-                font-size: 16px;
-                display: inline-block;
-                box-shadow: 0 4px 14px 0 rgba(102, 126, 234, 0.39);
-              ">
-                ${args.action_text}
-              </a>
-            </div>
-          ` : ''}
-          
-          <div style="border-top: 1px solid #e2e8f0; padding-top: 20px; margin-top: 40px; text-align: center;">
-            <p style="color: #a0aec0; font-size: 12px; margin: 0;">
-              &copy; ${new Date().getFullYear()} iRankHub. All rights reserved.
-            </p>
-          </div>
-        </div>
-      </div>
-    `;
-
-    try {
-      const { data, error } = await resend.emails.send({
-        from: process.env.RESEND_FROM_EMAIL || 'iRankHub <noreply@irankdebate.com>',
-        to: [args.email],
-        subject: args.subject,
-        html,
-      });
-
-      if (error) {
-        console.error("Resend error:", error);
-        return { success: false, error: error.message };
-      }
-
-      console.log("Notification email sent:", data?.id);
-      return { success: true, emailId: data?.id };
-
-    } catch (error: any) {
-      console.error("Failed to send notification email:", error);
-      return { success: false, error: error.message };
-    }
-  },
-});

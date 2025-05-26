@@ -21,6 +21,17 @@ export default defineSchema({
     .index("by_expires_at", ["expires_at"])
     .index("by_user_id_device_id", ["user_id", "device_info.device_id"]),
 
+  biometric_credentials: defineTable({
+    user_id: v.id("users"),
+    credential_id: v.string(),
+    public_key: v.string(),
+    device_name: v.string(),
+    last_used: v.optional(v.number()),
+    created_at: v.number(),
+  })
+    .index("by_user_id", ["user_id"])
+    .index("by_credential_id", ["credential_id"]),
+
   magic_links: defineTable({
     email: v.string(),
     token: v.string(),
