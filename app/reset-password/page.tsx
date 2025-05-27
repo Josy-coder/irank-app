@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation"
 import { z } from "zod"
 import { useForm } from "react-hook-form"
@@ -22,6 +22,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { motion } from "framer-motion"
 import { useAuth } from "@/hooks/useAuth"
+import AppLoader from "@/components/app-loader";
 
 const resetPasswordSchema = z.object({
   password: z.string()
@@ -37,7 +38,7 @@ const resetPasswordSchema = z.object({
 
 type ResetPasswordFormValues = z.infer<typeof resetPasswordSchema>
 
-export default function ResetPasswordPage() {
+function ResetPasswordForm() {
   const [loading, setLoading] = useState(false)
   const [verifying, setVerifying] = useState(true)
   const [success, setSuccess] = useState(false)
@@ -371,4 +372,11 @@ export default function ResetPasswordPage() {
       </motion.div>
     </div>
   )
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={<AppLoader />} >
+      <ResetPasswordForm />
+    </Suspense>)
 }

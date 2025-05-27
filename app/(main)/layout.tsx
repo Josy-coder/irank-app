@@ -17,7 +17,9 @@ import {
 import { AdvancedOfflineBanner } from "@/components/offline-banner";
 
 function generateBreadcrumbs(pathname: string, userRole: string) {
-  const segments = pathname.split('/').filter(Boolean)
+  // Remove query parameters if any
+  const cleanPathname = pathname.split('?')[0]
+  const segments = cleanPathname.split('/').filter(Boolean)
   const breadcrumbs = []
 
   const roleLabel = userRole === 'school_admin' ? 'School Admin' :
@@ -34,7 +36,21 @@ function generateBreadcrumbs(pathname: string, userRole: string) {
     currentPath += `/${segment}`
 
     if (index > 0) {
-      const label = segment.charAt(0).toUpperCase() + segment.slice(1)
+      // Smart label generation
+      let label = segment.charAt(0).toUpperCase() + segment.slice(1)
+
+      // Handle special cases and IDs
+      if (segment.match(/^[a-f\d]{24}$/i) || segment.match(/^[0-9]+$/)) {
+        // This looks like an ID (MongoDB ObjectId or numeric ID)
+        // Get the previous segment to determine context
+        const previousSegment = segments[index - 1]
+        if (previousSegment) {
+          label = `${previousSegment.charAt(0).toUpperCase() + previousSegment.slice(1)} Details`
+        } else {
+          label = 'Details'
+        }
+      }
+
       breadcrumbs.push({
         label,
         href: currentPath,
@@ -43,14 +59,45 @@ function generateBreadcrumbs(pathname: string, userRole: string) {
     }
   })
 
+  // Limit breadcrumbs to prevent breaking - show only last 3 plus role
+  if (breadcrumbs.length > 4) {
+    return [
+      breadcrumbs[0], // Keep role
+      {
+        label: "...",
+        href: "#",
+        isRole: false
+      },
+      ...breadcrumbs.slice(-2) // Keep last 2
+    ]
+  }
+
   return breadcrumbs
 }
 
 function getPageTitle(pathname: string) {
-  const segments = pathname.split('/').filter(Boolean)
+  // Remove query parameters if any
+  const cleanPathname = pathname.split('?')[0]
+  const segments = cleanPathname.split('/').filter(Boolean)
   const lastSegment = segments[segments.length - 1]
 
   if (!lastSegment) return 'Dashboard'
+
+  // Check if last segment is an ID
+  if (lastSegment.match(/^[a-f\d]{24}$/i) || lastSegment.match(/^[0-9]+$/)) {
+    // Use the second-to-last segment for title
+    const previousSegment = segments[segments.length - 2]
+    if (previousSegment) {
+      const titleMap: Record<string, string> = {
+        'tournaments': 'Tournament Details',
+        'users': 'User Details',
+        'schools': 'School Details',
+        'teams': 'Team Details',
+        'students': 'Student Details',
+      }
+      return titleMap[previousSegment] || `${previousSegment.charAt(0).toUpperCase() + previousSegment.slice(1)} Details`
+    }
+  }
 
   const titleMap: Record<string, string> = {
     'dashboard': 'Dashboard',
@@ -63,7 +110,9 @@ function getPageTitle(pathname: string) {
     'assignments': 'Assignments',
     'history': 'History',
     'users': 'Users',
-    'schools': 'Schools'
+    'schools': 'Schools',
+    'profile': 'Profile',
+    'settings': 'Settings'
   }
 
   return titleMap[lastSegment] || lastSegment.charAt(0).toUpperCase() + lastSegment.slice(1)
@@ -104,14 +153,19 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <div className={`hidden md:flex flex-1 flex-col overflow-hidden transition-all duration-300 ${
-        isCollapsed ? 'ml-16' : 'ml-64'
-      } h-screen`}>
-        <div className="h-32" />
-        <main className="flex-1 overflow-x-hidden overflow-y-auto">
+      {/* Desktop Layout - Fixed margin with proper CSS */}
+      <div
+        className={`hidden md:flex flex-1 bg-primary-foreground flex-col overflow-hidden transition-all duration-300 h-screen ${
+          isCollapsed ? 'ml-16' : 'ml-64'
+        }`}
+      >
+        <div className="h-32 flex-shrink-0" />
+        <main className="flex-1 overflow-x-hidden overflow-y-auto px-6 pb-6">
           {children}
         </main>
       </div>
+
+      {/* Mobile Layout */}
       <div className="md:hidden fixed inset-0 flex flex-col">
         <div className={`flex-shrink-0 ${contextualNav ? 'h-24' : 'h-16'}`} />
 

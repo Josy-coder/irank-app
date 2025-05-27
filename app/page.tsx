@@ -13,9 +13,9 @@ export default function Home() {
     if (!isLoading && user) {
       const dashboardPaths = {
         student: "/student/dashboard",
-        school_admin: "school/dashboard",
-        volunteer: "volunteer/dashboard",
-        admin: "admin/dashboard"
+        school_admin: "/school/dashboard",
+        volunteer: "/volunteer/dashboard",
+        admin: "/admin/dashboard"
       }
 
       const dashboardPath = dashboardPaths[user.role as keyof typeof dashboardPaths]

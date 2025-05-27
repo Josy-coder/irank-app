@@ -1,9 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
+import { useMutation, useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -16,7 +18,6 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-
 } from "@/components/ui/form"
 import {
   Dialog,
@@ -34,17 +35,23 @@ import {
   Shield,
   Fingerprint,
   Key,
-  Lock,
-  Settings,
   HelpCircle,
   AlertCircle,
   Save,
-  Trash2
+  Trash2,
+  Loader2,
+  Monitor,
+  Smartphone,
+  Laptop
 } from "lucide-react"
 import { motion } from "framer-motion"
 import { useAuth } from "@/hooks/useAuth"
 import { toast } from "sonner"
-import { Label } from "@/components/ui/label";
+import { Label } from "@/components/ui/label"
+import { Badge } from "@/components/ui/badge"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Id } from "@/convex/_generated/dataModel";
+import { generateRandomChallenge, arrayBufferToBase64 } from "@/lib/webauthn"
 
 const passwordChangeSchema = z.object({
   currentPassword: z.string().min(1, { message: "Current password is required" }),
@@ -68,8 +75,18 @@ const securityQuestionSchema = z.object({
 type PasswordChangeFormValues = z.infer<typeof passwordChangeSchema>
 type SecurityQuestionFormValues = z.infer<typeof securityQuestionSchema>
 
-export default function SettingsPage() {
-  const { user, changePassword, enableMFA, disableMFA, enableBiometric, disableBiometric, updateSecurityQuestion } = useAuth()
+export default function SettingsForm() {
+  const {
+    user,
+    token,
+    changePassword,
+    enableMFA,
+    disableMFA,
+    enableBiometric,
+    disableBiometric,
+    updateSecurityQuestion
+  } = useAuth()
+
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
@@ -79,6 +96,14 @@ export default function SettingsPage() {
   const [biometricDialogOpen, setBiometricDialogOpen] = useState(false)
   const [securityQuestionDialogOpen, setSecurityQuestionDialogOpen] = useState(false)
   const [deleteAccountDialogOpen, setDeleteAccountDialogOpen] = useState(false)
+  const [sessionsDialogOpen, setSessionsDialogOpen] = useState(false)
+
+  const userSessions = useQuery(
+    api.functions.auth.getUserSessions,
+    token ? { token } : "skip"
+  )
+
+  const revokeSession = useMutation(api.functions.auth.revokeSession)
 
   const passwordForm = useForm<PasswordChangeFormValues>({
     resolver: zodResolver(passwordChangeSchema),
@@ -105,82 +130,138 @@ export default function SettingsPage() {
     try {
       await changePassword(values.currentPassword, values.newPassword)
       passwordForm.reset()
-      toast.success("Password changed successfully!")
     } catch (error: any) {
       console.error("Password change error:", error)
       setError(error.message)
-      toast.error("Failed to change password")
     } finally {
       setLoading(false)
     }
   }
 
-  const handleMFAToggle = async (enabled: boolean, currentPassword: string) => {
+  const handleMFAToggle = async (enabled: boolean, currentPassword: string, securityQuestion?: string, securityAnswer?: string) => {
     setLoading(true)
     setError(null)
 
     try {
       if (enabled) {
+        if (securityQuestion && securityAnswer) {
+          await updateSecurityQuestion(securityQuestion, securityAnswer, currentPassword)
+        }
         await enableMFA(currentPassword)
-        toast.success("Multi-factor authentication enabled!")
       } else {
         await disableMFA(currentPassword)
-        toast.success("Multi-factor authentication disabled!")
       }
       setMfaDialogOpen(false)
     } catch (error: any) {
       console.error("MFA toggle error:", error)
       setError(error.message)
-      toast.error(`Failed to ${enabled ? 'enable' : 'disable'} MFA`)
     } finally {
       setLoading(false)
     }
   }
-
   const handleBiometricToggle = async (enabled: boolean, currentPassword?: string) => {
     setLoading(true)
     setError(null)
 
     try {
       if (enabled) {
-        // For enabling biometric, we'd need to create credentials first
-        // This is a simplified version - you'd need actual WebAuthn implementation
-        const credential = await navigator.credentials.create({
+        if (!window.PublicKeyCredential) {
+          throw new Error("WebAuthn is not supported in this browser")
+        }
+
+        const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
+        if (!available) {
+          throw new Error("No biometric authenticator available on this device")
+        }
+
+        const challenge = generateRandomChallenge()
+        const userId = new TextEncoder().encode(user?.id || "")
+
+        const createCredentialOptions: CredentialCreationOptions = {
           publicKey: {
-            challenge: new Uint8Array(32),
-            rp: { name: "iRankHub" },
+            challenge,
+            rp: {
+              name: "iRankHub",
+              id: window.location.hostname,
+            },
             user: {
-              id: new TextEncoder().encode(user?.id),
+              id: userId,
               name: user?.email || "",
               displayName: user?.name || "",
             },
-            pubKeyCredParams: [{ alg: -7, type: "public-key" }],
+            pubKeyCredParams: [
+              { alg: -7, type: "public-key" },
+              { alg: -257, type: "public-key" },
+            ],
+            authenticatorSelection: {
+              authenticatorAttachment: "platform",
+              userVerification: "required",
+              requireResidentKey: false,
+            },
             timeout: 60000,
-            attestation: "direct"
-          }
-        }) as PublicKeyCredential
+            attestation: "direct",
+          },
+        }
 
-        // Extract credential data (simplified)
-        const credentialId = "mock-credential-id"
-        const publicKey = "mock-public-key"
+        const credential = await navigator.credentials.create(createCredentialOptions) as PublicKeyCredential
 
-        await enableBiometric(credentialId, publicKey, navigator.userAgent)
-        toast.success("Biometric authentication enabled!")
+        if (!credential) {
+          throw new Error("Failed to create biometric credential")
+        }
+
+        const response = credential.response as AuthenticatorAttestationResponse
+        const credentialId = arrayBufferToBase64(credential.rawId)
+        const publicKey = arrayBufferToBase64(response.getPublicKey()!)
+        const deviceName = `${navigator.platform} - ${navigator.userAgent.split(' ').find(part =>
+          part.includes('Chrome') || part.includes('Firefox') || part.includes('Safari') || part.includes('Edge')
+        ) || 'Unknown Browser'}`
+
+        await enableBiometric(credentialId, publicKey, deviceName)
+
       } else {
         if (!currentPassword) {
           setError("Current password is required to disable biometric authentication")
           return
         }
         await disableBiometric(currentPassword)
-        toast.success("Biometric authentication disabled!")
       }
       setBiometricDialogOpen(false)
     } catch (error: any) {
       console.error("Biometric toggle error:", error)
-      setError(error.message)
-      toast.error(`Failed to ${enabled ? 'enable' : 'disable'} biometric authentication`)
+      let errorMessage = "Failed to set up biometric authentication"
+
+      if (error.name === "NotSupportedError") {
+        errorMessage = "Biometric authentication is not supported on this device"
+      } else if (error.name === "SecurityError") {
+        errorMessage = "Security error occurred. Please ensure you're on a secure connection (HTTPS)"
+      } else if (error.name === "NotAllowedError") {
+        errorMessage = "Biometric authentication was cancelled or not allowed"
+      } else if (error.name === "InvalidStateError") {
+        errorMessage = "A biometric credential already exists for this device"
+      } else if (error.name === "ConstraintError") {
+        errorMessage = "The authenticator doesn't meet the requirements"
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+
+      setError(errorMessage)
+      toast.error(errorMessage)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleRevokeSession = async (sessionId: string) => {
+    if (!token) return
+
+    try {
+      await revokeSession({
+        session_id: sessionId as Id<"auth_sessions">,
+        token,
+      })
+
+    } catch (error: any) {
+      console.error("Revoke session error:", error)
     }
   }
 
@@ -192,14 +273,38 @@ export default function SettingsPage() {
       await updateSecurityQuestion(values.question, values.answer, values.currentPassword)
       securityQuestionForm.reset()
       setSecurityQuestionDialogOpen(false)
-      toast.success("Security question updated successfully!")
     } catch (error: any) {
       console.error("Security question update error:", error)
       setError(error.message)
-      toast.error("Failed to update security question")
     } finally {
       setLoading(false)
     }
+  }
+
+  const getDeviceIcon = (deviceInfo: any) => {
+    if (!deviceInfo) return <Monitor className="h-4 w-4" />
+
+    const userAgent = deviceInfo.user_agent?.toLowerCase() || ""
+
+    if (userAgent.includes("mobile") || userAgent.includes("android") || userAgent.includes("iphone")) {
+      return <Smartphone className="h-4 w-4" />
+    }
+
+    return <Laptop className="h-4 w-4" />
+  }
+
+  const getDeviceName = (deviceInfo: any) => {
+    if (!deviceInfo) return "Unknown Device"
+
+    const userAgent = deviceInfo.user_agent || ""
+    const platform = deviceInfo.platform || ""
+
+    if (userAgent.includes("Chrome")) return `Chrome on ${platform}`
+    if (userAgent.includes("Firefox")) return `Firefox on ${platform}`
+    if (userAgent.includes("Safari")) return `Safari on ${platform}`
+    if (userAgent.includes("Edge")) return `Edge on ${platform}`
+
+    return platform || "Unknown Device"
   }
 
   if (!user) {
@@ -224,7 +329,7 @@ export default function SettingsPage() {
     typeof navigator.credentials.create === 'function'
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="space-y-6">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -232,17 +337,14 @@ export default function SettingsPage() {
       >
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
             <p className="text-muted-foreground">
               Manage your account security and preferences
             </p>
           </div>
-          <Settings className="h-8 w-8 text-muted-foreground" />
         </div>
       </motion.div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        {/* Password Change */}
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -251,7 +353,7 @@ export default function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Key className="h-5 w-5" />
+                <Key className="h-4 w-4" />
                 Change Password
               </CardTitle>
               <CardDescription>
@@ -292,70 +394,71 @@ export default function SettingsPage() {
                       </FormItem>
                     )}
                   />
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <FormField
+                      control={passwordForm.control}
+                      name="newPassword"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>New Password</FormLabel>
+                          <div className="relative">
+                            <FormControl>
+                              <Input
+                                type={showNewPassword ? "text" : "password"}
+                                placeholder="Enter new password"
+                                {...field}
+                                disabled={loading}
+                                className="pr-10"
+                              />
+                            </FormControl>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="absolute right-0 top-0 h-full px-3 py-2 text-muted-foreground hover:text-foreground"
+                              onClick={() => setShowNewPassword(!showNewPassword)}
+                              tabIndex={-1}
+                            >
+                              {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                            </Button>
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                  <FormField
-                    control={passwordForm.control}
-                    name="newPassword"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>New Password</FormLabel>
-                        <div className="relative">
-                          <FormControl>
-                            <Input
-                              type={showNewPassword ? "text" : "password"}
-                              placeholder="Enter new password"
-                              {...field}
-                              disabled={loading}
-                              className="pr-10"
-                            />
-                          </FormControl>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="absolute right-0 top-0 h-full px-3 py-2 text-muted-foreground hover:text-foreground"
-                            onClick={() => setShowNewPassword(!showNewPassword)}
-                            tabIndex={-1}
-                          >
-                            {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                          </Button>
-                        </div>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={passwordForm.control}
-                    name="confirmPassword"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Confirm New Password</FormLabel>
-                        <div className="relative">
-                          <FormControl>
-                            <Input
-                              type={showConfirmPassword ? "text" : "password"}
-                              placeholder="Confirm new password"
-                              {...field}
-                              disabled={loading}
-                              className="pr-10"
-                            />
-                          </FormControl>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="absolute right-0 top-0 h-full px-3 py-2 text-muted-foreground hover:text-foreground"
-                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                            tabIndex={-1}
-                          >
-                            {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                          </Button>
-                        </div>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                    <FormField
+                      control={passwordForm.control}
+                      name="confirmPassword"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Confirm New Password</FormLabel>
+                          <div className="relative">
+                            <FormControl>
+                              <Input
+                                type={showConfirmPassword ? "text" : "password"}
+                                placeholder="Confirm new password"
+                                {...field}
+                                disabled={loading}
+                                className="pr-10"
+                              />
+                            </FormControl>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="absolute right-0 top-0 h-full px-3 py-2 text-muted-foreground hover:text-foreground"
+                              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                              tabIndex={-1}
+                            >
+                              {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                            </Button>
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
 
                   {error && (
                     <Alert variant="destructive">
@@ -367,7 +470,7 @@ export default function SettingsPage() {
                   <Button type="submit" disabled={loading} className="w-full">
                     {loading ? (
                       <>
-                        <Lock className="mr-2 h-4 w-4 animate-spin" />
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Changing...
                       </>
                     ) : (
@@ -383,7 +486,6 @@ export default function SettingsPage() {
           </Card>
         </motion.div>
 
-        {/* Security Settings */}
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -392,20 +494,19 @@ export default function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Shield className="h-5 w-5" />
+                <Shield className="h-4 w-4" />
                 Security Settings
               </CardTitle>
               <CardDescription>
                 Configure additional security measures for your account
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Multi-Factor Authentication */}
+            <CardContent className="space-y-5">
               {canUseMFA && (
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <div className="font-medium">Multi-Factor Authentication</div>
-                    <div className="text-sm text-muted-foreground">
+                    <div className="font-medium text-sm">Multi-Factor Authentication</div>
+                    <div className="text-xs text-muted-foreground">
                       Add an extra layer of security using your security question
                     </div>
                   </div>
@@ -435,12 +536,11 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {/* Biometric Authentication */}
               {canUseBiometric && (
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <div className="font-medium">Biometric Authentication</div>
-                    <div className="text-sm text-muted-foreground">
+                    <div className="font-medium text-sm">Biometric Authentication</div>
+                    <div className="text-xs text-muted-foreground">
                       Use fingerprint or face recognition to sign in
                     </div>
                   </div>
@@ -470,20 +570,24 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {/* Security Question (Students only) */}
               {user.role === "student" && (
                 <div className="space-y-2">
-                  <div className="font-medium">Security Question</div>
-                  <div className="text-sm text-muted-foreground">
-                    Update your security question for phone-based authentication
-                  </div>
                   <Dialog open={securityQuestionDialogOpen} onOpenChange={setSecurityQuestionDialogOpen}>
-                    <DialogTrigger asChild>
+                    <div className="flex items-center space-x-1.5">
+                      <div className="font-medium text-sm">Security Question</div>
+                      <DialogTrigger asChild>
                       <Button variant="outline" size="sm">
                         <HelpCircle className="mr-2 h-4 w-4" />
                         Update Security Question
                       </Button>
                     </DialogTrigger>
+                    </div>
+
+                  <div className="text-xs text-muted-foreground">
+                    Update your security question for phone-based authentication
+
+                  </div>
+
                     <DialogContent>
                       <DialogHeader>
                         <DialogTitle>Update Security Question</DialogTitle>
@@ -500,12 +604,84 @@ export default function SettingsPage() {
                   </Dialog>
                 </div>
               )}
+
+              <div className="space-y-2">
+                <div className="font-medium text-sm">Active Sessions</div>
+                <div className="text-xs text-muted-foreground">
+                  Manage devices that are currently signed in to your account
+                </div>
+                <Dialog open={sessionsDialogOpen} onOpenChange={setSessionsDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <Monitor className="mr-2 h-4 w-4" />
+                      Manage Sessions
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                      <DialogTitle>Active Sessions</DialogTitle>
+                      <DialogDescription>
+                        These are the devices currently signed in to your account
+                      </DialogDescription>
+                    </DialogHeader>
+                    <ScrollArea className="max-h-96">
+                      <div className="space-y-4">
+                        {userSessions ? (
+                          userSessions.map((session) => (
+                            <div
+                              key={session.id}
+                              className="flex items-center justify-between p-4 border rounded-lg"
+                            >
+                              <div className="flex items-center space-x-3">
+                                {getDeviceIcon(session.device_info)}
+                                <div>
+                                  <div className="font-medium flex items-center gap-2">
+                                    {getDeviceName(session.device_info)}
+                                    {session.is_current && (
+                                      <Badge variant="secondary" className="text-xs">
+                                        Current
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    Last active: {session.last_used_at
+                                    ? new Date(session.last_used_at).toLocaleString()
+                                    : 'Unknown'
+                                  }
+                                  </div>
+                                  {session.expires_at && (
+                                    <div className="text-xs text-muted-foreground">
+                                      Expires: {new Date(session.expires_at).toLocaleString()}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              {!session.is_current && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleRevokeSession(session.id)}
+                                >
+                                  Revoke
+                                </Button>
+                              )}
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-center py-4 text-muted-foreground">
+                            Loading sessions...
+                          </div>
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </DialogContent>
+                </Dialog>
+              </div>
             </CardContent>
           </Card>
         </motion.div>
       </div>
 
-      {/* Danger Zone */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -514,20 +690,20 @@ export default function SettingsPage() {
         <Card className="border-red-200 dark:border-red-800">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
-              <AlertCircle className="h-5 w-5" />
+              <AlertCircle className="h-4 w-4" />
               Danger Zone
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-sm">
               Irreversible and destructive actions
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="text-sm">
             <div className="space-y-4">
               <div className="p-4 border border-red-200 dark:border-red-800 rounded-lg bg-red-50 dark:bg-red-950/20">
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="font-medium text-red-900 dark:text-red-100">Delete Account</div>
-                    <div className="text-sm text-red-700 dark:text-red-300">
+                    <div className="text-xs text-red-700 dark:text-red-300">
                       Permanently delete your account and all associated data
                     </div>
                   </div>
@@ -541,9 +717,6 @@ export default function SettingsPage() {
                     <DialogContent>
                       <DialogHeader>
                         <DialogTitle className="text-red-600">Delete Account</DialogTitle>
-                        <DialogDescription>
-                          This action cannot be undone. This will permanently delete your account and remove all your data from our servers.
-                        </DialogDescription>
                       </DialogHeader>
                       <div className="space-y-4">
                         <Alert variant="destructive">
@@ -553,7 +726,7 @@ export default function SettingsPage() {
                           </AlertDescription>
                         </Alert>
                         <p className="text-sm text-muted-foreground">
-                          If you&#39;re sure you want to delete your account, contact our support team at support@irankdebate.com
+                          If you&#39;re sure you want to delete your account, contact our support team at info@debaterwanda.org
                         </p>
                       </div>
                       <DialogFooter>
@@ -576,86 +749,30 @@ export default function SettingsPage() {
   )
 }
 
-// Helper components for dialogs
 function MFAToggleDialog({
                            enabled,
                            onConfirm,
                            loading
                          }: {
   enabled: boolean
-  onConfirm: (enabled: boolean, password: string) => void
+  onConfirm: (enabled: boolean, password: string, securityQuestion?: string, securityAnswer?: string) => void
   loading: boolean
 }) {
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
+  const [securityQuestion, setSecurityQuestion] = useState("")
+  const [securityAnswer, setSecurityAnswer] = useState("")
 
-  return (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="password">Current Password</Label>
-        <div className="relative">
-          <Input
-            id="password"
-            type={showPassword ? "text" : "password"}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Enter your current password"
-            className="pr-10"
-          />
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="absolute right-0 top-0 h-full px-3 py-2"
-            onClick={() => setShowPassword(!showPassword)}
-          >
-            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-          </Button>
-        </div>
-      </div>
-      <DialogFooter>
-        <Button
-          onClick={() => onConfirm(enabled, password)}
-          disabled={!password || loading}
-        >
-          {loading ? "Processing..." : `${enabled ? 'Enable' : 'Disable'} MFA`}
-        </Button>
-      </DialogFooter>
-    </div>
-  )
-}
-
-function BiometricToggleDialog({
-                                 enabled,
-                                 onConfirm,
-                                 loading
-                               }: {
-  enabled: boolean
-  onConfirm: (enabled: boolean, password?: string) => void
-  loading: boolean
-}) {
-  const [password, setPassword] = useState("")
-  const [showPassword, setShowPassword] = useState(false)
-
-  if (enabled) {
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-center p-8">
-          <Fingerprint className="h-16 w-16 text-primary" />
-        </div>
-        <p className="text-center text-sm text-muted-foreground">
-          Click the button below to set up biometric authentication for this device.
-        </p>
-        <DialogFooter>
-          <Button
-            onClick={() => onConfirm(true)}
-            disabled={loading}
-          >
-            {loading ? "Setting up..." : "Set Up Biometric"}
-          </Button>
-        </DialogFooter>
-      </div>
-    )
+  const handleSubmit = () => {
+    if (enabled) {
+      if (!securityQuestion.trim() || !securityAnswer.trim()) {
+        toast.error("Security question and answer are required for MFA")
+        return
+      }
+      onConfirm(enabled, password, securityQuestion, securityAnswer)
+    } else {
+      onConfirm(enabled, password)
+    }
   }
 
   return (
@@ -682,12 +799,188 @@ function BiometricToggleDialog({
           </Button>
         </div>
       </div>
+
+      {enabled && (
+        <>
+          <div className="space-y-2">
+            <Label htmlFor="securityQuestion">Security Question</Label>
+            <Input
+              id="securityQuestion"
+              value={securityQuestion}
+              onChange={(e) => setSecurityQuestion(e.target.value)}
+              placeholder="e.g., What was your first pet's name?"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="securityAnswer">Security Answer</Label>
+            <Input
+              id="securityAnswer"
+              value={securityAnswer}
+              onChange={(e) => setSecurityAnswer(e.target.value)}
+              placeholder="Your answer"
+            />
+          </div>
+
+          <Alert>
+            <Shield className="h-4 w-4" />
+            <AlertDescription>
+              This security question will be used for multi-factor authentication when signing in.
+            </AlertDescription>
+          </Alert>
+        </>
+      )}
+
+      <DialogFooter>
+        <Button
+          onClick={handleSubmit}
+          disabled={!password || loading || (enabled && (!securityQuestion.trim() || !securityAnswer.trim()))}
+        >
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Processing...
+            </>
+          ) : (
+            `${enabled ? 'Enable' : 'Disable'} MFA`
+          )}
+        </Button>
+      </DialogFooter>
+    </div>
+  )
+}
+
+function BiometricToggleDialog({
+                                 enabled,
+                                 onConfirm,
+                                 loading
+                               }: {
+  enabled: boolean
+  onConfirm: (enabled: boolean, password?: string) => void
+  loading: boolean
+}) {
+  const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
+  const [isSupported, setIsSupported] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    const checkSupport = async () => {
+      if (enabled) {
+        try {
+          const supported = window.PublicKeyCredential &&
+            await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
+          setIsSupported(supported)
+        } catch {
+          setIsSupported(false)
+        }
+      }
+    }
+    checkSupport()
+  }, [enabled])
+
+  if (enabled) {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-center p-2">
+          <Fingerprint className="h-8 w-8 text-primary" />
+        </div>
+
+        {isSupported === null && (
+          <div className="text-center text-sm text-muted-foreground">
+            Checking device compatibility...
+          </div>
+        )}
+
+        {isSupported === false && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Biometric authentication is not supported on this device or browser.
+              Please ensure you&#39;re using a compatible device with biometric sensors.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {isSupported === true && (
+          <>
+            <div className="text-center space-y-2">
+              <p className="text-xs text-muted-foreground">
+                You&#39;ll be prompted to use your fingerprint, face recognition, or other biometric method.
+              </p>
+            </div>
+            <Alert>
+              <Shield className="h-4 w-4" />
+              <AlertDescription>
+                Your biometric data is stored securely on your device and never sent to our servers.
+              </AlertDescription>
+            </Alert>
+          </>
+        )}
+
+        <DialogFooter>
+          <Button
+            onClick={() => onConfirm(true)}
+            disabled={loading || isSupported === false}
+          >
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Setting up...
+              </>
+            ) : (
+              "Set Up Biometric"
+            )}
+          </Button>
+        </DialogFooter>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          Disabling biometric authentication will remove all registered biometric credentials from your account.
+        </AlertDescription>
+      </Alert>
+
+      <div className="space-y-2">
+        <Label htmlFor="password">Current Password</Label>
+        <div className="relative">
+          <Input
+            id="password"
+            type={showPassword ? "text" : "password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Enter your current password"
+            className="pr-10"
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="absolute right-0 top-0 h-full px-3 py-2"
+            onClick={() => setShowPassword(!showPassword)}
+          >
+            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+          </Button>
+        </div>
+      </div>
       <DialogFooter>
         <Button
           onClick={() => onConfirm(false, password)}
           disabled={!password || loading}
+          variant="destructive"
         >
-          {loading ? "Processing..." : "Disable Biometric"}
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Processing...
+            </>
+          ) : (
+            "Disable Biometric"
+          )}
         </Button>
       </DialogFooter>
     </div>
@@ -774,7 +1067,14 @@ function SecurityQuestionDialog({
 
         <DialogFooter>
           <Button type="submit" disabled={loading}>
-            {loading ? "Updating..." : "Update Security Question"}
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Updating...
+              </>
+            ) : (
+              "Update Security Question"
+            )}
           </Button>
         </DialogFooter>
       </form>

@@ -5,62 +5,74 @@ import { useMutation } from "convex/react"
 import { api } from "@/convex/_generated/api"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { Upload, FileText, X, Loader2 } from "lucide-react"
+import { Upload, FileText, X, Loader2, Image } from "lucide-react"
 import { toast } from "sonner"
 import { Id } from "@/convex/_generated/dataModel"
 
 interface FileUploadProps {
+    onUpload?: (storageId: Id<"_storage">) => void
     onFileUploaded?: (storageId: Id<"_storage">) => void
-    acceptedTypes?: string[]
+    accept?: string | string[]
+    maxSize?: number
     maxSizeInMB?: number
     label?: string
     description?: string
     required?: boolean
     disabled?: boolean
+    children?: React.ReactNode
 }
 
 export function FileUpload({
+                               onUpload,
                                onFileUploaded,
-                               acceptedTypes = [".pdf", ".jpg", ".jpeg", ".png"],
-                               maxSizeInMB = 5,
-                               label = "Upload File",
-                               description = "Click to upload or drag and drop",
+                               accept = "image/*",
+                               maxSize,
+                               maxSizeInMB,
+                               label,
+                               description,
                                required = false,
                                disabled = false,
+                               children,
                            }: FileUploadProps) {
     const [file, setFile] = useState<File | null>(null)
     const [uploading, setUploading] = useState(false)
+    const [dragOver, setDragOver] = useState(false)
 
     const generateUploadUrl = useMutation(api.files.generateUploadUrl)
 
-    const validateFile = (file: File): boolean => {
-        const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase()
-        const allowedMimeTypes = [
-            'application/pdf',
-            'image/jpeg',
-            'image/png',
-            'image/jpg'
-        ]
+    const maxSizeBytes = maxSize || (maxSizeInMB ? maxSizeInMB * 1024 * 1024 : 5 * 1024 * 1024)
 
-        if (!allowedMimeTypes.includes(file.type) && !acceptedTypes.includes(fileExtension)) {
-            toast.error(`Please upload a file with one of these types: ${acceptedTypes.join(', ')}`)
+    const handleUploadComplete = onUpload || onFileUploaded
+
+    const acceptTypes = Array.isArray(accept) ? accept : [accept]
+
+    const validateFile = (file: File): boolean => {
+        const isValidType = acceptTypes.some(type => {
+            if (type === "image/*") {
+                return file.type.startsWith('image/')
+            }
+            if (type === "application/pdf") {
+                return file.type === 'application/pdf'
+            }
+            return file.type.match(type.replace('*', '.*'))
+        })
+
+        if (!isValidType) {
+            const acceptedTypes = acceptTypes.join(', ')
+            toast.error(`Please upload a file of type: ${acceptedTypes}`)
             return false
         }
 
-        // Check file size
-        const maxSizeInBytes = maxSizeInMB * 1024 * 1024
-        if (file.size > maxSizeInBytes) {
-            toast.error(`File size must be less than ${maxSizeInMB}MB`)
+        if (file.size > maxSizeBytes) {
+            const maxSizeMB = (maxSizeBytes / (1024 * 1024)).toFixed(1)
+            toast.error(`File size must be less than ${maxSizeMB}MB`)
             return false
         }
 
         return true
     }
 
-    const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        const selectedFile = event.target.files?.[0]
-        if (!selectedFile) return
-
+    const handleFileChange = async (selectedFile: File) => {
         if (!validateFile(selectedFile)) return
 
         setFile(selectedFile)
@@ -84,7 +96,7 @@ export function FileUpload({
             }
 
             const { storageId } = await result.json()
-            onFileUploaded?.(storageId)
+            handleUploadComplete?.(storageId)
             toast.success("File uploaded successfully")
 
         } catch (error) {
@@ -98,34 +110,112 @@ export function FileUpload({
 
     const removeFile = () => {
         setFile(null)
-        // Reset the input
-        const input = document.querySelector('input[type="file"]') as HTMLInputElement
-        if (input) input.value = ''
+    }
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault()
+        setDragOver(true)
+    }
+
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault()
+        setDragOver(false)
+    }
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault()
+        setDragOver(false)
+
+        const droppedFile = e.dataTransfer.files[0]
+        if (droppedFile) {
+            handleFileChange(droppedFile)
+        }
+    }
+
+    const fileInputId = `file-upload-${Math.random().toString(36).slice(2, 11)}`
+
+    if (children) {
+        return (
+          <div className="space-y-2">
+              {label && (
+                <Label className="text-sm font-medium">
+                    {label} {required && <span className="text-red-500">*</span>}
+                </Label>
+              )}
+
+              {description && (
+                <p className="text-xs text-muted-foreground">{description}</p>
+              )}
+
+              <input
+                type="file"
+                accept={acceptTypes.join(',')}
+                onChange={(e) => {
+                    const selectedFile = e.target.files?.[0]
+                    if (selectedFile) handleFileChange(selectedFile)
+                }}
+                className="hidden"
+                id={fileInputId}
+                disabled={disabled || uploading}
+              />
+
+              <label
+                htmlFor={fileInputId}
+                className={disabled || uploading ? "cursor-not-allowed" : "cursor-pointer"}
+              >
+                  {children}
+              </label>
+
+              {uploading && (
+                <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Uploading...</span>
+                </div>
+              )}
+          </div>
+        )
     }
 
     return (
       <div className="space-y-2">
-          <Label className="text-sm font-medium">
-              {label} {required && <span className="text-red-500">*</span>}
-          </Label>
+          {label && (
+            <Label className="text-sm font-medium">
+                {label} {required && <span className="text-red-500">*</span>}
+            </Label>
+          )}
 
           {description && (
             <p className="text-xs text-muted-foreground">{description}</p>
           )}
 
           {!file ? (
-            <div className="relative border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center hover:border-muted-foreground/50 transition-colors">
+            <div
+              className={`
+            relative border-2 border-dashed rounded-lg p-6 text-center transition-colors
+            ${dragOver
+                ? "border-primary bg-primary/5"
+                : "border-muted-foreground/25 hover:border-muted-foreground/50"
+              }
+            ${disabled || uploading ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
+          `}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
                 <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground mb-2">
                     Click to upload or drag and drop
                 </p>
                 <p className="text-xs text-muted-foreground">
-                    {acceptedTypes.join(', ').toUpperCase()} (max {maxSizeInMB}MB)
+                    {acceptTypes.join(', ').toUpperCase()} (max {(maxSizeBytes / (1024 * 1024)).toFixed(1)}MB)
                 </p>
                 <input
                   type="file"
-                  accept={acceptedTypes.join(',')}
-                  onChange={handleFileChange}
+                  accept={acceptTypes.join(',')}
+                  onChange={(e) => {
+                      const selectedFile = e.target.files?.[0]
+                      if (selectedFile) handleFileChange(selectedFile)
+                  }}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   disabled={disabled || uploading}
                 />
@@ -133,7 +223,11 @@ export function FileUpload({
           ) : (
             <div className="border rounded-lg p-4 flex items-center justify-between">
                 <div className="flex items-center space-x-3">
-                    <FileText className="h-8 w-8 text-blue-500" />
+                    {file.type.startsWith('image/') ? (
+                      <Image className="h-8 w-8 text-blue-500" />
+                    ) : (
+                      <FileText className="h-8 w-8 text-blue-500" />
+                    )}
                     <div>
                         <p className="text-sm font-medium">{file.name}</p>
                         <p className="text-xs text-muted-foreground">

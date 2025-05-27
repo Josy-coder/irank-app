@@ -115,14 +115,14 @@ const StudentSignUpForm = () => {
       await signUp({
         name: values.name,
         email: values.email,
-        password_hash: values.password,
+        password: values.password,
         role: "student",
         phone: values.phone,
         gender: values.gender,
         grade: values.grade,
         school_id: values.school_id as Id<"schools">,
         security_question: values.security_question,
-        security_answer_hash: values.security_answer,
+        security_answer: values.security_answer,
       })
 
       router.push("/")

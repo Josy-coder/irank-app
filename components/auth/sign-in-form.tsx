@@ -37,7 +37,7 @@ import {
   Users,
   Mail,
   Shield,
-  AlertCircle, Phone, Link2
+  AlertCircle, Phone, Link2, ChevronLeft, Fingerprint
 } from "lucide-react";
 import { Label } from "@/components/ui/label"
 import { motion } from "framer-motion"
@@ -85,14 +85,16 @@ const SignInForm = ({ role }: SignInFormProps) => {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [rememberMe, setRememberMe] = useState(false)
-  const [authMethod, setAuthMethod] = useState<"email" | "phone" | "magic">("email")
+  const [authMethod, setAuthMethod] = useState<"email" | "phone" | "magic" | "biometric">("email")
   const [requiresMFA, setRequiresMFA] = useState(false)
   const [mfaUserId, setMfaUserId] = useState<string | null>(null)
   const [, setSelectedStudent] = useState<any>(null)
   const [securityQuestion, setSecurityQuestion] = useState<string>("")
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [biometricSupported, setBiometricSupported] = useState(false)
+  const [biometricLoading, setBiometricLoading] = useState(false)
 
-  const { signIn, signInWithPhone, generateMagicLink } = useAuth()
+  const { signIn, signInWithPhone, signInWithBiometric, generateMagicLink } = useAuth()
 
   const emailForm = useForm<EmailFormValues>({
     resolver: zodResolver(emailFormSchema),
@@ -147,6 +149,23 @@ const SignInForm = ({ role }: SignInFormProps) => {
   )
 
   useEffect(() => {
+    const checkBiometricSupport = async () => {
+      if (typeof window !== 'undefined' &&
+        'navigator' in window &&
+        'credentials' in navigator &&
+        window.PublicKeyCredential) {
+        try {
+          const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
+          setBiometricSupported(available)
+        } catch {
+          setBiometricSupported(false)
+        }
+      }
+    }
+    checkBiometricSupport()
+  }, [])
+
+  useEffect(() => {
     if (securityQuestionQuery?.error) {
       setSecurityQuestion("⚠️ " + securityQuestionQuery.error);
     } else if (securityQuestionQuery?.question) {
@@ -156,16 +175,31 @@ const SignInForm = ({ role }: SignInFormProps) => {
     }
   }, [securityQuestionQuery]);
 
+  const handleBiometricSignIn = async () => {
+    setBiometricLoading(true)
+    setError(null)
+
+    try {
+      await signInWithBiometric(role as UserRole)
+    } catch (error: any) {
+      console.error("Biometric auth error:", error)
+      setError(error.message)
+    } finally {
+      setBiometricLoading(false)
+    }
+  }
+
   const handleEmailSignIn = async (values: EmailFormValues) => {
     setLoading(true)
     setError(null)
 
     try {
-      const result = await signIn(values.email, values.password, rememberMe)
+      const result = await signIn(values.email, values.password, rememberMe, undefined, role)
 
       if (result.requiresMFA) {
         setRequiresMFA(true)
         setMfaUserId(result.userId || null)
+        setSecurityQuestion(result.securityQuestion || "")
       }
     } catch (error: any) {
       console.error("Signin error:", error)
@@ -183,7 +217,7 @@ const SignInForm = ({ role }: SignInFormProps) => {
 
     try {
       const emailValues = emailForm.getValues()
-      await signIn(emailValues.email, emailValues.password, rememberMe, values.mfaCode)
+      await signIn(emailValues.email, emailValues.password, rememberMe, values.mfaCode, role)
     } catch (error: any) {
       console.error("MFA signin error:", error)
       setError(error.message)
@@ -201,8 +235,8 @@ const SignInForm = ({ role }: SignInFormProps) => {
         name_search: values.nameSearch,
         selected_user_id: values.selectedUserId as any,
         phone: values.phone,
-        security_answer_hash: values.securityAnswer,
-      })
+        security_answer: values.securityAnswer,
+      }, role)
     } catch (error: any) {
       console.error("Phone signin error:", error)
       setError(error.message)
@@ -271,6 +305,13 @@ const SignInForm = ({ role }: SignInFormProps) => {
 
             <Form {...mfaForm}>
               <form onSubmit={mfaForm.handleSubmit(handleMFASignIn)} className="space-y-4">
+
+                {securityQuestion && (
+                  <div className="flex flex-col space-y-1">
+                  <Label>Security Question</Label>
+                    <span className="text-muted-foreground">{securityQuestion}</span>
+                  </div>
+                )}
                 <FormField
                   control={mfaForm.control}
                   name="mfaCode"
@@ -302,11 +343,12 @@ const SignInForm = ({ role }: SignInFormProps) => {
 
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="ghost"
                   onClick={handleBackToEmail}
-                  className="w-full"
+                  className="w-full text-primary"
                   disabled={loading}
                 >
+                  <ChevronLeft className="mr-2 h-4 w-4" />
                   Back to Sign In
                 </Button>
               </form>
@@ -349,8 +391,8 @@ const SignInForm = ({ role }: SignInFormProps) => {
           </div>
 
           {role === "student" ? (
-            <Tabs value={authMethod} onValueChange={(value) => setAuthMethod(value as "email" | "phone" | "magic")} className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
+            <Tabs value={authMethod} onValueChange={(value) => setAuthMethod(value as "email" | "magic" | "biometric")} className="w-full">
+              <TabsList className={`grid w-full ${biometricSupported ? 'grid-cols-4' : 'grid-cols-3'}`}>
                 <TabsTrigger value="email">
                   <Mail className="h-4 w-4 md:hidden" />
                   <span className="hidden md:inline">Email</span>
@@ -363,6 +405,12 @@ const SignInForm = ({ role }: SignInFormProps) => {
                   <Link2 className="h-4 w-4 md:hidden" />
                   <span className="hidden md:inline">Magic Link</span>
                 </TabsTrigger>
+                {biometricSupported && (
+                  <TabsTrigger value="biometric">
+                    <Fingerprint className="h-4 w-4 md:hidden" />
+                    <span className="hidden md:inline">Biometric</span>
+                  </TabsTrigger>
+                )}
               </TabsList>
 
               <TabsContent value="email" className="space-y-4">
@@ -665,10 +713,39 @@ const SignInForm = ({ role }: SignInFormProps) => {
                   </form>
                 </Form>
               </TabsContent>
+
+              {biometricSupported && (
+                <TabsContent value="biometric" className="space-y-4">
+                  <div className="text-center mb-4">
+                    <Fingerprint className="mx-auto h-12 w-12 text-primary mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      Use your fingerprint, face recognition, or other biometric method to sign in
+                    </p>
+                  </div>
+
+                  <Button
+                    onClick={handleBiometricSignIn}
+                    disabled={biometricLoading}
+                    className="w-full"
+                  >
+                    {biometricLoading ? (
+                      <span className="flex items-center justify-center">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Authenticating...
+            </span>
+                    ) : (
+                      <>
+                        <Fingerprint className="mr-2 h-4 w-4" />
+                        Sign in with Biometrics
+                      </>
+                    )}
+                  </Button>
+                </TabsContent>
+              )}
             </Tabs>
           ) : (
             <Tabs value={authMethod} onValueChange={(value) => setAuthMethod(value as "email" | "magic")} className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
+              <TabsList className={`grid w-full ${biometricSupported ? 'grid-cols-3' : 'grid-cols-2'}`}>
                 <TabsTrigger value="email">
                   <Mail className="h-4 w-4 md:hidden" />
                   <span className="hidden md:inline">Email</span>
@@ -677,6 +754,12 @@ const SignInForm = ({ role }: SignInFormProps) => {
                   <Link2 className="h-4 w-4 md:hidden" />
                   <span className="hidden md:inline">Magic Link</span>
                 </TabsTrigger>
+                {biometricSupported && (
+                  <TabsTrigger value="biometric">
+                    <Fingerprint className="h-4 w-4 md:hidden" />
+                    <span className="hidden md:inline">Biometric</span>
+                  </TabsTrigger>
+                )}
               </TabsList>
 
               <TabsContent value="email" className="space-y-4">
@@ -816,6 +899,35 @@ const SignInForm = ({ role }: SignInFormProps) => {
                   </form>
                 </Form>
               </TabsContent>
+
+              {biometricSupported && (
+                <TabsContent value="biometric" className="space-y-4">
+                  <div className="text-center mb-4">
+                    <Fingerprint className="mx-auto h-12 w-12 text-primary mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      Use your fingerprint, face recognition, or other biometric method to sign in
+                    </p>
+                  </div>
+
+                  <Button
+                    onClick={handleBiometricSignIn}
+                    disabled={biometricLoading}
+                    className="w-full"
+                  >
+                    {biometricLoading ? (
+                      <span className="flex items-center justify-center">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Authenticating...
+            </span>
+                    ) : (
+                      <>
+                        <Fingerprint className="mr-2 h-4 w-4" />
+                        Sign in with Biometrics
+                      </>
+                    )}
+                  </Button>
+                </TabsContent>
+              )}
             </Tabs>
           )}
 

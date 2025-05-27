@@ -128,7 +128,7 @@ const VolunteerSignUpForm = () => {
       await signUp({
         name: values.name,
         email: values.email,
-        password_hash: values.password,
+        password: values.password,
         role: "volunteer",
         date_of_birth: format(values.dateOfBirth, "yyyy-MM-dd"),
         gender: values.gender,
@@ -381,14 +381,23 @@ const VolunteerSignUpForm = () => {
                 name="safeguardingCertificate"
                 render={() => (
                   <FormItem>
-                    <FileUpload
-                      onFileUploaded={handleFileUploaded}
-                      acceptedTypes={[".pdf", ".jpg", ".jpeg", ".png"]}
-                      maxSizeInMB={5}
-                      label="Safeguarding Certificate"
-                      description="Upload your safeguarding certificate. This is required for all volunteers."
-                      required={true}
-                      disabled={loading}
+                    <FormField
+                      control={form.control}
+                      name="safeguardingCertificate"
+                      render={() => (
+                        <FormItem>
+                          <FileUpload
+                            onUpload={handleFileUploaded}
+                            accept={["application/pdf", "image/jpeg", "image/jpg", "image/png"]}
+                            maxSize={5 * 1024 * 1024}
+                            label="Safeguarding Certificate"
+                            description="Upload your safeguarding certificate. This is required for all volunteers."
+                            required={true}
+                            disabled={loading}
+                          />
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
                     <FormMessage />
                   </FormItem>

@@ -2,6 +2,7 @@ import { internalMutation, internalQuery, mutation, query } from "../_generated/
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import { Doc, Id } from "../_generated/dataModel";
+import { hashPassword, verifyPassword } from "../lib/password";
 
 type CurrentUserResponse = {
   id: string;
@@ -32,18 +33,30 @@ type CurrentUserResponse = {
 function getErrorMessage(code: string): string {
   const errorMap: Record<string, string> = {
     INVALID_CREDENTIALS: "The email or password you entered is incorrect. Please try again.",
+    BIOMETRIC_INVALID: "Biometric authentication failed. Please try again or use another sign-in method.",
     ACCOUNT_LOCKED: "Your account has been temporarily locked due to too many failed login attempts. Please try again later.",
     USER_BANNED: "Your account has been suspended. Please contact support.",
     USER_INACTIVE: "Your account is pending approval. Please wait for admin verification.",
     MFA_REQUIRED: "Multi-factor authentication is required. Please enter your MFA code.",
     MFA_INVALID: "The security answer you provided is incorrect. Please try again.",
     SECURITY_QUESTION_NOT_FOUND: "We couldn't find a security question for this user.",
+    "An account with this email already exists for this role": "An account with this email already exists for this role. Please use a different email or sign in.",
+    "Phone number already registered": "An account with this phone number already exists. Please use a different number.",
+    "School selection is required for students": "Please select your school to continue registration.",
+    "Phone and security question are required for students": "Both phone number and security question are required for student registration.",
+    "School information is required for school administrators": "Please provide school details to register as a school administrator.",
+    "High school and national ID are required for volunteers": "Please provide your high school and national ID to register as a volunteer.",
+    "Invalid session": "Your session is invalid or has expired. Please sign in again.",
+    "Invalid reset token": "This password reset link is invalid or has expired.",
+    "User not found": "No account was found with the provided details.",
+    "Magic link has expired": "This magic link has expired. Please request a new one.",
+    "Magic link has already been used": "This magic link has already been used. Please request a new one.",
+    "Current password is incorrect": "The password you entered is incorrect.",
+    "MFA is only available for school administrators, volunteers, and administrators": "Multi-factor authentication is only available for school administrators, volunteers, and administrators.",
   };
 
   return errorMap[code] || "Something went wrong. Please try again or contact support.";
 }
-
-
 
 async function generateSecureToken(payload: any): Promise<string> {
   const header = {
@@ -142,12 +155,87 @@ function generateRandomToken(): string {
   return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
+async function verifyWebAuthnAssertion({
+                                         credentialId,
+                                         publicKey,
+                                         authenticatorData,
+                                         clientDataJSON,
+                                         signature,
+                                       }: {
+  credentialId: string;
+  publicKey: string;
+  authenticatorData: string;
+  clientDataJSON: string;
+  signature: string;
+}): Promise<boolean> {
+  try {
+    const clientData = JSON.parse(new TextDecoder().decode(
+      new Uint8Array(atob(clientDataJSON).split('').map(char => char.charCodeAt(0)))
+    ));
+
+    if (clientData.type !== 'webauthn.get') {
+      console.error('Invalid ceremony type:', clientData.type);
+      return false;
+    }
+
+    const publicKeyBuffer = new Uint8Array(
+      atob(publicKey).split('').map(char => char.charCodeAt(0))
+    );
+
+    let cryptoKey;
+    try {
+      cryptoKey = await crypto.subtle.importKey(
+        'spki',
+        publicKeyBuffer,
+        {
+          name: 'ECDSA',
+          namedCurve: 'P-256',
+        },
+        false,
+        ['verify']
+      );
+    } catch (keyError) {
+      console.error('Failed to import public key:', keyError);
+      return false;
+    }
+
+    const signatureBuffer = new Uint8Array(
+      atob(signature).split('').map(char => char.charCodeAt(0))
+    );
+
+    const authDataBuffer = new Uint8Array(
+      atob(authenticatorData).split('').map(char => char.charCodeAt(0))
+    );
+
+    const clientDataBuffer = new TextEncoder().encode(clientDataJSON);
+    const clientDataHash = await crypto.subtle.digest('SHA-256', clientDataBuffer);
+
+    const signedData = new Uint8Array(authDataBuffer.length + 32);
+    signedData.set(authDataBuffer);
+    signedData.set(new Uint8Array(clientDataHash), authDataBuffer.length);
+
+    return await crypto.subtle.verify(
+      {
+        name: 'ECDSA',
+        hash: 'SHA-256',
+      },
+      cryptoKey,
+      signatureBuffer,
+      signedData
+    );
+  } catch (error) {
+    console.error('WebAuthn verification error:', error);
+    return false;
+  }
+}
+
+
 export const signUp = mutation({
   args: {
     name: v.string(),
     email: v.string(),
     phone: v.optional(v.string()),
-    password_hash: v.string(),
+    password: v.string(),
     role: v.union(
       v.literal("student"),
       v.literal("school_admin"),
@@ -163,7 +251,7 @@ export const signUp = mutation({
     school_id: v.optional(v.id("schools")),
     grade: v.optional(v.string()),
     security_question: v.optional(v.string()),
-    security_answer_hash: v.optional(v.string()),
+    security_answer: v.optional(v.string()),
     position: v.optional(v.string()),
     school_data: v.optional(v.object({
       name: v.string(),
@@ -221,7 +309,7 @@ export const signUp = mutation({
         if (!args.school_id) {
           throw new Error("School selection is required for students");
         }
-        if (!args.phone || !args.security_question || !args.security_answer_hash) {
+        if (!args.phone || !args.security_question || !args.security_answer) {
           throw new Error("Phone and security question are required for students");
         }
       }
@@ -235,6 +323,8 @@ export const signUp = mutation({
           throw new Error("High school and national ID are required for volunteers");
         }
       }
+
+      const { hash: passwordHash, salt: passwordSalt } = await hashPassword(args.password);
 
       let school_id = args.school_id;
       if (args.role === "school_admin" && args.school_data) {
@@ -260,7 +350,8 @@ export const signUp = mutation({
         name: args.name,
         email: args.email,
         phone: args.phone,
-        password_hash: args.password_hash,
+        password_hash: passwordHash,
+        password_salt: passwordSalt,
         role: args.role,
         school_id,
         status: "inactive",
@@ -278,11 +369,13 @@ export const signUp = mutation({
         created_at: now,
       });
 
-      if (args.role === "student" && args.security_question && args.security_answer_hash) {
+      if (args.role === "student" && args.security_question && args.security_answer) {
+        const { hash: answerHash } = await hashPassword(args.security_answer.toLowerCase().trim());
+
         await ctx.db.insert("security_questions", {
           user_id: userId,
           question: args.security_question,
-          answer_hash: args.security_answer_hash,
+          answer_hash: answerHash,
           created_at: now,
         });
       }
@@ -322,7 +415,7 @@ export const signUp = mutation({
 export const signIn = mutation({
   args: {
     email: v.string(),
-    password_hash: v.string(),
+    password: v.string(),
     device_info: v.optional(v.object({
       user_agent: v.optional(v.string()),
       ip_address: v.optional(v.string()),
@@ -331,6 +424,7 @@ export const signIn = mutation({
     })),
     remember_me: v.optional(v.boolean()),
     mfa_code: v.optional(v.string()),
+    expected_role: v.string()
   },
   handler: async (ctx, args) => {
     try {
@@ -338,19 +432,18 @@ export const signIn = mutation({
 
       const user = await ctx.db
         .query("users")
-        .withIndex("by_email", (q) => q.eq("email", args.email))
+        .withIndex("by_email_role", (q) => q.eq("email", args.email).eq("role", args.expected_role as "student" | "school_admin" | "volunteer" | "admin"))
         .first();
 
       if (!user) {
-        throw new Error("Invalid email or password");
+        throw new Error("INVALID_CREDENTIALS");
       }
 
       if (user.locked_until && user.locked_until > now) {
-        const remainingTime = Math.ceil((user.locked_until - now) / (60 * 1000));
-        throw new Error(`Account locked due to too many failed attempts. Try again in ${remainingTime} minutes.`);
+        throw new Error("ACCOUNT_LOCKED");
       }
 
-      const isValidPassword = user.password_hash === args.password_hash;
+      const isValidPassword = await verifyPassword(args.password, user.password_hash, user.password_salt);
 
       if (!isValidPassword) {
         const failedAttempts = (user.failed_login_attempts || 0) + 1;
@@ -363,28 +456,29 @@ export const signIn = mutation({
         }
 
         await ctx.db.patch(user._id, updateData);
-
-        if (failedAttempts >= 5) {
-          throw new Error("Account locked due to too many failed attempts. Try again in 30 minutes.");
-        }
-
-        throw new Error("Invalid email or password");
+        throw new Error(failedAttempts >= 5 ? "ACCOUNT_LOCKED" : "INVALID_CREDENTIALS");
       }
 
       if (user.status === "banned") {
-        throw new Error("Account has been banned. Contact administrator.");
+        throw new Error("USER_BANNED");
       }
 
       if (user.status === "inactive") {
-        throw new Error("Your account is pending approval. Please wait for admin verification.");
+        throw new Error("USER_INACTIVE");
       }
 
       if (user.mfa_enabled && (!args.mfa_code)) {
+        const securityQuestion = await ctx.db
+          .query("security_questions")
+          .withIndex("by_user_id", (q) => q.eq("user_id", user._id))
+          .first();
+
         return {
           success: false,
           requiresMFA: true,
           userId: user._id,
-          message: "Multi-factor authentication required",
+          message: getErrorMessage("MFA_REQUIRED"),
+          securityQuestion: securityQuestion?.question || null,
         };
       }
 
@@ -394,12 +488,18 @@ export const signIn = mutation({
           .withIndex("by_user_id", (q) => q.eq("user_id", user._id))
           .first();
 
-        if (!securityQuestion || securityQuestion.answer_hash !== args.mfa_code) {
+        if (!securityQuestion) {
+          throw new Error("SECURITY_QUESTION_NOT_FOUND");
+        }
+
+        const isValidMFA = await verifyPassword(args.mfa_code.toLowerCase().trim(), securityQuestion.answer_hash, user.password_salt);
+
+        if (!isValidMFA) {
           const failedAttempts = (user.failed_login_attempts || 0) + 1;
           await ctx.db.patch(user._id, {
             failed_login_attempts: failedAttempts,
           });
-          throw new Error("Invalid security answer");
+          throw new Error("MFA_INVALID");
         }
       }
 
@@ -418,7 +518,6 @@ export const signIn = mutation({
       };
 
       const sessionToken = await generateSecureToken(tokenPayload);
-
       const expiresIn = args.remember_me ? 30 * 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
       const expiresAt = now + expiresIn;
 
@@ -437,7 +536,7 @@ export const signIn = mutation({
         action: "user_login",
         resource_type: "users",
         resource_id: user._id,
-        description: `User ${user.name} logged in`,
+        description: `User ${user.name} logged in via ${args.expected_role} form`,
         ip_address: args.device_info?.ip_address,
         user_agent: args.device_info?.user_agent,
       });
@@ -453,6 +552,7 @@ export const signIn = mutation({
           status: user.status,
           verified: user.verified,
           school_id: user.school_id,
+          profile_image: user.profile_image
         },
         expiresAt,
       };
@@ -467,7 +567,8 @@ export const signInWithPhone = mutation({
     name_search: v.string(),
     selected_user_id: v.id("users"),
     phone: v.string(),
-    security_answer_hash: v.string(),
+    security_answer: v.string(),
+    expected_role: v.string(),
     device_info: v.optional(v.object({
       user_agent: v.optional(v.string()),
       ip_address: v.optional(v.string()),
@@ -479,23 +580,30 @@ export const signInWithPhone = mutation({
     try {
       const now = Date.now();
 
+      if (args.expected_role !== "student") {
+        throw new Error("INVALID_CREDENTIALS");
+      }
+
       const user = await ctx.db.get(args.selected_user_id);
 
       if (!user || user.phone !== args.phone || user.role !== "student") {
-        throw new Error("Invalid credentials");
+        throw new Error("INVALID_CREDENTIALS");
+      }
+
+      if (args.expected_role && args.expected_role !== "student") {
+        throw new Error("INVALID_CREDENTIALS");
       }
 
       if (user.locked_until && user.locked_until > now) {
-        const remainingTime = Math.ceil((user.locked_until - now) / (60 * 1000));
-        throw new Error(`Account locked due to too many failed attempts. Try again in ${remainingTime} minutes.`);
+        throw new Error("ACCOUNT_LOCKED");
       }
 
       if (user.status === "banned") {
-        throw new Error("Account has been banned. Contact administrator.");
+        throw new Error("USER_BANNED");
       }
 
       if (user.status === "inactive") {
-        throw new Error("Your account is pending approval. Please wait for admin verification.");
+        throw new Error("USER_INACTIVE");
       }
 
       const securityQuestion = await ctx.db
@@ -504,10 +612,10 @@ export const signInWithPhone = mutation({
         .first();
 
       if (!securityQuestion) {
-        throw new Error("Security question not found");
+        throw new Error("SECURITY_QUESTION_NOT_FOUND");
       }
 
-      const isValidAnswer = securityQuestion.answer_hash === args.security_answer_hash;
+      const isValidAnswer = await verifyPassword(args.security_answer.toLowerCase().trim(), securityQuestion.answer_hash, user.password_salt);
 
       if (!isValidAnswer) {
         const failedAttempts = (user.failed_login_attempts || 0) + 1;
@@ -520,7 +628,7 @@ export const signInWithPhone = mutation({
         }
 
         await ctx.db.patch(user._id, updateData);
-        throw new Error("Invalid security answer");
+        throw new Error("MFA_INVALID");
       }
 
       await ctx.db.patch(user._id, {
@@ -576,6 +684,145 @@ export const signInWithPhone = mutation({
       };
     } catch (error: any) {
       throw new Error(getErrorMessage(error.message));
+    }
+  },
+});
+
+export const signInWithBiometric = mutation({
+  args: {
+    credential_id: v.string(),
+    authenticator_data: v.string(),
+    client_data_json: v.string(),
+    signature: v.string(),
+    device_info: v.optional(v.object({
+      user_agent: v.optional(v.string()),
+      ip_address: v.optional(v.string()),
+      platform: v.optional(v.string()),
+      device_id: v.optional(v.string()),
+    })),
+    expected_role: v.string(),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const now = Date.now();
+
+      const credential = await ctx.db
+        .query("biometric_credentials")
+        .withIndex("by_credential_id", (q) => q.eq("credential_id", args.credential_id))
+        .first();
+
+      if (!credential) {
+        throw new Error("BIOMETRIC_INVALID");
+      }
+
+      const user = await ctx.db.get(credential.user_id);
+      if (!user) {
+        throw new Error("BIOMETRIC_INVALID");
+      }
+
+      if (user.role !== args.expected_role) {
+        const failedAttempts = (user.failed_login_attempts || 0) + 1;
+        await ctx.db.patch(user._id, {
+          failed_login_attempts: failedAttempts,
+        });
+        throw new Error("BIOMETRIC_INVALID");
+      }
+
+      if (user.locked_until && user.locked_until > now) {
+        throw new Error("ACCOUNT_LOCKED");
+      }
+
+      if (user.status === "banned") {
+        throw new Error("USER_BANNED");
+      }
+
+      if (user.status === "inactive") {
+        throw new Error("USER_INACTIVE");
+      }
+
+      const isValidAssertion = await verifyWebAuthnAssertion({
+        credentialId: args.credential_id,
+        publicKey: credential.public_key,
+        authenticatorData: args.authenticator_data,
+        clientDataJSON: args.client_data_json,
+        signature: args.signature,
+      });
+
+      if (!isValidAssertion) {
+        const failedAttempts = (user.failed_login_attempts || 0) + 1;
+        const updateData: any = {
+          failed_login_attempts: failedAttempts,
+        };
+
+        if (failedAttempts >= 5) {
+          updateData.locked_until = now + (30 * 60 * 1000);
+        }
+
+        await ctx.db.patch(user._id, updateData);
+        throw new Error("BIOMETRIC_INVALID");
+      }
+
+      await ctx.db.patch(credential._id, {
+        last_used: now,
+      });
+
+      await ctx.db.patch(user._id, {
+        failed_login_attempts: 0,
+        locked_until: undefined,
+        last_login_at: now,
+      });
+
+      const tokenPayload = {
+        userId: user._id,
+        email: user.email,
+        role: user.role,
+        verified: user.verified,
+        status: user.status,
+      };
+
+      const sessionToken = await generateSecureToken(tokenPayload);
+      const expiresAt = now + (7 * 24 * 60 * 60 * 1000);
+
+      await ctx.db.insert("auth_sessions", {
+        user_id: user._id,
+        session_token: sessionToken,
+        device_info: args.device_info,
+        expires_at: expiresAt,
+        last_used_at: now,
+        is_offline_capable: true,
+        created_at: now,
+      });
+
+      await ctx.runMutation(internal.functions.audit.createAuditLog, {
+        user_id: user._id,
+        action: "user_login",
+        resource_type: "users",
+        resource_id: user._id,
+        description: `User ${user.name} logged in via biometric authentication on ${args.expected_role} form`,
+        ip_address: args.device_info?.ip_address,
+        user_agent: args.device_info?.user_agent,
+      });
+
+      return {
+        success: true,
+        token: sessionToken,
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          status: user.status,
+          verified: user.verified,
+          school_id: user.school_id,
+        },
+        expiresAt,
+      };
+    } catch (error: any) {
+      let errorCode = error.message;
+      if (errorCode === "BIOMETRIC_INVALID") {
+        throw new Error("Biometric authentication failed. Please try again or use another sign-in method.");
+      }
+      throw new Error(getErrorMessage(errorCode));
     }
   },
 });
@@ -802,7 +1049,7 @@ export const verifyMagicLink = mutation({
 export const resetPassword = mutation({
   args: {
     reset_token: v.string(),
-    new_password_hash: v.string(),
+    new_password: v.string(),
   },
   handler: async (ctx, args) => {
     try {
@@ -817,8 +1064,11 @@ export const resetPassword = mutation({
         throw new Error("User not found");
       }
 
+      const { hash: newPasswordHash, salt: newPasswordSalt } = await hashPassword(args.new_password);
+
       await ctx.db.patch(user._id, {
-        password_hash: args.new_password_hash,
+        password_hash: newPasswordHash,
+        password_salt: newPasswordSalt,
         password_changed_at: Date.now(),
         failed_login_attempts: 0,
         locked_until: undefined,
@@ -854,7 +1104,7 @@ export const resetPassword = mutation({
 export const enableMFA = mutation({
   args: {
     token: v.string(),
-    current_password_hash: v.string(),
+    current_password: v.string(),
   },
   handler: async (ctx, args) => {
     try {
@@ -871,7 +1121,8 @@ export const enableMFA = mutation({
         throw new Error("User not found");
       }
 
-      if (user.password_hash !== args.current_password_hash) {
+      const isPasswordValid = await verifyPassword(args.current_password, user.password_hash, user.password_salt);
+      if (!isPasswordValid) {
         throw new Error("Current password is incorrect");
       }
 
@@ -902,11 +1153,10 @@ export const enableMFA = mutation({
   },
 });
 
-
 export const disableMFA = mutation({
   args: {
     token: v.string(),
-    current_password_hash: v.string(),
+    current_password: v.string(),
   },
   handler: async (ctx, args) => {
     try {
@@ -923,7 +1173,8 @@ export const disableMFA = mutation({
         throw new Error("User not found");
       }
 
-      if (user.password_hash !== args.current_password_hash) {
+      const isPasswordValid = await verifyPassword(args.current_password, user.password_hash, user.password_salt);
+      if (!isPasswordValid) {
         throw new Error("Current password is incorrect");
       }
 
@@ -1004,7 +1255,7 @@ export const enableBiometric = mutation({
 export const disableBiometric = mutation({
   args: {
     token: v.string(),
-    current_password_hash: v.string(),
+    current_password: v.string(),
   },
   handler: async (ctx, args) => {
     try {
@@ -1021,7 +1272,8 @@ export const disableBiometric = mutation({
         throw new Error("User not found");
       }
 
-      if (user.password_hash !== args.current_password_hash) {
+      const isPasswordValid = await verifyPassword(args.current_password, user.password_hash, user.password_salt);
+      if (!isPasswordValid) {
         throw new Error("Current password is incorrect");
       }
 
@@ -1218,8 +1470,8 @@ export const signOut = mutation({
 export const updateSecurityQuestion = mutation({
   args: {
     question: v.string(),
-    answer_hash: v.string(),
-    current_password_hash: v.string(),
+    answer: v.string(),
+    current_password: v.string(),
     token: v.string(),
   },
   handler: async (ctx, args) => {
@@ -1228,8 +1480,8 @@ export const updateSecurityQuestion = mutation({
         token: args.token,
       });
 
-      if (!sessionResult.valid || sessionResult.user?.role !== "student") {
-        throw new Error("Student access required");
+      if (!sessionResult.valid || !sessionResult.user) {
+        throw new Error("Invalid session");
       }
 
       const user = await ctx.db.get(sessionResult.user.id);
@@ -1237,10 +1489,12 @@ export const updateSecurityQuestion = mutation({
         throw new Error("Invalid user record");
       }
 
-      const isPasswordValid = user.password_hash === args.current_password_hash;
+      const isPasswordValid = await verifyPassword(args.current_password, user.password_hash, user.password_salt);
       if (!isPasswordValid) {
         throw new Error("Current password is incorrect");
       }
+
+      const { hash: answerHash } = await hashPassword(args.answer.toLowerCase().trim(), user.password_salt);
 
       const existingQuestion = await ctx.db
         .query("security_questions")
@@ -1252,14 +1506,14 @@ export const updateSecurityQuestion = mutation({
       if (existingQuestion) {
         await ctx.db.patch(existingQuestion._id, {
           question: args.question,
-          answer_hash: args.answer_hash,
+          answer_hash: answerHash,
           updated_at: now,
         });
       } else {
         await ctx.db.insert("security_questions", {
           user_id: user._id,
           question: args.question,
-          answer_hash: args.answer_hash,
+          answer_hash: answerHash,
           created_at: now,
         });
       }
@@ -1281,8 +1535,8 @@ export const updateSecurityQuestion = mutation({
 
 export const changePassword = mutation({
   args: {
-    current_password_hash: v.string(),
-    new_password_hash: v.string(),
+    current_password: v.string(),
+    new_password: v.string(),
     token: v.string(),
   },
   handler: async (ctx, args) => {
@@ -1300,13 +1554,16 @@ export const changePassword = mutation({
         throw new Error("User not found or invalid user record");
       }
 
-      const isCurrentPasswordValid = user.password_hash === args.current_password_hash;
+      const isCurrentPasswordValid = await verifyPassword(args.current_password, user.password_hash, user.password_salt);
       if (!isCurrentPasswordValid) {
         throw new Error("Current password is incorrect");
       }
 
+      const { hash: newPasswordHash, salt: newPasswordSalt } = await hashPassword(args.new_password);
+
       await ctx.db.patch(user._id, {
-        password_hash: args.new_password_hash,
+        password_hash: newPasswordHash,
+        password_salt: newPasswordSalt,
         password_changed_at: Date.now(),
       });
 

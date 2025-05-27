@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation"
 import { z } from "zod"
 import { useForm } from "react-hook-form"
@@ -22,6 +22,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { motion } from "framer-motion"
 import { useAuth } from "@/hooks/useAuth"
+import AppLoader from "@/components/app-loader";
 
 const forgotPasswordSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email address" }),
@@ -29,7 +30,7 @@ const forgotPasswordSchema = z.object({
 
 type ForgotPasswordFormValues = z.infer<typeof forgotPasswordSchema>
 
-export default function ForgotPasswordPage() {
+function ForgotPasswordForm() {
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -257,5 +258,13 @@ export default function ForgotPasswordPage() {
         </Card>
       </motion.div>
     </div>
+  )
+}
+
+export default function ForgotPasswordPage(){
+  return (
+    <Suspense fallback={<AppLoader />}>
+      <ForgotPasswordForm />
+    </Suspense>
   )
 }

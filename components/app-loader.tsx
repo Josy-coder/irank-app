@@ -38,7 +38,7 @@ const loadingMessages = [
 
 export default function AppLoader() {
   const { theme } = useTheme()
-  const [message, setMessage] = useState("")
+  const [message, setMessage] = useState("Just a moment while we set things up...")
 
   useEffect(() => {
     const randomMessage = loadingMessages[Math.floor(Math.random() * loadingMessages.length)]
@@ -51,7 +51,7 @@ export default function AppLoader() {
       } while (newMessage === message)
 
       setMessage(newMessage)
-    }, 2000)
+    }, 1000)
 
     return () => clearInterval(interval)
   }, [message])

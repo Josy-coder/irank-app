@@ -4,10 +4,10 @@ import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
+import { useMutation, useQuery } from "convex/react"
+import { api } from "@/convex/_generated/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -36,19 +36,19 @@ import {
   User,
   Mail,
   Phone,
-  Calendar,
-  MapPin,
   Building,
-  GraduationCap,
   FileText,
-  Shield
+  Shield,
+  Loader2
 } from "lucide-react"
 import { motion } from "framer-motion"
 import { useAuth } from "@/hooks/useAuth"
 import { toast } from "sonner"
 import { FileUpload } from "@/components/file-upload"
+import { Id } from "@/convex/_generated/dataModel"
+import DatePicker from "@/components/date-picker";
+import { format } from "date-fns";
 
-// Base profile schema
 const baseProfileSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters" }),
   email: z.string().email({ message: "Invalid email address" }),
@@ -57,7 +57,6 @@ const baseProfileSchema = z.object({
   date_of_birth: z.string().optional(),
 })
 
-// Extended schemas for different roles
 const studentProfileSchema = baseProfileSchema.extend({
   grade: z.string().optional(),
 })
@@ -78,13 +77,27 @@ type VolunteerProfileFormValues = z.infer<typeof volunteerProfileSchema>
 
 type ProfileFormValues = BaseProfileFormValues | StudentProfileFormValues | SchoolAdminProfileFormValues | VolunteerProfileFormValues
 
-export default function ProfilePage() {
+export default function ProfileForm() {
   const { user, token } = useAuth()
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Determine schema based on user role
+  const updateProfile = useMutation(api.functions.users.updateProfile)
+  const updateProfileImage = useMutation(api.functions.users.updateProfileImage)
+  const updateSchoolLogo = useMutation(api.functions.users.updateSchoolLogo)
+  const updateSafeguardingCertificate = useMutation(api.functions.users.updateSafeguardingCertificate)
+
+  const profileImageUrl = useQuery(
+    api.functions.users.getProfileImageUrl,
+    user?.profile_image ? { storage_id: user.profile_image as Id<"_storage"> } : "skip"
+  )
+
+  const schoolLogoUrl = useQuery(
+    api.functions.users.getSchoolLogoUrl,
+    user?.school?.id ? { school_id: user.school.id as Id<"schools"> } : "skip"
+  )
+
   const getSchema = () => {
     switch (user?.role) {
       case "student":
@@ -116,12 +129,34 @@ export default function ProfilePage() {
   })
 
   const handleSubmit = async (values: ProfileFormValues) => {
+    if (!token) {
+      toast.error("Authentication required")
+      return
+    }
+
     setLoading(true)
     setError(null)
 
     try {
+      await updateProfile({
+        token,
+        name: values.name,
+        email: values.email,
+        phone: values.phone,
+        gender: values.gender,
+        date_of_birth: values.date_of_birth,
+        ...(user?.role === "student" && {
+          grade: (values as StudentProfileFormValues).grade
+        }),
+        ...(user?.role === "school_admin" && {
+          position: (values as SchoolAdminProfileFormValues).position
+        }),
+        ...(user?.role === "volunteer" && {
+          high_school_attended: (values as VolunteerProfileFormValues).high_school_attended,
+          national_id: (values as VolunteerProfileFormValues).national_id,
+        }),
+      })
 
-      console.log("Profile update values:", values)
       toast.success("Profile updated successfully!")
     } catch (error: any) {
       console.error("Profile update error:", error)
@@ -132,12 +167,18 @@ export default function ProfilePage() {
     }
   }
 
-  const handleProfileImageUpload = async (fileId: string) => {
+  const handleProfileImageUpload = async (storageId: Id<"_storage">) => {
+    if (!token) {
+      toast.error("Authentication required")
+      return
+    }
+
     setUploading(true)
     try {
-
-      console.log("Profile image uploaded:", fileId)
-      toast.success("Profile image updated successfully!")
+      await updateProfileImage({
+        token,
+        profile_image: storageId,
+      })
     } catch (error: any) {
       console.error("Profile image upload error:", error)
       toast.error("Failed to update profile image")
@@ -146,13 +187,15 @@ export default function ProfilePage() {
     }
   }
 
-  const handleSchoolLogoUpload = async (fileId: string) => {
-    if (user?.role !== "school_admin") return
+  const handleSchoolLogoUpload = async (storageId: Id<"_storage">) => {
+    if (user?.role !== "school_admin" || !token) return
 
     setUploading(true)
     try {
-
-      console.log("School logo uploaded:", fileId)
+      await updateSchoolLogo({
+        token,
+        logo_url: storageId,
+      })
       toast.success("School logo updated successfully!")
     } catch (error: any) {
       console.error("School logo upload error:", error)
@@ -162,14 +205,15 @@ export default function ProfilePage() {
     }
   }
 
-  const handleSafeguardingCertificateUpload = async (fileId: string) => {
-    if (user?.role !== "volunteer") return
+  const handleSafeguardingCertificateUpload = async (storageId: Id<"_storage">) => {
+    if (user?.role !== "volunteer" || !token) return
 
     setUploading(true)
     try {
-      // Here you would call your update safeguarding certificate mutation
-      // await updateSafeguardingCertificate(fileId)
-      console.log("Safeguarding certificate uploaded:", fileId)
+      await updateSafeguardingCertificate({
+        token,
+        safeguarding_certificate: storageId,
+      })
       toast.success("Safeguarding certificate updated successfully!")
     } catch (error: any) {
       console.error("Safeguarding certificate upload error:", error)
@@ -195,39 +239,8 @@ export default function ProfilePage() {
       </div>
     )
   }
-
-  const getRoleDisplayName = () => {
-    switch (user.role) {
-      case "school_admin":
-        return "School Administrator"
-      case "volunteer":
-        return "Volunteer Judge"
-      case "admin":
-        return "System Administrator"
-      case "student":
-        return "Student"
-      default:
-        return "User"
-    }
-  }
-
-  const getRoleBadgeColor = () => {
-    switch (user.role) {
-      case "admin":
-        return "bg-red-100 text-red-800"
-      case "school_admin":
-        return "bg-blue-100 text-blue-800"
-      case "volunteer":
-        return "bg-green-100 text-green-800"
-      case "student":
-        return "bg-purple-100 text-purple-800"
-      default:
-        return "bg-gray-100 text-gray-800"
-    }
-  }
-
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="space-y-6">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -235,19 +248,14 @@ export default function ProfilePage() {
       >
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Profile</h1>
             <p className="text-muted-foreground">
               Manage your personal information and preferences
             </p>
           </div>
-          <Badge className={getRoleBadgeColor()}>
-            {getRoleDisplayName()}
-          </Badge>
         </div>
       </motion.div>
 
-      <div className="grid gap-6 md:grid-cols-3">
-        {/* Profile Picture and Basic Info */}
+      <div className="grid gap-4 md:grid-cols-3">
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -255,18 +263,17 @@ export default function ProfilePage() {
         >
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="h-5 w-5" />
-                Profile Picture
+              <CardTitle className="flex items-center gap-1">
+                <User className="h-4 w-4"/>Profile Picture
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-xs">
                 Upload a profile picture to personalize your account
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-2">
               <div className="flex flex-col items-center space-y-4">
                 <Avatar className="h-24 w-24">
-                  <AvatarImage src={user.profile_image} alt={user.name} />
+                  <AvatarImage src={profileImageUrl || undefined} alt={user.name} />
                   <AvatarFallback className="text-lg">
                     {user.name.split(' ').map(n => n[0]).join('').toUpperCase()}
                   </AvatarFallback>
@@ -274,24 +281,11 @@ export default function ProfilePage() {
 
                 <FileUpload
                   onUpload={handleProfileImageUpload}
-                  accept="image/*"
-                  maxSize={5 * 1024 * 1024} // 5MB
+                  accept={["image/jpeg", "image/jpg", "image/png"]}
+                  maxSize={5 * 1024 * 1024}
                   disabled={uploading}
-                >
-                  <Button variant="outline" disabled={uploading} className="w-full">
-                    {uploading ? (
-                      <>
-                        <Upload className="mr-2 h-4 w-4 animate-pulse" />
-                        Uploading...
-                      </>
-                    ) : (
-                      <>
-                        <Camera className="mr-2 h-4 w-4" />
-                        Change Picture
-                      </>
-                    )}
-                  </Button>
-                </FileUpload>
+
+                />
               </div>
 
               <div className="space-y-3 pt-4 border-t">
@@ -329,7 +323,6 @@ export default function ProfilePage() {
           </Card>
         </motion.div>
 
-        {/* Profile Form */}
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -339,14 +332,14 @@ export default function ProfilePage() {
           <Card>
             <CardHeader>
               <CardTitle>Personal Information</CardTitle>
-              <CardDescription>
+              <CardDescription className="text-xs">
                 Update your personal details and contact information
               </CardDescription>
             </CardHeader>
             <CardContent>
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
-                  <div className="grid gap-4 md:grid-cols-2">
+                <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-1.5">
+                  <div className="grid gap-2 md:grid-cols-2">
                     <FormField
                       control={form.control}
                       name="name"
@@ -422,14 +415,18 @@ export default function ProfilePage() {
                       <FormItem>
                         <FormLabel>Date of Birth</FormLabel>
                         <FormControl>
-                          <Input type="date" {...field} />
+                          <DatePicker
+                            date={field.value ? new Date(field.value) : undefined}
+                            onDateChange={(date) => field.onChange(date ? format(date, "yyyy-MM-dd") : "")}
+                            disabled={loading}
+                            placeholder="Select your birth date"
+                            maxDate={new Date()}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-
-                  {/* Role-specific fields */}
                   {user.role === "student" && (
                     <FormField
                       control={form.control}
@@ -504,7 +501,7 @@ export default function ProfilePage() {
                   <Button type="submit" disabled={loading} className="w-full">
                     {loading ? (
                       <>
-                        <Upload className="mr-2 h-4 w-4 animate-spin" />
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Updating...
                       </>
                     ) : (
@@ -521,7 +518,6 @@ export default function ProfilePage() {
         </motion.div>
       </div>
 
-      {/* Additional uploads for specific roles */}
       {(user.role === "school_admin" || user.role === "volunteer") && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -540,17 +536,27 @@ export default function ProfilePage() {
                   Upload your school&#39;s official logo
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
+                {schoolLogoUrl && (
+                  <div className="flex justify-center">
+                    <img
+                      src={schoolLogoUrl}
+                      alt="School Logo"
+                      className="h-16 w-16 object-contain rounded-lg border"
+                    />
+                  </div>
+                )}
+
                 <FileUpload
                   onUpload={handleSchoolLogoUpload}
-                  accept="image/*"
-                  maxSize={5 * 1024 * 1024} // 5MB
+                  accept={["image/jpeg", "image/jpg", "image/png"]}
+                  maxSize={5 * 1024 * 1024}
                   disabled={uploading}
                 >
                   <Button variant="outline" disabled={uploading} className="w-full">
                     {uploading ? (
                       <>
-                        <Upload className="mr-2 h-4 w-4 animate-pulse" />
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Uploading...
                       </>
                     ) : (
@@ -579,14 +585,14 @@ export default function ProfilePage() {
               <CardContent>
                 <FileUpload
                   onUpload={handleSafeguardingCertificateUpload}
-                  accept=".pdf"
-                  maxSize={10 * 1024 * 1024} // 10MB
+                  accept={["application/pdf"]}
+                  maxSize={10 * 1024 * 1024}
                   disabled={uploading}
                 >
                   <Button variant="outline" disabled={uploading} className="w-full">
                     {uploading ? (
                       <>
-                        <Upload className="mr-2 h-4 w-4 animate-pulse" />
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Uploading...
                       </>
                     ) : (

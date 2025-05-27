@@ -76,6 +76,7 @@ export default defineSchema({
     email: v.string(),
     phone: v.optional(v.string()),
     password_hash: v.string(),
+    password_salt: v.string(),
     role: v.union(
       v.literal("student"),
       v.literal("school_admin"),
@@ -126,6 +127,7 @@ export default defineSchema({
     .index("by_role_status", ["role", "status"])
     .index("by_school_id_role", ["school_id", "role"])
     .index("by_name", ["name"])
+    .index("by_email_role", ["email", "role"])
     .searchIndex("search_users", {
       searchField: "name",
       filterFields: ["role", "status", "school_id", "verified"]

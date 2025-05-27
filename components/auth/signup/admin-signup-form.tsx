@@ -90,7 +90,7 @@ const AdminSignUpForm = () => {
       await signUp({
         name: values.name,
         email: values.email,
-        password_hash: values.password,
+        password: values.password,
         role: "admin",
         phone: values.phone,
         position: values.position,

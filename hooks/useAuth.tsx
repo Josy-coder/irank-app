@@ -2,11 +2,11 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react"
 import { useQuery, useMutation, useAction } from "convex/react";
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation";
 import { api } from "@/convex/_generated/api"
 import { Id } from "@/convex/_generated/dataModel"
 import { toast } from "sonner"
-import { hashPassword } from "@/lib/password";
+import { arrayBufferToBase64, generateRandomChallenge } from "@/lib/webauthn";
 
 type UserRole = "student" | "school_admin" | "volunteer" | "admin"
 
@@ -43,8 +43,9 @@ type AuthContextType = {
   isAuthenticated: boolean
   isLoading: boolean
   signUp: (userData: SignUpData) => Promise<void>
-  signIn: (email: string, password: string, rememberMe?: boolean, mfaCode?: string) => Promise<SignInResult>
-  signInWithPhone: (data: PhoneSignInData) => Promise<void>
+  signIn: (email: string, password: string, rememberMe?: boolean, mfaCode?: string, expectedRole?: string) => Promise<SignInResult>
+  signInWithBiometric: (expectedRole?: UserRole) => Promise<SignInResult>
+  signInWithPhone: (data: PhoneSignInData, expectedRole?: string) => Promise<void>
   signOut: () => Promise<void>
   refreshToken: () => Promise<void>
   generateMagicLink: (email: string, purpose: MagicLinkPurpose) => Promise<void>
@@ -62,14 +63,14 @@ type SignUpData = {
   name: string
   email: string
   phone?: string
-  password_hash: string
+  password: string
   role: UserRole
   gender?: "male" | "female" | "non_binary"
   date_of_birth?: string
   school_id?: Id<"schools">
   grade?: string
   security_question?: string
-  security_answer_hash?: string
+  security_answer?: string
   position?: string
   school_data?: {
     name: string
@@ -93,7 +94,7 @@ type PhoneSignInData = {
   name_search: string
   selected_user_id: Id<"users">
   phone: string
-  security_answer_hash: string
+  security_answer: string
 }
 
 type MagicLinkPurpose = "login" | "password_reset" | "email_verification" | "account_recovery"
@@ -103,6 +104,8 @@ type SignInResult = {
   requiresMFA?: boolean
   userId?: string
   message?: string
+  securityQuestion?: string
+  expectedRole?: string
 }
 
 type MagicLinkResult = {
@@ -130,17 +133,35 @@ const USER_KEY = "irank_user_data"
 function getErrorMessage(error: string): string {
   const errorMap: Record<string, string> = {
     "The email or password you entered is incorrect. Please try again.": "The email or password you entered is incorrect. Please try again.",
-    "Your account has been temporarily locked for security. Please try again in 30 minutes.": "Your account has been temporarily locked for security. Please try again in 30 minutes.",
-    "Your account has been suspended. Please contact support for assistance.": "Your account has been suspended. Please contact support for assistance.",
-    "The information you entered doesn't match our records. Please check and try again.": "The information you entered doesn't match our records. Please check and try again.",
-    "The security answer you provided is incorrect. Please try again.": "The security answer you provided is incorrect. Please try again.",
-    "This link has expired or is invalid. Please request a new one.": "This link has expired or is invalid. Please request a new one.",
+    "Biometric authentication failed. Please try again or use another sign-in method.": "Biometric authentication failed. Please try again or use another sign-in method.",
+    "Your account has been temporarily locked due to too many failed login attempts. Please try again later.": "Your account has been temporarily locked due to too many failed login attempts. Please try again later.",
+    "Your account has been suspended. Please contact support.": "Your account has been suspended. Please contact support.",
     "Your account is pending approval. Please wait for admin verification.": "Your account is pending approval. Please wait for admin verification.",
-    "Multi-factor authentication required": "Please provide your security answer to complete sign in.",
-    "Invalid security answer": "The security answer you provided is incorrect. Please try again.",
+    "Multi-factor authentication is required. Please enter your MFA code.": "Multi-factor authentication is required. Please enter your MFA code.",
+    "The security answer you provided is incorrect. Please try again.": "The security answer you provided is incorrect. Please try again.",
+    "We couldn't find a security question for this user.": "We couldn't find a security question for this user.",
+    "An account with this email already exists. Please use a different email or sign in.": "An account with this email already exists. Please use a different email or sign in.",
+    "An account with this phone number already exists. Please use a different number.": "An account with this phone number already exists. Please use a different number.",
+    "Please select your school to continue registration.": "Please select your school to continue registration.",
+    "Both phone number and security question are required for student registration.": "Both phone number and security question are required for student registration.",
+    "Please provide school details to register as a school administrator.": "Please provide school details to register as a school administrator.",
+    "Please provide your high school and national ID to register as a volunteer.": "Please provide your high school and national ID to register as a volunteer.",
+    "Your session is invalid or has expired. Please sign in again.": "Your session is invalid or has expired. Please sign in again.",
+    "This password reset link is invalid or has expired.": "This password reset link is invalid or has expired.",
+    "No account was found with the provided details.": "No account was found with the provided details.",
+    "This magic link has expired. Please request a new one.": "This magic link has expired. Please request a new one.",
+    "This magic link has already been used. Please request a new one.": "This magic link has already been used. Please request a new one.",
+    "The password you entered is incorrect.": "The password you entered is incorrect.",
+    "Multi-factor authentication is only available for school administrators, volunteers, and administrators.": "Multi-factor authentication is only available for school administrators, volunteers, and administrators.",
   };
 
-  return errorMap[error] || "Something went wrong. Please try again or contact support if the problem persists.";
+  for (const key in errorMap) {
+    if (error.includes(key)) {
+      return errorMap[key];
+    }
+  }
+
+  return "Something went wrong. Please try again or contact support if the problem persists.";
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -148,10 +169,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
+  const pathname = usePathname()
 
   const signUpMutation = useMutation(api.functions.auth.signUp)
   const signInMutation = useMutation(api.functions.auth.signIn)
   const signInWithPhoneMutation = useMutation(api.functions.auth.signInWithPhone)
+  const signInWithBiometricMutation = useMutation(api.functions.auth.signInWithBiometric)
   const signOutMutation = useMutation(api.functions.auth.signOut)
   const refreshTokenMutation = useMutation(api.functions.auth.refreshToken)
   const generateMagicLinkMutation = useMutation(api.functions.auth.generateMagicLink)
@@ -170,6 +193,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     api.functions.auth.getCurrentUser,
     token ? { token } : "skip"
   )
+
+  useEffect(() => {
+    const isAuthPage =
+      pathname === "/" || pathname.startsWith("/signin") || pathname.startsWith("/signup");
+
+    if (isAuthPage && user) {
+      const dashboardPath =
+        user.role === "school_admin" ? "/school/dashboard" : `/${user.role}/dashboard`;
+      router.push(dashboardPath);
+    }
+  }, [pathname, user, router]);
+
 
   useEffect(() => {
     const storedToken = localStorage.getItem(TOKEN_KEY)
@@ -239,28 +274,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setIsLoading(true)
 
-      const password_hash = await hashPassword(userData.password_hash);
-      const security_answer_hash = userData.security_answer_hash
-        ? await hashPassword(userData.security_answer_hash.toLowerCase().trim())
-        : undefined;
-
       const result = await signUpMutation({
         ...userData,
-        password_hash,
-        security_answer_hash,
         device_info: getDeviceInfo(),
       })
 
       if (result.success) {
-          try {
-            await sendWelcomeEmail({
-              email: userData.email,
-              name: userData.name,
-              role: userData.role,
-            });
-          } catch (err) {
-            console.error("Failed to send email:", err);
-          }
+        try {
+          await sendWelcomeEmail({
+            email: userData.email,
+            name: userData.name,
+            role: userData.role,
+          });
+        } catch (err) {
+          console.error("Failed to send email:", err);
+        }
 
         toast.success(result.message);
         router.push("/");
@@ -275,19 +303,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const signIn = async (email: string, password: string, rememberMe = false, mfaCode?: string): Promise<SignInResult> => {
+  const signIn = async (email: string, password: string, rememberMe = false, mfaCode?: string, expectedRole?: string): Promise<SignInResult> => {
     try {
       setIsLoading(true)
 
-      const password_hash = await hashPassword(password)
-      const mfa_code_hash = mfaCode ? await hashPassword(mfaCode.toLowerCase().trim()) : undefined
-
       const result = await signInMutation({
         email,
-        password_hash,
+        password,
         remember_me: rememberMe,
-        mfa_code: mfa_code_hash,
+        mfa_code: mfaCode,
         device_info: getDeviceInfo(),
+        expected_role: expectedRole || ""
       })
 
       if (result.requiresMFA) {
@@ -295,7 +321,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           success: false,
           requiresMFA: true,
           userId: result.userId,
-          message: result.message
+          message: result.message,
+          securityQuestion: result.securityQuestion || undefined,
         }
       }
 
@@ -331,15 +358,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const signInWithPhone = async (data: PhoneSignInData) => {
+  const signInWithPhone = async (data: PhoneSignInData, expectedRole?: string) => {
     try {
       setIsLoading(true)
-      const security_answer_hash = await hashPassword(data.security_answer_hash.toLowerCase().trim())
 
       const result = await signInWithPhoneMutation({
         ...data,
-        security_answer_hash,
         device_info: getDeviceInfo(),
+        expected_role: expectedRole || "student",
       })
 
       if (result.success && result.token && result.user) {
@@ -367,6 +393,86 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(friendlyMessage)
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const signInWithBiometric = async (expectedRole?: UserRole): Promise<SignInResult> => {
+    try {
+      setIsLoading(true);
+
+      if (!window.PublicKeyCredential) {
+        throw new Error("Biometric authentication is not supported in this browser");
+      }
+
+      const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+      if (!available) {
+        throw new Error("No biometric authenticator available on this device");
+      }
+
+      const challenge = generateRandomChallenge();
+
+      const credentialRequestOptions: CredentialRequestOptions = {
+        publicKey: {
+          challenge,
+          timeout: 60000,
+          userVerification: "required",
+          rpId: window.location.hostname,
+        },
+      };
+
+      const credential = await navigator.credentials.get(credentialRequestOptions) as PublicKeyCredential;
+
+      if (!credential) {
+        throw new Error("Biometric authentication failed");
+      }
+
+      const response = credential.response as AuthenticatorAssertionResponse;
+
+      const result = await signInWithBiometricMutation({
+        credential_id: arrayBufferToBase64(credential.rawId),
+        authenticator_data: arrayBufferToBase64(response.authenticatorData),
+        client_data_json: arrayBufferToBase64(response.clientDataJSON),
+        signature: arrayBufferToBase64(response.signature),
+        device_info: getDeviceInfo(),
+        expected_role: expectedRole || "",
+      });
+
+      if (result.success && result.token && result.user) {
+        setToken(result.token);
+        const userWithSchool: User = { ...result.user, school: null } as User;
+        setUser(userWithSchool);
+
+        localStorage.setItem(TOKEN_KEY, result.token);
+        localStorage.setItem(USER_KEY, JSON.stringify(userWithSchool));
+
+        const dashboardPath = result.user.role === 'school_admin'
+          ? '/school/dashboard'
+          : `/${result.user.role}/dashboard`;
+        router.push(dashboardPath);
+        toast.success("Signed in successfully with biometrics!");
+
+        return { success: true };
+      }
+
+      return { success: false, message: "Biometric sign in failed" };
+    } catch (error: any) {
+      console.error("Biometric sign in error:", error);
+      let errorMessage = "Biometric authentication failed";
+
+      if (error.name === "NotSupportedError") {
+        errorMessage = "Biometric authentication is not supported on this device";
+      } else if (error.name === "SecurityError") {
+        errorMessage = "Security error occurred. Please ensure you're on a secure connection (HTTPS)";
+      } else if (error.name === "NotAllowedError") {
+        errorMessage = "Biometric authentication was cancelled or not allowed";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      toast.error(errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setIsLoading(false);
     }
   }
 
@@ -442,11 +548,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const resetPassword = async (resetToken: string, newPassword: string) => {
     try {
-      const new_password_hash = await hashPassword(newPassword)
-
       const result = await resetPasswordMutation({
         reset_token: resetToken,
-        new_password_hash,
+        new_password: newPassword,
       })
 
       if (result.success) {
@@ -465,12 +569,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!token) throw new Error("Authentication required")
 
     try {
-      const current_password_hash = await hashPassword(currentPassword)
-      const new_password_hash = await hashPassword(newPassword)
-
       const result = await changePasswordMutation({
-        current_password_hash,
-        new_password_hash,
+        current_password: currentPassword,
+        new_password: newPassword,
         token,
       })
 
@@ -489,10 +590,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!token) throw new Error("Authentication required")
 
     try {
-      const current_password_hash = await hashPassword(currentPassword)
-
       const result = await enableMFAMutation({
-        current_password_hash,
+        current_password: currentPassword,
         token,
       })
 
@@ -514,10 +613,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!token) throw new Error("Authentication required")
 
     try {
-      const current_password_hash = await hashPassword(currentPassword)
-
       const result = await disableMFAMutation({
-        current_password_hash,
+        current_password: currentPassword,
         token,
       })
 
@@ -564,10 +661,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!token) throw new Error("Authentication required")
 
     try {
-      const current_password_hash = await hashPassword(currentPassword)
-
       const result = await disableBiometricMutation({
-        current_password_hash,
+        current_password: currentPassword,
         token,
       })
 
@@ -589,13 +684,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!token) throw new Error("Authentication required")
 
     try {
-      const current_password_hash = await hashPassword(currentPassword)
-      const answer_hash = await hashPassword(answer.toLowerCase().trim())
-
       const result = await updateSecurityQuestionMutation({
         question,
-        answer_hash,
-        current_password_hash,
+        answer,
+        current_password: currentPassword,
         token,
       })
 
@@ -637,6 +729,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signUp,
     signIn,
     signInWithPhone,
+    signInWithBiometric,
     signOut: handleSignOut,
     refreshToken,
     generateMagicLink,

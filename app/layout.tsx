@@ -5,6 +5,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { ConvexClientProvider } from "@/components/ConvexClientProvider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/hooks/useAuth";
+import React from "react";
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -15,6 +16,7 @@ export const metadata: Metadata = {
     icon: "/icons/favicon.ico",
   },
 };
+
 
 export default function RootLayout({
                                      children,

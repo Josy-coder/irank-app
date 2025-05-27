@@ -4,10 +4,8 @@ import { useState, useEffect, createContext, useContext, ReactNode } from "react
 import { useAuth, useRoleAccess } from "@/hooks/useAuth"
 import { cn } from "@/lib/utils"
 import {
-  Home,
   Users,
   School,
-  Trophy,
   Calendar,
   BarChart3,
   LogOut,
@@ -53,6 +51,10 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet"
 import Image from "next/image"
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Id } from "@/convex/_generated/dataModel";
 
 const sidebarItems = {
   student: [
@@ -310,6 +312,25 @@ export function DashboardNavigation() {
   const [, setIsMediumScreen] = useState(false)
   const [contextualNav, setContextualNav] = useState<ContextualNavConfig | null>(null)
   const [mainBottomNavVisible, setMainBottomNavVisible] = useState(true)
+  const router = useRouter()
+
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const getUrl = useMutation(api.files.getUrl);
+
+  useEffect(() => {
+    async function fetchImageUrl() {
+      if (user?.profile_image) {
+        try {
+          const url = await getUrl({ storageId: user.profile_image as Id<"_storage"> });
+          setImageUrl(url);
+        } catch (error) {
+          console.error("Failed to fetch profile image URL:", error);
+        }
+      }
+    }
+
+    fetchImageUrl();
+  }, [user?.profile_image, getUrl]);
 
   useEffect(() => {
     const checkScreenSize = () => {
@@ -490,17 +511,20 @@ export function DashboardNavigation() {
                 >
                   <div className="hidden xl:flex xl:flex-col xl:items-start">
                     <p className="text-sm font-medium text-gray-900 dark:text-white">{user.name}</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground w-full text-right">
                       {user.role === 'school_admin'
                         ? 'School Admin'
                         : user.role.charAt(0).toUpperCase() + user.role.slice(1)}
                     </p>
                   </div>
-                  <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-      <span className="text-sm font-medium text-white">
-        {user.name.charAt(0).toUpperCase()}
-      </span>
-                  </div>
+                  <Avatar className="w-8 h-8">
+                    {user.profile_image ? (
+                      <AvatarImage src={imageUrl || ""} alt={user.name} />
+                    ) : null}
+                    <AvatarFallback className="bg-primary text-white">
+                      {user.name.charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
                   <ChevronDown className="h-4 w-4 text-gray-400 ml-1" />
                 </Button>
               </DropdownMenuTrigger>
@@ -513,13 +537,21 @@ export function DashboardNavigation() {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>
-                  <User className="mr-2 h-4 w-4" />
-                  Profile
+                <DropdownMenuItem asChild>
+                  <Link href={user.role === "school_admin" ? "/school/profile" : `/${user.role}/profile`} prefetch>
+                    <div className="flex items-center">
+                      <User className="mr-2 h-4 w-4" />
+                      Profile
+                    </div>
+                  </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <Settings className="mr-2 h-4 w-4" />
-                  Settings
+                <DropdownMenuItem asChild>
+                  <Link href={user.role === "school_admin" ? "/school/settings" : `/${user.role}/settings`} prefetch>
+                    <div className="flex items-center">
+                      <Settings className="mr-2 h-4 w-4" />
+                      Settings
+                    </div>
+                  </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={signOut} className="text-red-600">
@@ -613,13 +645,22 @@ export function DashboardNavigation() {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>
-                  <User className="mr-2 h-4 w-4" />
-                  Profile
+                <DropdownMenuItem asChild>
+                  <Link href={user.role === "school_admin" ? "/school/profile" : `/${user.role}/profile`} prefetch>
+                    <div className="flex items-center">
+                      <User className="mr-2 h-4 w-4" />
+                      Profile
+                    </div>
+                  </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <Settings className="mr-2 h-4 w-4" />
-                  Settings
+
+                <DropdownMenuItem asChild>
+                  <Link href={user.role === "school_admin" ? "/school/settings" : `/${user.role}/settings`} prefetch>
+                    <div className="flex items-center">
+                      <Settings className="mr-2 h-4 w-4" />
+                      Settings
+                    </div>
+                  </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={signOut} className="text-red-600">
