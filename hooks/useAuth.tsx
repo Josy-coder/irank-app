@@ -6,7 +6,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { api } from "@/convex/_generated/api"
 import { Id } from "@/convex/_generated/dataModel"
 import { toast } from "sonner"
-import { arrayBufferToBase64, generateRandomChallenge } from "@/lib/webauthn";
 
 type UserRole = "student" | "school_admin" | "volunteer" | "admin"
 
@@ -26,7 +25,6 @@ type User = {
   high_school_attended?: string
   profile_image?: string
   mfa_enabled?: boolean
-  biometric_enabled?: boolean
   last_login_at?: number
   school: {
     id: string
@@ -44,7 +42,6 @@ type AuthContextType = {
   isLoading: boolean
   signUp: (userData: SignUpData) => Promise<void>
   signIn: (email: string, password: string, rememberMe?: boolean, mfaCode?: string, expectedRole?: string) => Promise<SignInResult>
-  signInWithBiometric: (expectedRole?: UserRole) => Promise<SignInResult>
   signInWithPhone: (data: PhoneSignInData, expectedRole?: string) => Promise<void>
   signOut: () => Promise<void>
   refreshToken: () => Promise<void>
@@ -54,8 +51,6 @@ type AuthContextType = {
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>
   enableMFA: (currentPassword: string) => Promise<void>
   disableMFA: (currentPassword: string) => Promise<void>
-  enableBiometric: (credentialId: string, publicKey: string, deviceName?: string) => Promise<void>
-  disableBiometric: (currentPassword: string) => Promise<void>
   updateSecurityQuestion: (question: string, answer: string, currentPassword: string) => Promise<void>
 }
 
@@ -133,7 +128,6 @@ const USER_KEY = "irank_user_data"
 function getErrorMessage(error: string): string {
   const errorMap: Record<string, string> = {
     "The email or password you entered is incorrect. Please try again.": "The email or password you entered is incorrect. Please try again.",
-    "Biometric authentication failed. Please try again or use another sign-in method.": "Biometric authentication failed. Please try again or use another sign-in method.",
     "Your account has been temporarily locked due to too many failed login attempts. Please try again later.": "Your account has been temporarily locked due to too many failed login attempts. Please try again later.",
     "Your account has been suspended. Please contact support.": "Your account has been suspended. Please contact support.",
     "Your account is pending approval. Please wait for admin verification.": "Your account is pending approval. Please wait for admin verification.",
@@ -174,7 +168,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signUpMutation = useMutation(api.functions.auth.signUp)
   const signInMutation = useMutation(api.functions.auth.signIn)
   const signInWithPhoneMutation = useMutation(api.functions.auth.signInWithPhone)
-  const signInWithBiometricMutation = useMutation(api.functions.auth.signInWithBiometric)
   const signOutMutation = useMutation(api.functions.auth.signOut)
   const refreshTokenMutation = useMutation(api.functions.auth.refreshToken)
   const generateMagicLinkMutation = useMutation(api.functions.auth.generateMagicLink)
@@ -183,8 +176,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const changePasswordMutation = useMutation(api.functions.auth.changePassword)
   const enableMFAMutation = useMutation(api.functions.auth.enableMFA)
   const disableMFAMutation = useMutation(api.functions.auth.disableMFA)
-  const enableBiometricMutation = useMutation(api.functions.auth.enableBiometric)
-  const disableBiometricMutation = useMutation(api.functions.auth.disableBiometric)
   const updateSecurityQuestionMutation = useMutation(api.functions.auth.updateSecurityQuestion)
   const sendWelcomeEmail = useAction(api.actions.email.sendWelcomeEmail);
   const sendMagicLinkEmail = useAction(api.actions.email.sendMagicLinkEmail);
@@ -395,87 +386,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false)
     }
   }
-
-  const signInWithBiometric = async (expectedRole?: UserRole): Promise<SignInResult> => {
-    try {
-      setIsLoading(true);
-
-      if (!window.PublicKeyCredential) {
-        throw new Error("Biometric authentication is not supported in this browser");
-      }
-
-      const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-      if (!available) {
-        throw new Error("No biometric authenticator available on this device");
-      }
-
-      const challenge = generateRandomChallenge();
-
-      const credentialRequestOptions: CredentialRequestOptions = {
-        publicKey: {
-          challenge,
-          timeout: 60000,
-          userVerification: "required",
-          rpId: window.location.hostname,
-        },
-      };
-
-      const credential = await navigator.credentials.get(credentialRequestOptions) as PublicKeyCredential;
-
-      if (!credential) {
-        throw new Error("Biometric authentication failed");
-      }
-
-      const response = credential.response as AuthenticatorAssertionResponse;
-
-      const result = await signInWithBiometricMutation({
-        credential_id: arrayBufferToBase64(credential.rawId),
-        authenticator_data: arrayBufferToBase64(response.authenticatorData),
-        client_data_json: arrayBufferToBase64(response.clientDataJSON),
-        signature: arrayBufferToBase64(response.signature),
-        device_info: getDeviceInfo(),
-        expected_role: expectedRole || "",
-      });
-
-      if (result.success && result.token && result.user) {
-        setToken(result.token);
-        const userWithSchool: User = { ...result.user, school: null } as User;
-        setUser(userWithSchool);
-
-        localStorage.setItem(TOKEN_KEY, result.token);
-        localStorage.setItem(USER_KEY, JSON.stringify(userWithSchool));
-
-        const dashboardPath = result.user.role === 'school_admin'
-          ? '/school/dashboard'
-          : `/${result.user.role}/dashboard`;
-        router.push(dashboardPath);
-        toast.success("Signed in successfully with biometrics!");
-
-        return { success: true };
-      }
-
-      return { success: false, message: "Biometric sign in failed" };
-    } catch (error: any) {
-      console.error("Biometric sign in error:", error);
-      let errorMessage = "Biometric authentication failed";
-
-      if (error.name === "NotSupportedError") {
-        errorMessage = "Biometric authentication is not supported on this device";
-      } else if (error.name === "SecurityError") {
-        errorMessage = "Security error occurred. Please ensure you're on a secure connection (HTTPS)";
-      } else if (error.name === "NotAllowedError") {
-        errorMessage = "Biometric authentication was cancelled or not allowed";
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-
-      toast.error(errorMessage);
-      throw new Error(errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
+  
   const generateMagicLink = async (email: string, purpose: MagicLinkPurpose) => {
     try {
       const result = await generateMagicLinkMutation({
@@ -631,55 +542,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(friendlyMessage)
     }
   }
-
-  const enableBiometric = async (credentialId: string, publicKey: string, deviceName?: string) => {
-    if (!token) throw new Error("Authentication required")
-
-    try {
-      const result = await enableBiometricMutation({
-        credential_id: credentialId,
-        public_key: publicKey,
-        device_name: deviceName,
-        token,
-      })
-
-      if (result.success) {
-        toast.success(result.message)
-        if (user) {
-          setUser({ ...user, biometric_enabled: true })
-        }
-      }
-    } catch (error: any) {
-      console.error("Enable biometric error:", error)
-      const friendlyMessage = getErrorMessage(error.message)
-      toast.error(friendlyMessage)
-      throw new Error(friendlyMessage)
-    }
-  }
-
-  const disableBiometric = async (currentPassword: string) => {
-    if (!token) throw new Error("Authentication required")
-
-    try {
-      const result = await disableBiometricMutation({
-        current_password: currentPassword,
-        token,
-      })
-
-      if (result.success) {
-        toast.success(result.message)
-        if (user) {
-          setUser({ ...user, biometric_enabled: false })
-        }
-      }
-    } catch (error: any) {
-      console.error("Disable biometric error:", error)
-      const friendlyMessage = getErrorMessage(error.message)
-      toast.error(friendlyMessage)
-      throw new Error(friendlyMessage)
-    }
-  }
-
+  
   const updateSecurityQuestion = async (question: string, answer: string, currentPassword: string) => {
     if (!token) throw new Error("Authentication required")
 
@@ -729,7 +592,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signUp,
     signIn,
     signInWithPhone,
-    signInWithBiometric,
     signOut: handleSignOut,
     refreshToken,
     generateMagicLink,
@@ -738,8 +600,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     changePassword,
     enableMFA,
     disableMFA,
-    enableBiometric,
-    disableBiometric,
     updateSecurityQuestion,
   }
 

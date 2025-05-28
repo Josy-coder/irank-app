@@ -19,7 +19,6 @@ type CurrentUserResponse = {
   high_school_attended?: string;
   profile_image?: string;
   mfa_enabled?: boolean;
-  biometric_enabled?: boolean;
   last_login_at?: number;
   school: {
     id: string;
@@ -33,7 +32,6 @@ type CurrentUserResponse = {
 function getErrorMessage(code: string): string {
   const errorMap: Record<string, string> = {
     INVALID_CREDENTIALS: "The email or password you entered is incorrect. Please try again.",
-    BIOMETRIC_INVALID: "Biometric authentication failed. Please try again or use another sign-in method.",
     ACCOUNT_LOCKED: "Your account has been temporarily locked due to too many failed login attempts. Please try again later.",
     USER_BANNED: "Your account has been suspended. Please contact support.",
     USER_INACTIVE: "Your account is pending approval. Please wait for admin verification.",
@@ -153,80 +151,6 @@ function generateRandomToken(): string {
   const array = new Uint8Array(32);
   crypto.getRandomValues(array);
   return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
-}
-
-async function verifyWebAuthnAssertion({
-                                         credentialId,
-                                         publicKey,
-                                         authenticatorData,
-                                         clientDataJSON,
-                                         signature,
-                                       }: {
-  credentialId: string;
-  publicKey: string;
-  authenticatorData: string;
-  clientDataJSON: string;
-  signature: string;
-}): Promise<boolean> {
-  try {
-    const clientData = JSON.parse(new TextDecoder().decode(
-      new Uint8Array(atob(clientDataJSON).split('').map(char => char.charCodeAt(0)))
-    ));
-
-    if (clientData.type !== 'webauthn.get') {
-      console.error('Invalid ceremony type:', clientData.type);
-      return false;
-    }
-
-    const publicKeyBuffer = new Uint8Array(
-      atob(publicKey).split('').map(char => char.charCodeAt(0))
-    );
-
-    let cryptoKey;
-    try {
-      cryptoKey = await crypto.subtle.importKey(
-        'spki',
-        publicKeyBuffer,
-        {
-          name: 'ECDSA',
-          namedCurve: 'P-256',
-        },
-        false,
-        ['verify']
-      );
-    } catch (keyError) {
-      console.error('Failed to import public key:', keyError);
-      return false;
-    }
-
-    const signatureBuffer = new Uint8Array(
-      atob(signature).split('').map(char => char.charCodeAt(0))
-    );
-
-    const authDataBuffer = new Uint8Array(
-      atob(authenticatorData).split('').map(char => char.charCodeAt(0))
-    );
-
-    const clientDataBuffer = new TextEncoder().encode(clientDataJSON);
-    const clientDataHash = await crypto.subtle.digest('SHA-256', clientDataBuffer);
-
-    const signedData = new Uint8Array(authDataBuffer.length + 32);
-    signedData.set(authDataBuffer);
-    signedData.set(new Uint8Array(clientDataHash), authDataBuffer.length);
-
-    return await crypto.subtle.verify(
-      {
-        name: 'ECDSA',
-        hash: 'SHA-256',
-      },
-      cryptoKey,
-      signatureBuffer,
-      signedData
-    );
-  } catch (error) {
-    console.error('WebAuthn verification error:', error);
-    return false;
-  }
 }
 
 
@@ -364,7 +288,6 @@ export const signUp = mutation({
         national_id: args.national_id,
         safeguarding_certificate: args.safeguarding_certificate,
         mfa_enabled: false,
-        biometric_enabled: false,
         failed_login_attempts: 0,
         created_at: now,
       });
@@ -684,145 +607,6 @@ export const signInWithPhone = mutation({
       };
     } catch (error: any) {
       throw new Error(getErrorMessage(error.message));
-    }
-  },
-});
-
-export const signInWithBiometric = mutation({
-  args: {
-    credential_id: v.string(),
-    authenticator_data: v.string(),
-    client_data_json: v.string(),
-    signature: v.string(),
-    device_info: v.optional(v.object({
-      user_agent: v.optional(v.string()),
-      ip_address: v.optional(v.string()),
-      platform: v.optional(v.string()),
-      device_id: v.optional(v.string()),
-    })),
-    expected_role: v.string(),
-  },
-  handler: async (ctx, args) => {
-    try {
-      const now = Date.now();
-
-      const credential = await ctx.db
-        .query("biometric_credentials")
-        .withIndex("by_credential_id", (q) => q.eq("credential_id", args.credential_id))
-        .first();
-
-      if (!credential) {
-        throw new Error("BIOMETRIC_INVALID");
-      }
-
-      const user = await ctx.db.get(credential.user_id);
-      if (!user) {
-        throw new Error("BIOMETRIC_INVALID");
-      }
-
-      if (user.role !== args.expected_role) {
-        const failedAttempts = (user.failed_login_attempts || 0) + 1;
-        await ctx.db.patch(user._id, {
-          failed_login_attempts: failedAttempts,
-        });
-        throw new Error("BIOMETRIC_INVALID");
-      }
-
-      if (user.locked_until && user.locked_until > now) {
-        throw new Error("ACCOUNT_LOCKED");
-      }
-
-      if (user.status === "banned") {
-        throw new Error("USER_BANNED");
-      }
-
-      if (user.status === "inactive") {
-        throw new Error("USER_INACTIVE");
-      }
-
-      const isValidAssertion = await verifyWebAuthnAssertion({
-        credentialId: args.credential_id,
-        publicKey: credential.public_key,
-        authenticatorData: args.authenticator_data,
-        clientDataJSON: args.client_data_json,
-        signature: args.signature,
-      });
-
-      if (!isValidAssertion) {
-        const failedAttempts = (user.failed_login_attempts || 0) + 1;
-        const updateData: any = {
-          failed_login_attempts: failedAttempts,
-        };
-
-        if (failedAttempts >= 5) {
-          updateData.locked_until = now + (30 * 60 * 1000);
-        }
-
-        await ctx.db.patch(user._id, updateData);
-        throw new Error("BIOMETRIC_INVALID");
-      }
-
-      await ctx.db.patch(credential._id, {
-        last_used: now,
-      });
-
-      await ctx.db.patch(user._id, {
-        failed_login_attempts: 0,
-        locked_until: undefined,
-        last_login_at: now,
-      });
-
-      const tokenPayload = {
-        userId: user._id,
-        email: user.email,
-        role: user.role,
-        verified: user.verified,
-        status: user.status,
-      };
-
-      const sessionToken = await generateSecureToken(tokenPayload);
-      const expiresAt = now + (7 * 24 * 60 * 60 * 1000);
-
-      await ctx.db.insert("auth_sessions", {
-        user_id: user._id,
-        session_token: sessionToken,
-        device_info: args.device_info,
-        expires_at: expiresAt,
-        last_used_at: now,
-        is_offline_capable: true,
-        created_at: now,
-      });
-
-      await ctx.runMutation(internal.functions.audit.createAuditLog, {
-        user_id: user._id,
-        action: "user_login",
-        resource_type: "users",
-        resource_id: user._id,
-        description: `User ${user.name} logged in via biometric authentication on ${args.expected_role} form`,
-        ip_address: args.device_info?.ip_address,
-        user_agent: args.device_info?.user_agent,
-      });
-
-      return {
-        success: true,
-        token: sessionToken,
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          status: user.status,
-          verified: user.verified,
-          school_id: user.school_id,
-        },
-        expiresAt,
-      };
-    } catch (error: any) {
-      let errorCode = error.message;
-      if (errorCode === "BIOMETRIC_INVALID") {
-        throw new Error("Biometric authentication failed. Please try again or use another sign-in method.");
-      }
-      throw new Error(getErrorMessage(errorCode));
     }
   },
 });
@@ -1193,114 +977,6 @@ export const disableMFA = mutation({
       return {
         success: true,
         message: "Multi-factor authentication has been disabled for your account.",
-      };
-    } catch (error: any) {
-      throw new Error(getErrorMessage(error.message));
-    }
-  },
-});
-
-export const enableBiometric = mutation({
-  args: {
-    token: v.string(),
-    credential_id: v.string(),
-    public_key: v.string(),
-    device_name: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    try {
-      const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
-        token: args.token,
-      });
-
-      if (!sessionResult.valid || !sessionResult.user) {
-        throw new Error("Invalid session");
-      }
-
-      const user = await ctx.db.get(sessionResult.user.id);
-      if (!user) {
-        throw new Error("User not found");
-      }
-
-      await ctx.db.patch(user._id, {
-        biometric_enabled: true,
-      });
-
-      await ctx.db.insert("biometric_credentials", {
-        user_id: user._id,
-        credential_id: args.credential_id,
-        public_key: args.public_key,
-        device_name: args.device_name || "Unknown Device",
-        created_at: Date.now(),
-      });
-
-      await ctx.runMutation(internal.functions.audit.createAuditLog, {
-        user_id: user._id,
-        action: "user_updated",
-        resource_type: "users",
-        resource_id: user._id,
-        description: "User enabled biometric authentication",
-      });
-
-      return {
-        success: true,
-        message: "Biometric authentication has been enabled for this device.",
-      };
-    } catch (error: any) {
-      throw new Error(getErrorMessage(error.message));
-    }
-  },
-});
-
-export const disableBiometric = mutation({
-  args: {
-    token: v.string(),
-    current_password: v.string(),
-  },
-  handler: async (ctx, args) => {
-    try {
-      const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
-        token: args.token,
-      });
-
-      if (!sessionResult.valid || !sessionResult.user) {
-        throw new Error("Invalid session");
-      }
-
-      const user = await ctx.db.get(sessionResult.user.id);
-      if (!user) {
-        throw new Error("User not found");
-      }
-
-      const isPasswordValid = await verifyPassword(args.current_password, user.password_hash, user.password_salt);
-      if (!isPasswordValid) {
-        throw new Error("Current password is incorrect");
-      }
-
-      await ctx.db.patch(user._id, {
-        biometric_enabled: false,
-      });
-
-      const credentials = await ctx.db
-        .query("biometric_credentials")
-        .withIndex("by_user_id", (q) => q.eq("user_id", user._id))
-        .collect();
-
-      for (const credential of credentials) {
-        await ctx.db.delete(credential._id);
-      }
-
-      await ctx.runMutation(internal.functions.audit.createAuditLog, {
-        user_id: user._id,
-        action: "user_updated",
-        resource_type: "users",
-        resource_id: user._id,
-        description: "User disabled biometric authentication",
-      });
-
-      return {
-        success: true,
-        message: "Biometric authentication has been disabled for your account.",
       };
     } catch (error: any) {
       throw new Error(getErrorMessage(error.message));
@@ -1705,7 +1381,6 @@ export const getCurrentUser = query({
         high_school_attended: user.high_school_attended,
         profile_image: user.profile_image,
         mfa_enabled: user.mfa_enabled,
-        biometric_enabled: user.biometric_enabled,
         last_login_at: user.last_login_at,
         school: school
           ? {

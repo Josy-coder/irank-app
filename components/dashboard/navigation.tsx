@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, createContext, useContext, ReactNode } from "react"
+import { useState, useEffect, createContext, useContext } from "react"
 import { useAuth, useRoleAccess } from "@/hooks/useAuth"
 import { cn } from "@/lib/utils"
 import {
@@ -55,6 +55,7 @@ import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Id } from "@/convex/_generated/dataModel";
+import { AnimatePresence, motion } from "framer-motion";
 
 const sidebarItems = {
   student: [
@@ -117,12 +118,6 @@ const NavigationContext = createContext<NavigationContextType>({
 })
 
 export const useNavigation = () => useContext(NavigationContext)
-
-export const useSidebar = () => {
-  const { isCollapsed, setIsCollapsed } = useNavigation()
-  return { isCollapsed, setIsCollapsed }
-}
-
 export const useContextualNavigation = () => {
   const { contextualNav, setContextualNav, hideMainBottomNav, showMainBottomNav } = useNavigation()
 
@@ -144,21 +139,6 @@ export const useContextualNavigation = () => {
     clearTabs
   }
 }
-
-export const useFeatureNavigation = (config: ContextualNavConfig) => {
-  const { setTabs, clearTabs } = useContextualNavigation()
-
-  useEffect(() => {
-    setTabs(config)
-
-    return () => {
-      clearTabs()
-    }
-  }, [config.tabs.length, config.backHref])
-
-  return { setTabs, clearTabs }
-}
-
 function generateBreadcrumbs(pathname: string, userRole: string) {
   const segments = pathname.split('/').filter(Boolean)
   const breadcrumbs = []
@@ -312,8 +292,6 @@ export function DashboardNavigation() {
   const [, setIsMediumScreen] = useState(false)
   const [contextualNav, setContextualNav] = useState<ContextualNavConfig | null>(null)
   const [mainBottomNavVisible, setMainBottomNavVisible] = useState(true)
-  const router = useRouter()
-
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const getUrl = useMutation(api.files.getUrl);
 
@@ -381,30 +359,45 @@ export function DashboardNavigation() {
                   height={isCollapsed ? 52 : 36}
                 />
               </div>
-              {!isCollapsed && (
-                <div>
-                  <h2 className="text-lg font-bold text-white">
-                    iRankHub
-                  </h2>
-                </div>
-              )}
+              <AnimatePresence mode="wait">
+                {!isCollapsed && (
+                  <motion.div
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    transition={{ duration: 0.2, delay: 0.1 }}
+                  >
+                    <h2 className="text-lg font-bold text-white">
+                      iRankHub
+                    </h2>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
+
           <div className="mx-4 mb-3 min-h-[60px] flex items-center">
             {!isVerified() && (
-              <div className={cn(
-                "w-full p-3 bg-white/20 backdrop-blur-sm rounded-lg transition-opacity duration-300",
-                isCollapsed ? "opacity-0" : "opacity-100"
-              )}>
-                <p className="text-xs text-white/90">
-                  Account pending approval
-                </p>
-              </div>
+              <AnimatePresence mode="wait">
+                {!isCollapsed && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ duration: 0.2, delay: 0.15 }}
+                    className="w-full p-3 bg-white/20 backdrop-blur-sm rounded-lg"
+                  >
+                    <p className="text-xs text-white/90">
+                      Account pending approval
+                    </p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             )}
           </div>
 
           <nav className="flex-1 px-3">
-            {items.map((item) => {
+            {items.map((item, index) => {
               const isActive = pathname === item.href
 
               const navItem = (
@@ -420,9 +413,22 @@ export function DashboardNavigation() {
                   )}
                 >
                   <item.icon className={cn("h-5 w-5", !isCollapsed && "mr-3")} />
-                  {!isCollapsed && (
-                    <span className="font-medium text-sm">{item.label}</span>
-                  )}
+                  <AnimatePresence mode="wait">
+                    {!isCollapsed && (
+                      <motion.span
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -10 }}
+                        transition={{
+                          duration: 0.2,
+                          delay: 0.1 + (index * 0.05) // Staggered animation
+                        }}
+                        className="font-medium text-sm whitespace-nowrap"
+                      >
+                        {item.label}
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
                 </Link>
               )
 
@@ -456,14 +462,30 @@ export function DashboardNavigation() {
                 </TooltipContent>
               </Tooltip>
             ) : (
-              <Button
-                onClick={signOut}
-                variant="ghost"
-                className="w-full text-white/80 hover:text-white hover:bg-white/10 border border-white/20 rounded-lg"
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2, delay: 0.2 }}
               >
-                <LogOut className="h-4 w-4 mr-2" />
-                Sign Out
-              </Button>
+                <Button
+                  onClick={signOut}
+                  variant="ghost"
+                  className="w-full text-white/80 hover:text-white hover:bg-white/10 border border-white/20 rounded-lg"
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  <AnimatePresence mode="wait">
+                    <motion.span
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -10 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      Sign Out
+                    </motion.span>
+                  </AnimatePresence>
+                </Button>
+              </motion.div>
             )}
           </div>
         </div>
@@ -629,14 +651,30 @@ export function DashboardNavigation() {
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="flex items-center space-x-2">
-                  <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-                    <span className="text-sm font-medium text-white">
-                      {user.name.charAt(0).toUpperCase()}
-                    </span>
+                <Button
+                  variant="ghost"
+                  className="flex items-center gap-2 py-6 hover:bg-gray-200 rounded-md"
+                >
+                  <div className="hidden xl:flex xl:flex-col xl:items-start">
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">{user.name}</p>
+                    <p className="text-xs text-muted-foreground w-full text-right">
+                      {user.role === 'school_admin'
+                        ? 'School Admin'
+                        : user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                    </p>
                   </div>
+                  <Avatar className="w-8 h-8">
+                    {user.profile_image ? (
+                      <AvatarImage src={imageUrl || ""} alt={user.name} />
+                    ) : null}
+                    <AvatarFallback className="bg-primary text-white">
+                      {user.name.charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <ChevronDown className="h-4 w-4 text-gray-400 ml-1" />
                 </Button>
               </DropdownMenuTrigger>
+
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>
                   <div>

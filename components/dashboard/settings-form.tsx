@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -33,7 +33,6 @@ import {
   Eye,
   EyeOff,
   Shield,
-  Fingerprint,
   Key,
   HelpCircle,
   AlertCircle,
@@ -51,7 +50,6 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Id } from "@/convex/_generated/dataModel";
-import { generateRandomChallenge, arrayBufferToBase64 } from "@/lib/webauthn"
 
 const passwordChangeSchema = z.object({
   currentPassword: z.string().min(1, { message: "Current password is required" }),
@@ -82,8 +80,6 @@ export default function SettingsForm() {
     changePassword,
     enableMFA,
     disableMFA,
-    enableBiometric,
-    disableBiometric,
     updateSecurityQuestion
   } = useAuth()
 
@@ -93,7 +89,6 @@ export default function SettingsForm() {
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [mfaDialogOpen, setMfaDialogOpen] = useState(false)
-  const [biometricDialogOpen, setBiometricDialogOpen] = useState(false)
   const [securityQuestionDialogOpen, setSecurityQuestionDialogOpen] = useState(false)
   const [deleteAccountDialogOpen, setDeleteAccountDialogOpen] = useState(false)
   const [sessionsDialogOpen, setSessionsDialogOpen] = useState(false)
@@ -155,97 +150,6 @@ export default function SettingsForm() {
     } catch (error: any) {
       console.error("MFA toggle error:", error)
       setError(error.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-  const handleBiometricToggle = async (enabled: boolean, currentPassword?: string) => {
-    setLoading(true)
-    setError(null)
-
-    try {
-      if (enabled) {
-        if (!window.PublicKeyCredential) {
-          throw new Error("WebAuthn is not supported in this browser")
-        }
-
-        const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
-        if (!available) {
-          throw new Error("No biometric authenticator available on this device")
-        }
-
-        const challenge = generateRandomChallenge()
-        const userId = new TextEncoder().encode(user?.id || "")
-
-        const createCredentialOptions: CredentialCreationOptions = {
-          publicKey: {
-            challenge,
-            rp: {
-              name: "iRankHub",
-              id: window.location.hostname,
-            },
-            user: {
-              id: userId,
-              name: user?.email || "",
-              displayName: user?.name || "",
-            },
-            pubKeyCredParams: [
-              { alg: -7, type: "public-key" },
-              { alg: -257, type: "public-key" },
-            ],
-            authenticatorSelection: {
-              authenticatorAttachment: "platform",
-              userVerification: "required",
-              requireResidentKey: false,
-            },
-            timeout: 60000,
-            attestation: "direct",
-          },
-        }
-
-        const credential = await navigator.credentials.create(createCredentialOptions) as PublicKeyCredential
-
-        if (!credential) {
-          throw new Error("Failed to create biometric credential")
-        }
-
-        const response = credential.response as AuthenticatorAttestationResponse
-        const credentialId = arrayBufferToBase64(credential.rawId)
-        const publicKey = arrayBufferToBase64(response.getPublicKey()!)
-        const deviceName = `${navigator.platform} - ${navigator.userAgent.split(' ').find(part =>
-          part.includes('Chrome') || part.includes('Firefox') || part.includes('Safari') || part.includes('Edge')
-        ) || 'Unknown Browser'}`
-
-        await enableBiometric(credentialId, publicKey, deviceName)
-
-      } else {
-        if (!currentPassword) {
-          setError("Current password is required to disable biometric authentication")
-          return
-        }
-        await disableBiometric(currentPassword)
-      }
-      setBiometricDialogOpen(false)
-    } catch (error: any) {
-      console.error("Biometric toggle error:", error)
-      let errorMessage = "Failed to set up biometric authentication"
-
-      if (error.name === "NotSupportedError") {
-        errorMessage = "Biometric authentication is not supported on this device"
-      } else if (error.name === "SecurityError") {
-        errorMessage = "Security error occurred. Please ensure you're on a secure connection (HTTPS)"
-      } else if (error.name === "NotAllowedError") {
-        errorMessage = "Biometric authentication was cancelled or not allowed"
-      } else if (error.name === "InvalidStateError") {
-        errorMessage = "A biometric credential already exists for this device"
-      } else if (error.name === "ConstraintError") {
-        errorMessage = "The authenticator doesn't meet the requirements"
-      } else if (error.message) {
-        errorMessage = error.message
-      }
-
-      setError(errorMessage)
-      toast.error(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -323,10 +227,6 @@ export default function SettingsForm() {
   }
 
   const canUseMFA = ["school_admin", "volunteer", "admin"].includes(user.role)
-  const canUseBiometric = typeof window !== 'undefined' &&
-    'navigator' in window &&
-    'credentials' in navigator &&
-    typeof navigator.credentials.create === 'function'
 
   return (
     <div className="space-y-6">
@@ -529,40 +429,6 @@ export default function SettingsForm() {
                       <MFAToggleDialog
                         enabled={!user.mfa_enabled}
                         onConfirm={handleMFAToggle}
-                        loading={loading}
-                      />
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              )}
-
-              {canUseBiometric && (
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <div className="font-medium text-sm">Biometric Authentication</div>
-                    <div className="text-xs text-muted-foreground">
-                      Use fingerprint or face recognition to sign in
-                    </div>
-                  </div>
-                  <Dialog open={biometricDialogOpen} onOpenChange={setBiometricDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Switch checked={user.biometric_enabled} />
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>
-                          {user.biometric_enabled ? 'Disable' : 'Enable'} Biometric Authentication
-                        </DialogTitle>
-                        <DialogDescription>
-                          {user.biometric_enabled
-                            ? 'Enter your current password to disable biometric authentication'
-                            : 'Set up biometric authentication for this device'
-                          }
-                        </DialogDescription>
-                      </DialogHeader>
-                      <BiometricToggleDialog
-                        enabled={!user.biometric_enabled}
-                        onConfirm={handleBiometricToggle}
                         loading={loading}
                       />
                     </DialogContent>
@@ -850,142 +716,6 @@ function MFAToggleDialog({
   )
 }
 
-function BiometricToggleDialog({
-                                 enabled,
-                                 onConfirm,
-                                 loading
-                               }: {
-  enabled: boolean
-  onConfirm: (enabled: boolean, password?: string) => void
-  loading: boolean
-}) {
-  const [password, setPassword] = useState("")
-  const [showPassword, setShowPassword] = useState(false)
-  const [isSupported, setIsSupported] = useState<boolean | null>(null)
-
-  useEffect(() => {
-    const checkSupport = async () => {
-      if (enabled) {
-        try {
-          const supported = window.PublicKeyCredential &&
-            await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
-          setIsSupported(supported)
-        } catch {
-          setIsSupported(false)
-        }
-      }
-    }
-    checkSupport()
-  }, [enabled])
-
-  if (enabled) {
-    return (
-      <div className="space-y-2">
-        <div className="flex items-center justify-center p-2">
-          <Fingerprint className="h-8 w-8 text-primary" />
-        </div>
-
-        {isSupported === null && (
-          <div className="text-center text-sm text-muted-foreground">
-            Checking device compatibility...
-          </div>
-        )}
-
-        {isSupported === false && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              Biometric authentication is not supported on this device or browser.
-              Please ensure you&#39;re using a compatible device with biometric sensors.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {isSupported === true && (
-          <>
-            <div className="text-center space-y-2">
-              <p className="text-xs text-muted-foreground">
-                You&#39;ll be prompted to use your fingerprint, face recognition, or other biometric method.
-              </p>
-            </div>
-            <Alert>
-              <Shield className="h-4 w-4" />
-              <AlertDescription>
-                Your biometric data is stored securely on your device and never sent to our servers.
-              </AlertDescription>
-            </Alert>
-          </>
-        )}
-
-        <DialogFooter>
-          <Button
-            onClick={() => onConfirm(true)}
-            disabled={loading || isSupported === false}
-          >
-            {loading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Setting up...
-              </>
-            ) : (
-              "Set Up Biometric"
-            )}
-          </Button>
-        </DialogFooter>
-      </div>
-    )
-  }
-
-  return (
-    <div className="space-y-4">
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          Disabling biometric authentication will remove all registered biometric credentials from your account.
-        </AlertDescription>
-      </Alert>
-
-      <div className="space-y-2">
-        <Label htmlFor="password">Current Password</Label>
-        <div className="relative">
-          <Input
-            id="password"
-            type={showPassword ? "text" : "password"}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Enter your current password"
-            className="pr-10"
-          />
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="absolute right-0 top-0 h-full px-3 py-2"
-            onClick={() => setShowPassword(!showPassword)}
-          >
-            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-          </Button>
-        </div>
-      </div>
-      <DialogFooter>
-        <Button
-          onClick={() => onConfirm(false, password)}
-          disabled={!password || loading}
-          variant="destructive"
-        >
-          {loading ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Processing...
-            </>
-          ) : (
-            "Disable Biometric"
-          )}
-        </Button>
-      </DialogFooter>
-    </div>
-  )
-}
 
 function SecurityQuestionDialog({
                                   form,

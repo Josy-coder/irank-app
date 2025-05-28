@@ -37,7 +37,7 @@ import {
   Users,
   Mail,
   Shield,
-  AlertCircle, Phone, Link2, ChevronLeft, Fingerprint
+  AlertCircle, Phone, Link2, ChevronLeft
 } from "lucide-react";
 import { Label } from "@/components/ui/label"
 import { motion } from "framer-motion"
@@ -91,10 +91,8 @@ const SignInForm = ({ role }: SignInFormProps) => {
   const [, setSelectedStudent] = useState<any>(null)
   const [securityQuestion, setSecurityQuestion] = useState<string>("")
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [biometricSupported, setBiometricSupported] = useState(false)
-  const [biometricLoading, setBiometricLoading] = useState(false)
 
-  const { signIn, signInWithPhone, signInWithBiometric, generateMagicLink } = useAuth()
+  const { signIn, signInWithPhone, generateMagicLink } = useAuth()
 
   const emailForm = useForm<EmailFormValues>({
     resolver: zodResolver(emailFormSchema),
@@ -149,23 +147,6 @@ const SignInForm = ({ role }: SignInFormProps) => {
   )
 
   useEffect(() => {
-    const checkBiometricSupport = async () => {
-      if (typeof window !== 'undefined' &&
-        'navigator' in window &&
-        'credentials' in navigator &&
-        window.PublicKeyCredential) {
-        try {
-          const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
-          setBiometricSupported(available)
-        } catch {
-          setBiometricSupported(false)
-        }
-      }
-    }
-    checkBiometricSupport()
-  }, [])
-
-  useEffect(() => {
     if (securityQuestionQuery?.error) {
       setSecurityQuestion("⚠️ " + securityQuestionQuery.error);
     } else if (securityQuestionQuery?.question) {
@@ -174,20 +155,6 @@ const SignInForm = ({ role }: SignInFormProps) => {
       setSecurityQuestion("");
     }
   }, [securityQuestionQuery]);
-
-  const handleBiometricSignIn = async () => {
-    setBiometricLoading(true)
-    setError(null)
-
-    try {
-      await signInWithBiometric(role as UserRole)
-    } catch (error: any) {
-      console.error("Biometric auth error:", error)
-      setError(error.message)
-    } finally {
-      setBiometricLoading(false)
-    }
-  }
 
   const handleEmailSignIn = async (values: EmailFormValues) => {
     setLoading(true)
@@ -391,8 +358,8 @@ const SignInForm = ({ role }: SignInFormProps) => {
           </div>
 
           {role === "student" ? (
-            <Tabs value={authMethod} onValueChange={(value) => setAuthMethod(value as "email" | "magic" | "biometric")} className="w-full">
-              <TabsList className={`grid w-full ${biometricSupported ? 'grid-cols-4' : 'grid-cols-3'}`}>
+            <Tabs value={authMethod} onValueChange={(value) => setAuthMethod(value as "email" | "magic")} className="w-full">
+              <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="email">
                   <Mail className="h-4 w-4 md:hidden" />
                   <span className="hidden md:inline">Email</span>
@@ -405,12 +372,6 @@ const SignInForm = ({ role }: SignInFormProps) => {
                   <Link2 className="h-4 w-4 md:hidden" />
                   <span className="hidden md:inline">Magic Link</span>
                 </TabsTrigger>
-                {biometricSupported && (
-                  <TabsTrigger value="biometric">
-                    <Fingerprint className="h-4 w-4 md:hidden" />
-                    <span className="hidden md:inline">Biometric</span>
-                  </TabsTrigger>
-                )}
               </TabsList>
 
               <TabsContent value="email" className="space-y-4">
@@ -713,39 +674,10 @@ const SignInForm = ({ role }: SignInFormProps) => {
                   </form>
                 </Form>
               </TabsContent>
-
-              {biometricSupported && (
-                <TabsContent value="biometric" className="space-y-4">
-                  <div className="text-center mb-4">
-                    <Fingerprint className="mx-auto h-12 w-12 text-primary mb-2" />
-                    <p className="text-sm text-muted-foreground">
-                      Use your fingerprint, face recognition, or other biometric method to sign in
-                    </p>
-                  </div>
-
-                  <Button
-                    onClick={handleBiometricSignIn}
-                    disabled={biometricLoading}
-                    className="w-full"
-                  >
-                    {biometricLoading ? (
-                      <span className="flex items-center justify-center">
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Authenticating...
-            </span>
-                    ) : (
-                      <>
-                        <Fingerprint className="mr-2 h-4 w-4" />
-                        Sign in with Biometrics
-                      </>
-                    )}
-                  </Button>
-                </TabsContent>
-              )}
             </Tabs>
           ) : (
             <Tabs value={authMethod} onValueChange={(value) => setAuthMethod(value as "email" | "magic")} className="w-full">
-              <TabsList className={`grid w-full ${biometricSupported ? 'grid-cols-3' : 'grid-cols-2'}`}>
+              <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="email">
                   <Mail className="h-4 w-4 md:hidden" />
                   <span className="hidden md:inline">Email</span>
@@ -754,12 +686,6 @@ const SignInForm = ({ role }: SignInFormProps) => {
                   <Link2 className="h-4 w-4 md:hidden" />
                   <span className="hidden md:inline">Magic Link</span>
                 </TabsTrigger>
-                {biometricSupported && (
-                  <TabsTrigger value="biometric">
-                    <Fingerprint className="h-4 w-4 md:hidden" />
-                    <span className="hidden md:inline">Biometric</span>
-                  </TabsTrigger>
-                )}
               </TabsList>
 
               <TabsContent value="email" className="space-y-4">
@@ -899,35 +825,6 @@ const SignInForm = ({ role }: SignInFormProps) => {
                   </form>
                 </Form>
               </TabsContent>
-
-              {biometricSupported && (
-                <TabsContent value="biometric" className="space-y-4">
-                  <div className="text-center mb-4">
-                    <Fingerprint className="mx-auto h-12 w-12 text-primary mb-2" />
-                    <p className="text-sm text-muted-foreground">
-                      Use your fingerprint, face recognition, or other biometric method to sign in
-                    </p>
-                  </div>
-
-                  <Button
-                    onClick={handleBiometricSignIn}
-                    disabled={biometricLoading}
-                    className="w-full"
-                  >
-                    {biometricLoading ? (
-                      <span className="flex items-center justify-center">
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Authenticating...
-            </span>
-                    ) : (
-                      <>
-                        <Fingerprint className="mr-2 h-4 w-4" />
-                        Sign in with Biometrics
-                      </>
-                    )}
-                  </Button>
-                </TabsContent>
-              )}
             </Tabs>
           )}
 
