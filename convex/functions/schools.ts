@@ -149,15 +149,26 @@ export const getSchools = query({
 });
 
 /**
- * Get schools for admin with all filters
+ * Get schools for admin with all filters (FIXED validation)
  */
 export const getSchoolsForAdmin = query({
   args: {
     search: v.optional(v.string()),
-    type: v.optional(schoolType),
+    type: v.optional(v.union(
+      v.literal("all"),
+      v.literal("Private"),
+      v.literal("Public"),
+      v.literal("Government Aided"),
+      v.literal("International")
+    )),
     country: v.optional(v.string()),
     province: v.optional(v.string()),
-    status: v.optional(statusType),
+    status: v.optional(v.union(
+      v.literal("all"),
+      v.literal("active"),
+      v.literal("inactive"),
+      v.literal("banned")
+    )),
     verified: v.optional(v.boolean()),
     page: v.number(),
     limit: v.number(),
@@ -176,21 +187,22 @@ export const getSchoolsForAdmin = query({
 
     let filteredQuery;
 
-    if (typeof args.status === "string" && typeof args.type === "string") {
-      const status = args.status;
-      const type = args.type;
+    // Handle the filtering logic, ignoring "all" values
+    const effectiveStatus = args.status && args.status !== "all" ? args.status : undefined;
+    const effectiveType = args.type && args.type !== "all" ? args.type : undefined;
+
+    if (effectiveStatus && effectiveType) {
       filteredQuery = baseQuery.withIndex("by_type_status", (q) =>
-        q.eq("type", type).eq("status", status)
+        q.eq("type", effectiveType).eq("status", effectiveStatus)
       );
-    } else if (typeof args.status === "string") {
-      const status = args.status;
+    } else if (effectiveStatus) {
       filteredQuery = baseQuery.withIndex("by_status", (q) =>
-        q.eq("status", status)
+        q.eq("status", effectiveStatus)
       );
     } else if (typeof args.verified === "boolean") {
-      const verified = args.verified;
+      const verifiedValue: boolean = args.verified;
       filteredQuery = baseQuery.withIndex("by_verified", (q) =>
-        q.eq("verified", verified)
+        q.eq("verified", verifiedValue)
       );
     } else {
       filteredQuery = baseQuery;
@@ -199,8 +211,8 @@ export const getSchoolsForAdmin = query({
     if (args.search && args.search.trim() !== "") {
       const searchQuery = baseQuery.withSearchIndex("search_schools", (q) => {
         let query = q.search("name", args.search || "");
-        if (args.status) query = query.eq("status", args.status);
-        if (args.type) query = query.eq("type", args.type);
+        if (effectiveStatus) query = query.eq("status", effectiveStatus);
+        if (effectiveType) query = query.eq("type", effectiveType);
         if (args.verified !== undefined) query = query.eq("verified", args.verified);
         return query;
       });
@@ -211,12 +223,28 @@ export const getSchoolsForAdmin = query({
           cursor: args.page > 1 ? String(args.page) : null
         });
 
-      const schoolsWithCreators = await Promise.all(
+      const schoolsWithCreatorsAndCounts = await Promise.all(
         paginatedSchools.page.map(async (school) => {
           let creator = null;
           if (school.created_by) {
             creator = await ctx.db.get(school.created_by);
           }
+
+          // Get student count for this school
+          const studentCount = await ctx.db
+            .query("users")
+            .withIndex("by_school_id_role", (q) =>
+              q.eq("school_id", school._id).eq("role", "student")
+            )
+            .collect()
+            .then(users => users.length);
+
+          // Get team count for this school
+          const teamCount = await ctx.db
+            .query("teams")
+            .withIndex("by_school_id", (q) => q.eq("school_id", school._id))
+            .collect()
+            .then(teams => teams.length);
 
           return {
             ...school,
@@ -225,32 +253,72 @@ export const getSchoolsForAdmin = query({
               name: creator.name,
               email: creator.email,
             } : null,
+            student_count: studentCount,
+            team_count: teamCount,
           };
         })
       );
 
+      // Apply additional filters in memory if needed
+      let filteredSchools = schoolsWithCreatorsAndCounts;
+
+      if (effectiveType) {
+        filteredSchools = filteredSchools.filter(school => school.type === effectiveType);
+      }
+
+      if (effectiveStatus) {
+        filteredSchools = filteredSchools.filter(school => school.status === effectiveStatus);
+      }
+
       return {
-        schools: schoolsWithCreators,
-        totalCount: paginatedSchools.page.length,
+        schools: filteredSchools,
+        totalCount: filteredSchools.length,
         hasMore: paginatedSchools.continueCursor !== null,
         nextPage: paginatedSchools.continueCursor
       };
     } else {
-      const totalCount = await filteredQuery.collect();
+      // Get all results first
+      let allSchools = await filteredQuery.collect();
 
-      const paginatedSchools = await filteredQuery
-        .order("desc")
-        .paginate({
-          numItems: args.limit,
-          cursor: args.page > 1 ? String(args.page) : null
-        });
+      // Apply additional filters in memory
+      if (effectiveType) {
+        allSchools = allSchools.filter(school => school.type === effectiveType);
+      }
 
-      const schoolsWithCreators = await Promise.all(
-        paginatedSchools.page.map(async (school) => {
+      if (effectiveStatus) {
+        allSchools = allSchools.filter(school => school.status === effectiveStatus);
+      }
+
+      const totalCount = allSchools.length;
+
+      // Sort and paginate
+      const sortedSchools = allSchools.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+      const startIndex = (args.page - 1) * args.limit;
+      const endIndex = startIndex + args.limit;
+      const paginatedSchools = sortedSchools.slice(startIndex, endIndex);
+
+      const schoolsWithCreatorsAndCounts = await Promise.all(
+        paginatedSchools.map(async (school) => {
           let creator = null;
           if (school.created_by) {
             creator = await ctx.db.get(school.created_by);
           }
+
+          // Get student count for this school
+          const studentCount = await ctx.db
+            .query("users")
+            .withIndex("by_school_id_role", (q) =>
+              q.eq("school_id", school._id).eq("role", "student")
+            )
+            .collect()
+            .then(users => users.length);
+
+          // Get team count for this school
+          const teamCount = await ctx.db
+            .query("teams")
+            .withIndex("by_school_id", (q) => q.eq("school_id", school._id))
+            .collect()
+            .then(teams => teams.length);
 
           return {
             ...school,
@@ -259,15 +327,17 @@ export const getSchoolsForAdmin = query({
               name: creator.name,
               email: creator.email,
             } : null,
+            student_count: studentCount,
+            team_count: teamCount,
           };
         })
       );
 
       return {
-        schools: schoolsWithCreators,
-        totalCount: totalCount.length,
-        hasMore: paginatedSchools.continueCursor !== null,
-        nextPage: paginatedSchools.continueCursor
+        schools: schoolsWithCreatorsAndCounts,
+        totalCount: totalCount,
+        hasMore: endIndex < totalCount,
+        nextPage: endIndex < totalCount ? args.page + 1 : null,
       };
     }
   },

@@ -43,7 +43,6 @@ import {
   Smartphone,
   Laptop
 } from "lucide-react"
-import { motion } from "framer-motion"
 import { useAuth } from "@/hooks/useAuth"
 import { toast } from "sonner"
 import { Label } from "@/components/ui/label"
@@ -230,11 +229,7 @@ export default function SettingsForm() {
 
   return (
     <div className="space-y-6">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
+      <div>
         <div className="flex items-center justify-between">
           <div>
             <p className="text-muted-foreground">
@@ -242,14 +237,10 @@ export default function SettingsForm() {
             </p>
           </div>
         </div>
-      </motion.div>
+      </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
-        >
+        <div>
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -384,13 +375,9 @@ export default function SettingsForm() {
               </Form>
             </CardContent>
           </Card>
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-        >
+        <div>
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -545,14 +532,10 @@ export default function SettingsForm() {
               </div>
             </CardContent>
           </Card>
-        </motion.div>
+        </div>
       </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.3 }}
-      >
+      <div>
         <Card className="border-red-200 dark:border-red-800">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
@@ -610,7 +593,7 @@ export default function SettingsForm() {
             </div>
           </CardContent>
         </Card>
-      </motion.div>
+      </div>
     </div>
   )
 }

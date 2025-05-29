@@ -29,7 +29,6 @@ import {
 } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
-  Camera,
   Upload,
   Save,
   AlertCircle,
@@ -41,7 +40,6 @@ import {
   Shield,
   Loader2
 } from "lucide-react"
-import { motion } from "framer-motion"
 import { useAuth } from "@/hooks/useAuth"
 import { toast } from "sonner"
 import { FileUpload } from "@/components/file-upload"
@@ -241,11 +239,7 @@ export default function ProfileForm() {
   }
   return (
     <div className="space-y-6">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
+      <div>
         <div className="flex items-center justify-between">
           <div>
             <p className="text-muted-foreground">
@@ -253,14 +247,10 @@ export default function ProfileForm() {
             </p>
           </div>
         </div>
-      </motion.div>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
-        >
+        <div>
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-1">
@@ -321,14 +311,9 @@ export default function ProfileForm() {
               </div>
             </CardContent>
           </Card>
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-          className="md:col-span-2"
-        >
+        <div className="md:col-span-2">
           <Card>
             <CardHeader>
               <CardTitle>Personal Information</CardTitle>
@@ -515,16 +500,11 @@ export default function ProfileForm() {
               </Form>
             </CardContent>
           </Card>
-        </motion.div>
+        </div>
       </div>
 
       {(user.role === "school_admin" || user.role === "volunteer") && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.3 }}
-          className="grid gap-6 md:grid-cols-2"
-        >
+        <div className="grid gap-6 md:grid-cols-2">
           {user.role === "school_admin" && (
             <Card>
               <CardHeader>
@@ -539,6 +519,7 @@ export default function ProfileForm() {
               <CardContent className="space-y-4">
                 {schoolLogoUrl && (
                   <div className="flex justify-center">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={schoolLogoUrl}
                       alt="School Logo"
@@ -606,7 +587,7 @@ export default function ProfileForm() {
               </CardContent>
             </Card>
           )}
-        </motion.div>
+        </div>
       )}
     </div>
   )

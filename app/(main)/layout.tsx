@@ -1,11 +1,14 @@
 "use client"
 
 import { useRequireAuth, useOfflineSync } from "@/hooks/useAuth"
-import AppLoader from "@/components/app-loader"
-import { DashboardNavigation, useNavigation } from "@/components/dashboard/navigation"
 import { useAuth } from "@/hooks/useAuth"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
+import AppLoader from "@/components/app-loader"
+import { AppSidebar } from "@/components/dashboard/navigation/app-sidebar"
+import { SiteHeader } from "@/components/dashboard/navigation/site-header"
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
+import { AdvancedOfflineBanner } from "@/components/offline-banner"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -14,10 +17,9 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
-import { AdvancedOfflineBanner } from "@/components/offline-banner";
+import React from "react";
 
 function generateBreadcrumbs(pathname: string, userRole: string) {
-  // Remove query parameters if any
   const cleanPathname = pathname.split('?')[0]
   const segments = cleanPathname.split('/').filter(Boolean)
   const breadcrumbs = []
@@ -36,13 +38,9 @@ function generateBreadcrumbs(pathname: string, userRole: string) {
     currentPath += `/${segment}`
 
     if (index > 0) {
-      // Smart label generation
       let label = segment.charAt(0).toUpperCase() + segment.slice(1)
 
-      // Handle special cases and IDs
       if (segment.match(/^[a-f\d]{24}$/i) || segment.match(/^[0-9]+$/)) {
-        // This looks like an ID (MongoDB ObjectId or numeric ID)
-        // Get the previous segment to determine context
         const previousSegment = segments[index - 1]
         if (previousSegment) {
           label = `${previousSegment.charAt(0).toUpperCase() + previousSegment.slice(1)} Details`
@@ -59,16 +57,15 @@ function generateBreadcrumbs(pathname: string, userRole: string) {
     }
   })
 
-  // Limit breadcrumbs to prevent breaking - show only last 3 plus role
   if (breadcrumbs.length > 4) {
     return [
-      breadcrumbs[0], // Keep role
+      breadcrumbs[0],
       {
         label: "...",
         href: "#",
         isRole: false
       },
-      ...breadcrumbs.slice(-2) // Keep last 2
+      ...breadcrumbs.slice(-2)
     ]
   }
 
@@ -76,16 +73,13 @@ function generateBreadcrumbs(pathname: string, userRole: string) {
 }
 
 function getPageTitle(pathname: string) {
-  // Remove query parameters if any
   const cleanPathname = pathname.split('?')[0]
   const segments = cleanPathname.split('/').filter(Boolean)
   const lastSegment = segments[segments.length - 1]
 
   if (!lastSegment) return 'Dashboard'
 
-  // Check if last segment is an ID
   if (lastSegment.match(/^[a-f\d]{24}$/i) || lastSegment.match(/^[0-9]+$/)) {
-    // Use the second-to-last segment for title
     const previousSegment = segments[segments.length - 2]
     if (previousSegment) {
       const titleMap: Record<string, string> = {
@@ -125,6 +119,8 @@ export default function DashboardLayout({
 }) {
   const auth = useRequireAuth()
   const { isOfflineValid } = useOfflineSync()
+  const { user } = useAuth()
+  const pathname = usePathname()
 
   if (auth.isLoading) {
     return <AppLoader />
@@ -134,84 +130,57 @@ export default function DashboardLayout({
     return <AppLoader />
   }
 
-  return (
-    <>
-      <AdvancedOfflineBanner />
-      <DashboardNavigation />
-      <DashboardContent>{children}</DashboardContent>
-    </>
-  )
-}
-
-function DashboardContent({ children }: { children: React.ReactNode }) {
-  const { isCollapsed, contextualNav } = useNavigation()
-  const { user } = useAuth()
-  const pathname = usePathname()
-
   const breadcrumbs = user ? generateBreadcrumbs(pathname, user.role) : []
   const pageTitle = getPageTitle(pathname)
 
   return (
     <>
-      {/* Desktop Layout - Fixed margin with proper CSS */}
-      <div
-        className={`hidden md:flex flex-1 bg-primary-foreground flex-col overflow-hidden transition-all duration-300 h-screen ${
-          isCollapsed ? 'ml-16' : 'ml-64'
-        }`}
-      >
-        <div className="h-32 flex-shrink-0" />
-        <main className="flex-1 overflow-x-hidden overflow-y-auto px-6 pb-6">
-          {children}
-        </main>
-      </div>
+      <AdvancedOfflineBanner />
+      <SidebarProvider>
+        <AppSidebar />
+        <SidebarInset>
+          <SiteHeader />
+          <div className="flex flex-1 flex-col bg-muted max-w-full overflow-x-hidden">
+            <div className="px-4 md:px-6 pt-2 pb-1">
+              <div className="flex items-center justify-between">
+                <h1 className="text-xl font-semibold text-primary">
+                  {pageTitle}
+                </h1>
 
-      {/* Mobile Layout */}
-      <div className="md:hidden fixed inset-0 flex flex-col">
-        <div className={`flex-shrink-0 ${contextualNav ? 'h-24' : 'h-16'}`} />
-
-        <main className="flex-1 overflow-x-hidden overflow-y-auto">
-          <div className="px-4 py-3 bg-white">
-            <div className="flex items-center justify-between">
-              <h1 className="text-lg font-semibold text-primary">
-                {pageTitle}
-              </h1>
-
-              <Breadcrumb>
-                <BreadcrumbList>
-                  {breadcrumbs.map((crumb, index) => (
-                    <div key={crumb.href} className="flex items-center">
-                      {index > 0 && (
-                        <BreadcrumbSeparator className="mx-2">
-                          <span className="text-gray-400">/</span>
-                        </BreadcrumbSeparator>
-                      )}
-                      <BreadcrumbItem>
-                        {index === breadcrumbs.length - 1 ? (
-                          <BreadcrumbPage className="text-primary font-medium text-sm">
-                            {crumb.label}
-                          </BreadcrumbPage>
-                        ) : (
-                          <BreadcrumbLink asChild>
-                            <Link href={crumb.href} className="text-gray-600 hover:text-primary text-sm">
-                              {crumb.label}
-                            </Link>
-                          </BreadcrumbLink>
+                <Breadcrumb className="hidden md:flex">
+                  <BreadcrumbList>
+                    {breadcrumbs.map((crumb, index) => (
+                      <div key={crumb.href} className="flex items-center">
+                        {index > 0 && (
+                          <BreadcrumbSeparator className="mx-2">
+                            <span className="text-gray-400">/</span>
+                          </BreadcrumbSeparator>
                         )}
-                      </BreadcrumbItem>
-                    </div>
-                  ))}
-                </BreadcrumbList>
-              </Breadcrumb>
+                        <BreadcrumbItem>
+                          {index === breadcrumbs.length - 1 ? (
+                            <BreadcrumbPage className="text-primary font-medium">
+                              {crumb.label}
+                            </BreadcrumbPage>
+                          ) : (
+                            <BreadcrumbLink asChild>
+                              <Link href={crumb.href} className="text-gray-600 hover:text-primary">
+                                {crumb.label}
+                              </Link>
+                            </BreadcrumbLink>
+                          )}
+                        </BreadcrumbItem>
+                      </div>
+                    ))}
+                  </BreadcrumbList>
+                </Breadcrumb>
+              </div>
             </div>
+            <main className="flex-1 overflow-y-auto px-4 md:px-6 ">
+              {children}
+            </main>
           </div>
-
-          <div className="p-4">
-            {children}
-          </div>
-        </main>
-
-        {!contextualNav && <div className="flex-shrink-0 h-16" />}
-      </div>
+        </SidebarInset>
+      </SidebarProvider>
     </>
   )
 }
