@@ -116,7 +116,7 @@ export const sendMagicLinkEmail = action({
   },
   handler: async (ctx, args) => {
     try {
-      const baseUrl = process.env.CONVEX_SITE_URL || process.env.NEXT_PUBLIC_CONVEX_URL || "http://localhost:3000";
+      const baseUrl = process.env.FRONTEND_SITE_URL || "http://localhost:3000";
       let magicLinkUrl: string;
       let subject: string;
 
@@ -168,7 +168,7 @@ export const sendAccountApprovedEmail = action({
   },
   handler: async (ctx, args) => {
     try {
-      const dashboardUrl = `${process.env.CONVEX_SITE_URL || 'http://localhost:3000'}/${args.role === 'school_admin' ? 'school' : args.role}/dashboard`;
+      const dashboardUrl = `${process.env.FRONTEND_SITE_URL || 'http://localhost:3000'}/${args.role === 'school_admin' ? 'school' : args.role}/dashboard`;
       const html = getAccountApprovedEmailTemplate(args.name, args.role, dashboardUrl);
 
       const emailData: EmailQueue = {
@@ -197,7 +197,7 @@ export const sendPasswordResetEmail = action({
   },
   handler: async (ctx, args) => {
     try {
-      const resetUrl = `${process.env.CONVEX_SITE_URL || 'http://localhost:3000'}/auth/reset-password?token=${args.token}`;
+      const resetUrl = `${process.env.FRONTEND_SITE_URL || 'http://localhost:3000'}/auth/reset-password?token=${args.token}`;
       const html = getPasswordResetEmailTemplate(resetUrl);
 
       const emailData: EmailQueue = {
@@ -255,7 +255,7 @@ export const sendBulkNotificationEmails = action({
 });
 
 function getMagicLinkEmailTemplate(purpose: string, magicLinkUrl: string): string {
-  const baseUrl = process.env.CONVEX_SITE_URL || 'http://localhost:3000';
+  const baseUrl = process.env.FRONTEND_SITE_URL || 'http://localhost:3000';
 
   const configs = {
     login: {
@@ -335,7 +335,7 @@ function getMagicLinkEmailTemplate(purpose: string, magicLinkUrl: string): strin
 }
 
 function getWelcomeEmailTemplate(name: string, role: string): string {
-  const baseUrl = process.env.CONVEX_SITE_URL || 'http://localhost:3000';
+  const baseUrl = process.env.FRONTEND_SITE_URL || 'http://localhost:3000';
   const dashboardUrl = `${baseUrl}/${role === 'school_admin' ? 'school' : role}/dashboard`;
 
   const roleMessages = {
@@ -439,7 +439,7 @@ function getWelcomeEmailTemplate(name: string, role: string): string {
 }
 
 function getAccountApprovedEmailTemplate(name: string, role: string, dashboardUrl: string): string {
-  const baseUrl = process.env.CONVEX_SITE_URL || 'http://localhost:3000';
+  const baseUrl = process.env.FRONTEND_SITE_URL || 'http://localhost:3000';
 
   return `
     <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif; background-color: #f8fafc;">
@@ -496,7 +496,7 @@ function getAccountApprovedEmailTemplate(name: string, role: string, dashboardUr
 }
 
 function getPasswordResetEmailTemplate(resetUrl: string): string {
-  const baseUrl = process.env.CONVEX_SITE_URL || 'http://localhost:3000';
+  const baseUrl = process.env.FRONTEND_SITE_URL || 'http://localhost:3000';
 
   return `
     <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif; background-color: #f8fafc;">

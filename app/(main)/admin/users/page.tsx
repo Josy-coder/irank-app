@@ -3,12 +3,19 @@
 import React, { useState, useEffect, useMemo } from "react"
 import { useQuery, useMutation } from "convex/react"
 import { api } from "@/convex/_generated/api"
-import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,28 +27,19 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
   Download,
   Upload,
-  MoreHorizontal,
-  Eye,
-  Edit,
-  Trash2,
   UserPlus,
-  Mail,
-  Phone,
-  Building,
-  CheckCircle,
-  XCircle,
-  Users,
-  ChevronLeft, ChevronRight
+  Ban,
+  Trash2,
+  Copy,
+  Check,
+  Link,
+  ChevronLeft,
+  ChevronRight,
+  UserCheck,
+  Share,
+  UserX, BadgeCheck, CircleMinus, CircleCheck
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth"
 import { useDebounce } from "@/hooks/use-debounce"
@@ -59,24 +57,160 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { Id } from "@/convex/_generated/dataModel"
 import { CardLayoutWithToolbar } from "@/components/shared/card-layout-with-toolbar";
+import { AddUserDialog } from "@/components/users/add-user-dialog"
+import { ImportUsersDialog } from "@/components/users/import-users-dialog"
+import { ExportUsersDialog } from "@/components/users/export-users-dialog"
+import { formatDistanceToNow } from "date-fns"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 
 function UserTableSkeleton() {
   return (
-    <div className="space-y-4 p-4">
-      {[1, 2, 3, 4, 5].map((i) => (
-        <div key={i} className="flex items-center gap-4 p-4">
-          <Skeleton className="h-4 w-4" />
-          <Skeleton className="h-10 w-10 rounded-full" />
-          <div className="space-y-2 flex-1">
-            <Skeleton className="h-4 w-32" />
-            <Skeleton className="h-3 w-48" />
-          </div>
-          <Skeleton className="h-6 w-20" />
-          <Skeleton className="h-8 w-20" />
-          <Skeleton className="h-8 w-8" />
-        </div>
-      ))}
+    <div className="w-full overflow-x-auto">
+      <Table className="min-w-full table-auto">
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-10">
+              <Skeleton className="h-4 w-4" />
+            </TableHead>
+            <TableHead>Full Name</TableHead>
+            <TableHead>Email</TableHead>
+            <TableHead>Phone</TableHead>
+            <TableHead>Role</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Verified</TableHead>
+            <TableHead>Last Login</TableHead>
+            <TableHead className="w-32"></TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {[1, 2, 3, 4, 5].map((i) => (
+            <TableRow key={i}>
+              <TableCell>
+                <Skeleton className="h-4 w-4" />
+              </TableCell>
+              <TableCell>
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-10 w-10 rounded-full" />
+                  <Skeleton className="h-4 w-full max-w-[120px]" />
+                </div>
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-full max-w-[160px]" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-full max-w-[120px]" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-6 w-full max-w-[80px]" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-6 w-full max-w-[70px]" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-6 w-full max-w-[70px]" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-full max-w-[100px]" />
+              </TableCell>
+              <TableCell>
+                <div className="flex gap-2">
+                  <Skeleton className="h-8 w-10" />
+                  <Skeleton className="h-8 w-10" />
+                  <Skeleton className="h-8 w-10" />
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+
+      </Table>
     </div>
+  );
+}
+
+function CopyableField({ value, type = "text" }: { value: string, type?: "email" | "phone" | "text" }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (error) {
+      toast.error("Failed to copy")
+    }
+  }
+
+  const handleClick = () => {
+    if (type === "email") {
+      window.location.href = `mailto:${value}`
+    } else if (type === "phone") {
+      window.location.href = `tel:${value}`
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2 group">
+      <span
+        className={cn(
+          "truncate",
+          (type === "email" || type === "phone") && "cursor-pointer hover:text-primary hover:underline"
+        )}
+        onClick={handleClick}
+      >
+        {value}
+      </span>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+        onClick={handleCopy}
+      >
+        {copied ? (
+          <Check className="h-3 w-3 text-green-600" />
+        ) : (
+          <Copy className="h-3 w-3" />
+        )}
+      </Button>
+    </div>
+  )
+}
+
+function UserActionButton({
+                            icon: Icon,
+                            label,
+                            onClick,
+                            variant = "ghost",
+                            disabled = false
+                          }: {
+  icon: React.ElementType
+  label: string
+  onClick: () => void
+  variant?: "ghost" | "destructive"
+  disabled?: boolean
+}) {
+  return (
+    <Button
+      variant={"ghost"}
+      size="sm"
+      className="h-auto p-1 flex flex-col items-center gap-1"
+      onClick={onClick}
+      disabled={disabled}
+    >
+      <Icon className={cn("h-1 w-1",variant === "destructive" ? "text-red-500" : "text-foreground")} />
+      <span
+        className={cn(
+          "text-[10px]",
+          variant === "destructive" ? "text-red-500" : "text-muted-foreground"
+        )}
+      >
+        {label}
+      </span>
+    </Button>
   )
 }
 
@@ -92,10 +226,16 @@ export default function UsersPage() {
   const [userToDelete, setUserToDelete] = useState<string | null>(null)
   const [showBulkDialog, setShowBulkDialog] = useState(false)
   const [bulkAction, setBulkAction] = useState<string>("")
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
+  const [showAddDialog, setShowAddDialog] = useState(false)
+  const [showImportDialog, setShowImportDialog] = useState(false)
+  const [showExportDialog, setShowExportDialog] = useState(false)
+  const [showResetLinksDialog, setShowResetLinksDialog] = useState(false)
+  const [resetLinks, setResetLinks] = useState<Array<{name: string, email: string, link: string}>>([])
+  const [copiedResetLinks, setCopiedResetLinks] = useState<Set<number>>(new Set())
 
   const debouncedSearch = useDebounce(searchTerm, 300)
 
-  // Query users data
   const usersData = useQuery(
     api.functions.admin.users.getUsers,
     token ? {
@@ -109,33 +249,29 @@ export default function UsersPage() {
     } : "skip"
   )
 
-  // Mutations
   const updateUserStatus = useMutation(api.functions.admin.users.updateUserStatus)
   const verifyUser = useMutation(api.functions.admin.users.verifyUser)
   const deleteUser = useMutation(api.functions.admin.users.deleteUser)
   const bulkUpdateUsers = useMutation(api.functions.admin.users.bulkUpdateUsers)
+  const generateResetLink = useMutation(api.functions.admin.users.generateResetLink)
+  const getUrl = useMutation(api.files.getUrl)
 
-  // Reset page when filters change
   useEffect(() => {
     setPage(1)
   }, [debouncedSearch, roleFilter, statusFilter, verificationFilter])
 
-  // Filter users based on multi-select filters
   const filteredUsers = useMemo(() => {
     if (!usersData?.users) return []
 
     return usersData.users.filter(user => {
-      // Role filter
       if (roleFilter.length > 0 && !roleFilter.includes(user.role)) {
         return false
       }
 
-      // Status filter
       if (statusFilter.length > 0 && !statusFilter.includes(user.status)) {
         return false
       }
 
-      // Verification filter
       if (verificationFilter.length > 0) {
         const userVerificationStatus = user.verified ? "verified" : "pending"
         if (!verificationFilter.includes(userVerificationStatus)) {
@@ -147,7 +283,21 @@ export default function UsersPage() {
     })
   }, [usersData?.users, roleFilter, statusFilter, verificationFilter])
 
-  // Handler functions
+  useEffect(() => {
+    async function fetchImageUrl() {
+      if (user?.profile_image) {
+        try {
+          const url = await getUrl({ storageId: user.profile_image as Id<"_storage"> })
+          setImageUrl(url)
+        } catch (error) {
+          console.error("Failed to fetch profile image URL:", error)
+        }
+      }
+    }
+
+    fetchImageUrl()
+  }, [user?.profile_image, getUrl])
+
   const handleSearchChange = (value: string) => {
     setSearchTerm(value)
   }
@@ -179,7 +329,6 @@ export default function UsersPage() {
   }
 
   const handleStatusChange = async (userId: Id<"users">, status: "active" | "inactive" | "banned") => {
-    // Prevent user from changing their own status
     if (user?.id === userId) {
       toast.error("You cannot change your own status")
       return
@@ -254,12 +403,108 @@ export default function UsersPage() {
     }
   }
 
+  const handleSingleResetLink = async (userId: Id<"users">, userName: string, userEmail: string) => {
+    try {
+      const result = await generateResetLink({
+        admin_token: token!,
+        user_id: userId,
+      })
+
+      if (result.success) {
+        setResetLinks([{
+          name: userName,
+          email: userEmail,
+          link: result.resetLink
+        }])
+        setShowResetLinksDialog(true)
+        toast.success("Reset link generated successfully")
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Failed to generate reset link")
+    }
+  }
+
+  const handleBulkResetLinks = async () => {
+    if (selectedUsers.size === 0) return
+
+    try {
+      const links: Array<{name: string, email: string, link: string}> = []
+
+      for (const userId of Array.from(selectedUsers)) {
+        const user = users.find(u => u._id === userId)
+        if (user && user.verified && user.status === "inactive") {
+          try {
+            const result = await generateResetLink({
+              admin_token: token!,
+              user_id: userId as Id<"users">,
+            })
+
+            if (result.success) {
+              links.push({
+                name: user.name,
+                email: user.email,
+                link: result.resetLink
+              })
+            }
+          } catch (error) {
+            console.error(`Failed to generate link for ${user.name}:`, error)
+          }
+        }
+      }
+
+      if (links.length > 0) {
+        setResetLinks(links)
+        setShowResetLinksDialog(true)
+        toast.success(`Generated ${links.length} reset links`)
+      } else {
+        toast.error("No eligible users selected (must be verified and inactive)")
+      }
+
+      setSelectedUsers(new Set())
+    } catch (error: any) {
+      toast.error("Failed to generate reset links")
+    }
+  }
+
+  const handleCopyResetLink = async (link: string, index: number) => {
+    try {
+      await navigator.clipboard.writeText(link)
+      setCopiedResetLinks(prev => {
+        const newSet = new Set(Array.from(prev));
+        newSet.add(index);
+        return newSet
+      })
+      setTimeout(() => {
+        setCopiedResetLinks(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(index)
+          return newSet
+        })
+      }, 2000)
+      toast.success("Reset link copied!")
+    } catch (error) {
+      toast.error("Failed to copy link")
+    }
+  }
+
+  const handleCopyAllResetLinks = async () => {
+    try {
+      const allLinks = resetLinks.map(item =>
+        `${item.name} (${item.email}): ${item.link}`
+      ).join('\n\n')
+
+      await navigator.clipboard.writeText(allLinks)
+      toast.success("All reset links copied!")
+    } catch (error) {
+      toast.error("Failed to copy links")
+    }
+  }
+
   const isLoading = usersData === undefined
   const users = filteredUsers || []
   const totalCount = usersData?.totalCount || 0
   const hasMore = usersData?.hasMore || false
 
-  // Toolbar configuration
   const filters = [
     <MultiSelectFilter
       key="role"
@@ -280,7 +525,7 @@ export default function UsersPage() {
     />,
     <MultiSelectFilter
       key="verification"
-      title="Verification"
+      title="Valid"
       options={USER_VERIFICATION_OPTIONS}
       selected={verificationFilter}
       onSelectionChange={setVerificationFilter}
@@ -288,24 +533,41 @@ export default function UsersPage() {
   ]
 
   const actions = [
-    <Button key="import" variant="outline" size="sm" className="h-8 border-white/20">
+    <Button
+      key="import"
+      variant="outline"
+      size="sm"
+      className="h-8 border-white/20"
+      onClick={() => setShowImportDialog(true)}
+    >
       <Upload className="h-4 w-4" />
-      Import
+      <span className="hidden md:block">Import</span>
     </Button>,
-    <Button key="export" variant="outline" size="sm" className="h-8 border-white/20">
+    <Button
+      key="export"
+      variant="outline"
+      size="sm"
+      className="h-8 border-white/20"
+      onClick={() => setShowExportDialog(true)}
+    >
       <Download className="h-4 w-4" />
-      Export
+      <span className="hidden md:block">Export</span>
     </Button>,
-    <Button key="add" size="sm" className="h-8 hover:bg-white hover:text-foreground">
+    <Button
+      key="add"
+      size="sm"
+      className="h-8 hover:bg-white hover:text-foreground"
+      onClick={() => setShowAddDialog(true)}
+    >
       <UserPlus className="h-4 w-4" />
-      Add User
+      <span className="hidden md:block">Add User</span>
     </Button>
   ]
 
   const bulkActions = [
     {
       label: "Verify Users",
-      icon: <CheckCircle className="h-4 w-4" />,
+      icon: <BadgeCheck className="h-4 w-4" />,
       onClick: () => {
         setBulkAction("verify")
         setShowBulkDialog(true)
@@ -313,7 +575,7 @@ export default function UsersPage() {
     },
     {
       label: "Unverify Users",
-      icon: <XCircle className="h-4 w-4" />,
+      icon: <CircleMinus className="h-4 w-4" />,
       onClick: () => {
         setBulkAction("unverify")
         setShowBulkDialog(true)
@@ -321,28 +583,25 @@ export default function UsersPage() {
     },
     {
       label: "Activate Users",
-      icon: <CheckCircle className="h-4 w-4" />,
+      icon: <CircleCheck className="h-4 w-4" />,
       onClick: () => {
         setBulkAction("activate")
         setShowBulkDialog(true)
       }
     },
     {
-      label: "Deactivate Users",
-      icon: <XCircle className="h-4 w-4" />,
-      onClick: () => {
-        setBulkAction("deactivate")
-        setShowBulkDialog(true)
-      }
-    },
-    {
       label: "Ban Users",
-      icon: <Trash2 className="h-4 w-4" />,
+      icon: <Ban className="h-4 w-4" />,
       onClick: () => {
         setBulkAction("ban")
         setShowBulkDialog(true)
       },
       variant: "destructive" as const
+    },
+    {
+      label: "Generate Reset Links",
+      icon: <Share className="h-4 w-4" />,
+      onClick: () => handleBulkResetLinks()
     }
   ]
 
@@ -362,216 +621,225 @@ export default function UsersPage() {
 
   return (
     <CardLayoutWithToolbar toolbar={toolbar} description="Manage platform users and their permissions">
-        <div className="w-full bg-background">
-          {isLoading ? (
-            <UserTableSkeleton />
-          ) : (
-            <>
-              {/* Header with selection and pagination */}
-              <div className="p-4 border-b">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-4">
-                    <Checkbox
-                      checked={selectedUsers.size === users.length && users.length > 0}
-                      onCheckedChange={handleSelectAll}
-                    />
-                    <span className="text-sm text-muted-foreground">
-                      {isLoading ? "Loading..." : `${users.length} of ${totalCount} users`}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Users List */}
-              <div className="p-4">
-                {users.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12">
-                    <Users className="h-12 w-12 text-muted-foreground mb-4" />
-                    <h3 className="text-lg font-medium mb-2">No users found</h3>
-                    <p className="text-muted-foreground text-center max-w-sm">
-                      {searchTerm || roleFilter.length > 0 || statusFilter.length > 0 || verificationFilter.length > 0
-                        ? "Try adjusting your search criteria or filters"
-                        : "Get started by adding your first user to the platform"
-                      }
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {users.map((user) => {
-                      const RoleIcon = getRoleIcon(user.role)
+      <div className="w-full bg-background">
+        {isLoading ? (
+          <UserTableSkeleton />
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">
+                      <Checkbox
+                        checked={selectedUsers.size === users.length && users.length > 0}
+                        onCheckedChange={handleSelectAll}
+                      />
+                    </TableHead>
+                    <TableHead>Full Name</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Verified</TableHead>
+                    <TableHead className="hidden lg:table-cell">Last Login</TableHead>
+                    <TableHead className="w-32"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {users.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center py-12">
+                        <div className="flex flex-col items-center justify-center">
+                          <UserX className="h-12 w-12 text-muted-foreground mb-4" />
+                          <h3 className="text-lg font-medium mb-2">No users found</h3>
+                          <p className="text-muted-foreground text-center max-w-sm">
+                            {searchTerm || roleFilter.length > 0 || statusFilter.length > 0 || verificationFilter.length > 0
+                              ? "Try adjusting your search criteria or filters"
+                              : "Get started by adding your first user to the platform"
+                            }
+                          </p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    users.map((currentUser) => {
+                      const RoleIcon = getRoleIcon(currentUser.role)
+                      const isCurrentUser = currentUser._id === user?.id
                       return (
-                        <Card key={user._id} className="p-4">
-                          <div className="flex items-center gap-4">
+                        <TableRow key={currentUser._id}>
+                          <TableCell>
                             <Checkbox
-                              checked={selectedUsers.has(user._id)}
+                              checked={selectedUsers.has(currentUser._id)}
                               onCheckedChange={(checked) =>
-                                handleSelectUser(user._id, checked as boolean)
+                                handleSelectUser(currentUser._id, checked as boolean)
                               }
                             />
-
-                            <Avatar className="h-10 w-10">
-                              <AvatarImage src={user.profile_image || undefined} alt={user.name} />
-                              <AvatarFallback className="text-sm">
-                                {user.name.split(' ').map(n => n[0]).join('').toUpperCase()}
-                              </AvatarFallback>
-                            </Avatar>
-
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <h3 className="font-medium truncate">{user.name}</h3>
-                                <Badge variant="secondary" className={getRoleColor(user.role)}>
-                                  <div className="flex items-center gap-1">
-                                    <RoleIcon className="h-4 w-4" />
-                                    <span className="capitalize">
-                                      {user.role.replace('_', ' ')}
-                                    </span>
-                                  </div>
-                                </Badge>
-                              </div>
-                              <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                                <div className="flex items-center gap-1">
-                                  <Mail className="h-3 w-3" />
-                                  {user.email}
-                                </div>
-                                {user.phone && (
-                                  <div className="flex items-center gap-1">
-                                    <Phone className="h-3 w-3" />
-                                    {user.phone}
-                                  </div>
-                                )}
-                                {user.school && (
-                                  <div className="flex items-center gap-1">
-                                    <Building className="h-3 w-3" />
-                                    {user.school.name}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              <Badge variant="secondary" className={getStatusColor(user.status)}>
-                                {user.status}
-                              </Badge>
-
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleVerifyUser(user._id, !user.verified)}
-                                className={cn(
-                                  "h-8 px-2",
-                                  user.verified
-                                    ? "text-green-600 hover:text-green-700"
-                                    : "text-orange-600 hover:text-orange-700"
-                                )}
-                              >
-                                {user.verified ? (
-                                  <>
-                                    <CheckCircle className="h-4 w-4 mr-1" />
-                                    <span className="text-xs">Verified</span>
-                                  </>
+                          </TableCell>
+                          <TableCell >
+                            <div className="flex items-start gap-4">
+                              <Avatar className="w-12 h-12 mt-1 shrink-0">
+                                {currentUser.profile_image ? (
+                                  <AvatarImage src={imageUrl || ""} alt={currentUser.name} />
                                 ) : (
-                                  <>
-                                    <XCircle className="h-4 w-4 mr-1" />
-                                    <span className="text-xs">Pending</span>
-                                  </>
+                                  <AvatarFallback className="bg-primary text-white">
+                                    {currentUser.name.charAt(0).toUpperCase()}
+                                  </AvatarFallback>
                                 )}
-                              </Button>
+                              </Avatar>
+
+                              <div className="flex flex-col gap-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                  <Badge variant="secondary" className={`w-fit ${getRoleColor(currentUser.role)}`}>
+                                    <div className="flex items-center gap-1">
+                                      <RoleIcon className="h-4 w-4" />
+                                      <span className="capitalize">{currentUser.role.replace('_', ' ')}</span>
+                                    </div>
+                                  </Badge>
+
+                                  {(currentUser.role === "student" || currentUser.role === "school_admin") && currentUser.school && (
+                                    <Badge variant="default" className="bg-primary text-primary-foreground">
+                                      <div className="flex items-center gap-1">
+                                        <span className="text-xs truncate max-w-[150px]" title={currentUser.school.name}>
+                                          {currentUser.school.name}
+                                        </span>
+                                      </div>
+                                    </Badge>
+                                  )}
+                                </div>
+
+                                <span className="font-medium truncate max-w-[250px]">
+        {currentUser.name}
+      </span>
+
+                                <CopyableField value={currentUser.email} type="email"/>
+
+                                {currentUser.phone ? (
+                                  <CopyableField value={currentUser.phone} type="phone" />
+                                ) : (
+                                  <span className="text-muted-foreground">-</span>
+                                )}
+                              </div>
                             </div>
+                          </TableCell>
 
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                <DropdownMenuItem>
-                                  <Eye className="h-4 w-4 mr-2" />
-                                  View Details
-                                </DropdownMenuItem>
-                                <DropdownMenuItem>
-                                  <Edit className="h-4 w-4 mr-2" />
-                                  Edit User
-                                </DropdownMenuItem>
-                                {user._id !== user?._id && (
-                                  <>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem
-                                      onClick={() => handleStatusChange(user._id, "active")}
-                                      disabled={user.status === "active"}
-                                    >
-                                      <CheckCircle className="h-4 w-4 mr-2" />
-                                      Activate
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      onClick={() => handleStatusChange(user._id, "inactive")}
-                                      disabled={user.status === "inactive"}
-                                    >
-                                      <XCircle className="h-4 w-4 mr-2" />
-                                      Deactivate
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      onClick={() => handleStatusChange(user._id, "banned")}
-                                      disabled={user.status === "banned"}
-                                      className="text-red-600"
-                                    >
-                                      <Trash2 className="h-4 w-4 mr-2" />
-                                      Ban User
-                                    </DropdownMenuItem>
-                                  </>
-                                )}
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setUserToDelete(user._id)
-                                    setShowDeleteDialog(true)
-                                  }}
-                                  className="text-red-600"
-                                >
-                                  <Trash2 className="h-4 w-4 mr-2" />
-                                  Delete User
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </Card>
+                          <TableCell>
+                            <Badge variant="secondary" className={getStatusColor(currentUser.status)}>
+                              {currentUser.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant="secondary"
+                              className={currentUser.verified ? "text-green-600 bg-green-100" : "text-orange-600 bg-orange-100"}
+                            >
+                              {currentUser.verified ? "Verified" : "Pending"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="hidden lg:table-cell">
+                            {currentUser.last_login_at ? (
+                              <span className="text-sm text-muted-foreground">
+                                {formatDistanceToNow(new Date(currentUser.last_login_at), { addSuffix: true })}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">Never</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              {currentUser.verified ? (
+                                <UserActionButton
+                                  icon={CircleMinus}
+                                  label="Unverify"
+                                  onClick={() => handleVerifyUser(currentUser._id, false)}
+                                  disabled={isCurrentUser}
+                                />
+                              ) : (
+                                <UserActionButton
+                                  icon={BadgeCheck}
+                                  label="Verify"
+                                  onClick={() => handleVerifyUser(currentUser._id, true)}
+                                  disabled={isCurrentUser}
+                                />
+                              )}
+
+                              {currentUser.status === "active" ? (
+                                <UserActionButton
+                                  icon={Ban}
+                                  label="Ban"
+                                  onClick={() => handleStatusChange(currentUser._id, "banned")}
+                                  disabled={isCurrentUser}
+                                />
+                              ) : (
+                                <UserActionButton
+                                  icon={UserCheck}
+                                  label="Activate"
+                                  onClick={() => handleStatusChange(currentUser._id, "active")}
+                                  disabled={isCurrentUser}
+                                />
+                              )}
+
+                              {currentUser.verified && currentUser.status === "inactive" && (
+                                <UserActionButton
+                                  icon={Link}
+                                  label="Reset Link"
+                                  onClick={() => handleSingleResetLink(currentUser._id, currentUser.name, currentUser.email)}
+                                  disabled={isCurrentUser}
+                                />
+                              )}
+
+                              <UserActionButton
+                                icon={Trash2}
+                                label="Delete"
+                                onClick={() => {
+                                  setUserToDelete(currentUser._id)
+                                  setShowDeleteDialog(true)
+                                }}
+                                variant="destructive"
+                                disabled={isCurrentUser}
+                              />
+                            </div>
+                          </TableCell>
+                        </TableRow>
                       )
-                    })}
-                  </div>
-                )}
-                <div className="flex items-center justify-center gap-4 space-x-4 mt-6">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => setPage(Math.max(1, page - 1))}
-                    disabled={page === 1 || isLoading}
-                    className="h-8 w-24"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    <span>Previous</span>
-                  </Button>
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
 
-                  <span className="text-sm text-foreground space-x-2">
-                    <span>Page </span>
-                    <span className="font-medium text-foreground">{page}</span>
+            <div className="flex items-center justify-center gap-4 space-x-4 mt-6 p-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage(Math.max(1, page - 1))}
+                disabled={page === 1 || isLoading}
+                className="h-8"
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Previous
+              </Button>
+
+              <span className="text-sm text-foreground">
+                {totalCount > 0 && (
+                  <span className="text-muted-foreground">
+                    {users.length} of {totalCount} users
                   </span>
+                )}
+              </span>
 
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => setPage(page + 1)}
-                    disabled={!hasMore || isLoading}
-                    className="h-8 w-24"
-                  >
-                    <span>Next</span>
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage(page + 1)}
+                disabled={!hasMore || isLoading}
+                className="h-8"
+              >
+                Next
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -609,6 +877,87 @@ export default function UsersPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AddUserDialog
+        open={showAddDialog}
+        onOpenChange={setShowAddDialog}
+        />
+
+      <ImportUsersDialog
+        open={showImportDialog}
+        onOpenChange={setShowImportDialog}
+        />
+
+      <ExportUsersDialog
+        open={showExportDialog}
+        onOpenChange={setShowExportDialog}
+      />
+
+      <Dialog open={showResetLinksDialog} onOpenChange={setShowResetLinksDialog}>
+        <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Reset Password Links</DialogTitle>
+            <DialogDescription>
+              Share these links with users so they can set their passwords. Links expire in 24 hours.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+          <span className="text-sm text-muted-foreground">
+            {resetLinks.length} reset link{resetLinks.length > 1 ? 's' : ''} generated
+          </span>
+              <Button variant="outline" size="sm" onClick={handleCopyAllResetLinks}>
+                <Copy className="h-4 w-4 mr-2" />
+                Copy All
+              </Button>
+            </div>
+
+            <div className="space-y-3">
+              {resetLinks.map((item, index) => (
+                <div key={index} className="border rounded-lg p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-medium">{item.name}</h4>
+                      <p className="text-sm text-muted-foreground">{item.email}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm">Reset Password Link</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={item.link}
+                        readOnly
+                        className="flex-1 text-sm"
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleCopyResetLink(item.link, index)}
+                      >
+                        {copiedResetLinks.has(index) ? (
+                          <Check className="h-4 w-4 text-green-600" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      This link will expire in 24 hours. The user should use this to set their new password.
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <Button onClick={() => setShowResetLinksDialog(false)}>Done</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
     </CardLayoutWithToolbar>
   )
 }

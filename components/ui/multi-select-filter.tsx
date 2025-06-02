@@ -47,11 +47,6 @@ export function MultiSelectFilter({
         <Button variant="outline" size="sm" className="h-8 bg-primary text-white border-dashed ">
           <CirclePlus className="h-4 w-4" />
           {displayText}
-          {selected.length > 0 && (
-            <div className="ml-2 flex h-4 w-4 items-center justify-center rounded-sm bg-primary text-primary-foreground text-xs">
-              {selected.length}
-            </div>
-          )}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-48 p-0" align="start">

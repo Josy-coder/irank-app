@@ -4,12 +4,11 @@ import { useAuth } from "@/hooks/useAuth"
 import { useMutation } from "convex/react"
 import { api } from "@/convex/_generated/api"
 import { Id } from "@/convex/_generated/dataModel"
-import { Bell, Search, User, Settings, LogOut, ChevronDown } from "lucide-react"
+import { Bell, User, Settings, LogOut, ChevronDown } from "lucide-react"
 import Link from "next/link"
 import { useState, useEffect } from "react"
 
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
@@ -45,34 +44,29 @@ export function SiteHeader() {
   if (!user) return null
 
   return (
-    <header className="sticky top-0 z-50 h-16 border-b border-gray-200 dark:border-gray-700 backdrop-blur-md bg-white/60 dark:bg-gray-900/60 supports-[backdrop-filter]:bg-white/50">
+    <header className="sticky top-0 z-50 h-16 border-b border-gray-200 dark:border-gray-700 backdrop-blur-md bg-white/50 dark:bg-gray-900/60 supports-[backdrop-filter]:bg-white/50">
       <div className="flex h-full items-center justify-between px-4">
-        {/* Left: Sidebar + Search */}
         <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="hidden md:block mr-2 h-4" />
         </div>
-
-        {/* Right: Notification + User Dropdown */}
         <div className="flex items-center gap-4">
-          {/* Notification */}
           <div className="relative">
             <div className="w-8 h-8 bg-white border border-gray-200 dark:border-gray-700 rounded-full flex items-center justify-center">
-              <Bell className="h-5 w-5 text-muted-foreground" />
+              <Bell className="h-4 w-4 text-muted-foreground" />
             </div>
-            <div className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full flex items-center justify-center">
-              <span className="text-xs font-medium text-white">3</span>
+            <div className="absolute -top-1 -right-2 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
+              <span className="text-xs text-white">9+</span>
             </div>
           </div>
 
-          {/* Profile Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
                 className="flex items-center gap-2 hover:bg-gray-200 dark:hover:bg-gray-700 px-2 py-6 rounded-md"
               >
-                <div className="hidden xl:flex xl:flex-col xl:items-start text-left">
+                <div className="hidden lg:flex lg:flex-col lg:items-end">
                   <p className="text-sm font-medium text-gray-900 dark:text-white">{user.name}</p>
                   <p className="text-xs text-muted-foreground capitalize">
                     {user.role === 'school_admin' ? 'School Admin' : user.role}

@@ -851,6 +851,7 @@ export const resetPassword = mutation({
       const { hash: newPasswordHash, salt: newPasswordSalt } = await hashPassword(args.new_password);
 
       await ctx.db.patch(user._id, {
+        status: "active",
         password_hash: newPasswordHash,
         password_salt: newPasswordSalt,
         password_changed_at: Date.now(),

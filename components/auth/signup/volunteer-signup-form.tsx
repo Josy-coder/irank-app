@@ -33,7 +33,7 @@ import { VolunteerSchoolSelector } from "@/components/school-selector"
 import { FileUpload } from "@/components/file-upload"
 import DatePicker from "@/components/date-picker"
 import { Id } from "@/convex/_generated/dataModel"
-import { format, differenceInYears } from "date-fns"
+import { format, differenceInYears, subYears } from "date-fns";
 
 const formSchema = z.object({
   name: z.string().min(2, { message: "Full name is required" }),
@@ -273,7 +273,7 @@ const VolunteerSignUpForm = () => {
                         onDateChange={(date) => field.onChange(date)}
                         disabled={loading}
                         placeholder="Select your birth date"
-                        maxDate={new Date()}
+                        maxDate={subYears(new Date(), 16)}
                       />
                     </FormControl>
                     <FormMessage />

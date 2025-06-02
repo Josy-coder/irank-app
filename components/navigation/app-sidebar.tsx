@@ -13,8 +13,8 @@ import {
   FilePieChart
 } from "lucide-react"
 
-import { NavMain } from "@/components/dashboard/navigation/nav-main"
-import { NavUser } from "@/components/dashboard/navigation/nav-user"
+import { NavMain } from "@/components/navigation/nav-main"
+import { NavUser } from "@/components/navigation/nav-user"
 import {
   Sidebar,
   SidebarContent,
@@ -46,9 +46,8 @@ const sidebarItems = {
   ],
   admin: [
     { icon: LayoutDashboard, label: "Dashboard", href: "/admin/dashboard" },
-    { icon: Users, label: "Users", href: "/admin/users" },
-    { icon: School, label: "Schools", href: "/admin/schools" },
     { icon: FileBadge2Icon, label: "Tournaments", href: "/admin/tournaments" },
+    { icon: Users, label: "Users", href: "/admin/users" },
     { icon: FilePieChart, label: "Analytics", href: "/admin/analytics" },
   ],
 }
@@ -61,7 +60,6 @@ function AppHeader() {
           size="lg"
           className="cursor-default hover:bg-transparent data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
         >
-          {/* Logo wrapper */}
           <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-white text-sidebar-primary-foreground">
             <Image
               src="/images/logo.png"
@@ -70,8 +68,6 @@ function AppHeader() {
               height={20}
             />
           </div>
-
-          {/* App name (visible on desktop only) */}
           <div className="grid flex-1 text-left text-sm leading-tight ">
             <span className="truncate font-semibold text-white">
               iRankHub

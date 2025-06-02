@@ -187,7 +187,6 @@ export const getSchoolsForAdmin = query({
 
     let filteredQuery;
 
-    // Handle the filtering logic, ignoring "all" values
     const effectiveStatus = args.status && args.status !== "all" ? args.status : undefined;
     const effectiveType = args.type && args.type !== "all" ? args.type : undefined;
 
@@ -230,7 +229,6 @@ export const getSchoolsForAdmin = query({
             creator = await ctx.db.get(school.created_by);
           }
 
-          // Get student count for this school
           const studentCount = await ctx.db
             .query("users")
             .withIndex("by_school_id_role", (q) =>
@@ -239,7 +237,6 @@ export const getSchoolsForAdmin = query({
             .collect()
             .then(users => users.length);
 
-          // Get team count for this school
           const teamCount = await ctx.db
             .query("teams")
             .withIndex("by_school_id", (q) => q.eq("school_id", school._id))
@@ -259,7 +256,6 @@ export const getSchoolsForAdmin = query({
         })
       );
 
-      // Apply additional filters in memory if needed
       let filteredSchools = schoolsWithCreatorsAndCounts;
 
       if (effectiveType) {
@@ -277,10 +273,8 @@ export const getSchoolsForAdmin = query({
         nextPage: paginatedSchools.continueCursor
       };
     } else {
-      // Get all results first
       let allSchools = await filteredQuery.collect();
 
-      // Apply additional filters in memory
       if (effectiveType) {
         allSchools = allSchools.filter(school => school.type === effectiveType);
       }
@@ -291,7 +285,6 @@ export const getSchoolsForAdmin = query({
 
       const totalCount = allSchools.length;
 
-      // Sort and paginate
       const sortedSchools = allSchools.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
       const startIndex = (args.page - 1) * args.limit;
       const endIndex = startIndex + args.limit;
@@ -304,7 +297,6 @@ export const getSchoolsForAdmin = query({
             creator = await ctx.db.get(school.created_by);
           }
 
-          // Get student count for this school
           const studentCount = await ctx.db
             .query("users")
             .withIndex("by_school_id_role", (q) =>
@@ -313,7 +305,6 @@ export const getSchoolsForAdmin = query({
             .collect()
             .then(users => users.length);
 
-          // Get team count for this school
           const teamCount = await ctx.db
             .query("teams")
             .withIndex("by_school_id", (q) => q.eq("school_id", school._id))

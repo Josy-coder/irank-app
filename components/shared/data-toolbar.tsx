@@ -48,7 +48,7 @@ export function DataToolbar({
   return (
     <div className="w-full bg-brown p-4 space-y-4 md:space-y-0 md:flex md:items-center md:justify-between">
       <div className="flex flex-col space-y-4 md:space-y-0 md:flex-row md:items-center md:space-x-4 flex-1">
-        <div className="relative w-full md:w-80">
+        <div className="relative w-full md:w-52">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder={searchPlaceholder}
@@ -71,17 +71,17 @@ export function DataToolbar({
           )}
         </div>
 
-        <div className="flex items-center space-x-2 flex-wrap">
+        <div className="flex items-center space-x-1 flex-wrap">
           {filters}
           {(hasFilters || searchTerm) && (
             <Button
               variant="ghost"
               onClick={onReset}
-              className="h-8 px-3 text-white hover:bg-white/10"
+              className="h-8 px-1 text-white hover:bg-white/10"
               disabled={isLoading}
             >
-              Reset
-              <X className="ml-2 h-4 w-4" />
+             <span className="hidden md:block">Reset</span>
+              <X className="h-4 w-4" />
             </Button>
           )}
         </div>
@@ -90,14 +90,11 @@ export function DataToolbar({
       <div className="flex items-center gap-2">
         {selectedCount > 0 && bulkActions.length > 0 && (
           <div className="flex items-center gap-2 mr-4">
-            <span className="text-sm text-white">
-              {selectedCount} selected
-            </span>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="h-8 border-white/20">
-                  Bulk Actions
-                  <ChevronDown className="h-4 w-4 ml-2" />
+                  {selectedCount > 0 ? `${selectedCount} selected` : 'Actions'}
+                  <ChevronDown className="h-4 w-4 " />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
