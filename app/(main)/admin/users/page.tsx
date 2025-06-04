@@ -342,7 +342,7 @@ export default function UsersPage() {
       })
       toast.success("User status updated successfully")
     } catch (error: any) {
-      toast.error(error.message || "Failed to update user status")
+      toast.error(error.message?.split("Uncaught Error:")[1]?.split(/\.|Called by client/)[0]?.trim() || "Failed to update user status")
     }
   }
 
@@ -649,8 +649,8 @@ export default function UsersPage() {
                       <TableCell colSpan={9} className="text-center py-12">
                         <div className="flex flex-col items-center justify-center">
                           <UserX className="h-12 w-12 text-muted-foreground mb-4" />
-                          <h3 className="text-lg font-medium mb-2">No users found</h3>
-                          <p className="text-muted-foreground text-center max-w-sm">
+                          <h3 className=" font-medium mb-2">No users found</h3>
+                          <p className="text-muted-foreground text-center text-sm max-w-sm">
                             {searchTerm || roleFilter.length > 0 || statusFilter.length > 0 || verificationFilter.length > 0
                               ? "Try adjusting your search criteria or filters"
                               : "Get started by adding your first user to the platform"

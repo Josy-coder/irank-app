@@ -30,7 +30,6 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
   Upload,
-  Save,
   AlertCircle,
   User,
   Mail,
@@ -158,7 +157,7 @@ export default function ProfileForm() {
       toast.success("Profile updated successfully!")
     } catch (error: any) {
       console.error("Profile update error:", error)
-      setError(error.message)
+      setError(error.message?.split("Uncaught Error:")[1]?.split(/\.|Called by client/)[0]?.trim())
       toast.error("Failed to update profile")
     } finally {
       setLoading(false)
@@ -491,7 +490,6 @@ export default function ProfileForm() {
                       </>
                     ) : (
                       <>
-                        <Save className="mr-2 h-4 w-4" />
                         Save Changes
                       </>
                     )}

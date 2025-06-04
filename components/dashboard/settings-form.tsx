@@ -36,7 +36,6 @@ import {
   Key,
   HelpCircle,
   AlertCircle,
-  Save,
   Trash2,
   Loader2,
   Monitor,
@@ -366,7 +365,6 @@ export default function SettingsForm() {
                       </>
                     ) : (
                       <>
-                        <Save className="mr-2 h-4 w-4" />
                         Change Password
                       </>
                     )}

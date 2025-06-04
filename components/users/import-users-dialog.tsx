@@ -17,7 +17,6 @@ import { Badge } from "@/components/ui/badge"
 import {
   Upload,
   Download,
-  FileText,
   CheckCircle,
   XCircle,
   AlertCircle,
@@ -147,7 +146,7 @@ Alice Johnson,alice@example.com,+250781234570,admin,female,,,,,,,,`
           } catch (error: any) {
             results.push({
               success: false,
-              error: error.message,
+              error: error.message?.split("Uncaught Error:")[1]?.split(/\.|Called by client/)[0]?.trim(),
               userData: {
                 name: userData.name,
                 email: userData.email,
@@ -180,7 +179,7 @@ Alice Johnson,alice@example.com,+250781234570,admin,female,,,,,,,,`
       }
 
     } catch (error: any) {
-      toast.error(error.message || "Failed to import users")
+      toast.error(error.message?.split("Uncaught Error:")[1]?.split(/\.|Called by client/)[0]?.trim() || "Failed to import users")
     } finally {
       setLoading(false)
     }
@@ -487,7 +486,7 @@ Alice Johnson,alice@example.com,+250781234570,admin,female,,,,,,,,`
               <Alert>
                 <CheckCircle className="h-4 w-4" />
                 <AlertDescription>
-                  File "{uploadedFile.name}" selected. Ready to import.
+                  File &#34;{uploadedFile.name}&#34; selected. Ready to import.
                 </AlertDescription>
               </Alert>
             )}

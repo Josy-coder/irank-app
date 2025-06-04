@@ -231,7 +231,7 @@ export function AddUserDialog({ open, onOpenChange, onUserAdded }: AddUserDialog
         }
       }
     } catch (error: any) {
-      toast.error(error.message || "Failed to create user")
+      toast.error(error.message?.split("Uncaught Error:")[1]?.split(/\.|Called by client/)[0]?.trim() || "Failed to create user")
     } finally {
       setLoading(false)
     }

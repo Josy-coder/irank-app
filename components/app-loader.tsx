@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes"
 
 const loadingMessages = [
@@ -39,22 +39,25 @@ const loadingMessages = [
 export default function AppLoader() {
   const { theme } = useTheme()
   const [message, setMessage] = useState("Just a moment while we set things up...")
+  const messageRef = useRef(message)
 
   useEffect(() => {
-    const randomMessage = loadingMessages[Math.floor(Math.random() * loadingMessages.length)]
-    setMessage(randomMessage)
+    const firstRandom = loadingMessages[Math.floor(Math.random() * loadingMessages.length)]
+    setMessage(firstRandom)
+    messageRef.current = firstRandom
 
     const interval = setInterval(() => {
       let newMessage
       do {
         newMessage = loadingMessages[Math.floor(Math.random() * loadingMessages.length)]
-      } while (newMessage === message)
+      } while (newMessage === messageRef.current)
 
+      messageRef.current = newMessage
       setMessage(newMessage)
     }, 1000)
 
     return () => clearInterval(interval)
-  }, [message])
+  }, [])
 
   const bgColor = theme === "dark" ? "bg-background" : "bg-gray-100"
   const textColor = theme === "dark" ? "text-gray-200" : "text-gray-800"

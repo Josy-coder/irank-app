@@ -234,7 +234,7 @@ export function ExportUsersDialog({ open, onOpenChange }: ExportUsersDialogProps
       onOpenChange(false)
 
     } catch (error: any) {
-      toast.error(error.message || "Failed to export users")
+      toast.error(error.message?.split("Uncaught Error:")[1]?.split(/\.|Called by client/)[0]?.trim() || "Failed to export users")
     } finally {
       setLoading(false)
       setProgress(0)

@@ -171,9 +171,19 @@ export default defineSchema({
       v.literal("Dreams Mode")
     ),
     description: v.optional(v.string()),
-    geographic_scope: v.optional(v.object({})),
+    geographic_scope: v.optional(
+      v.record(
+        v.string(),
+        v.object({
+          provinces: v.optional(v.array(v.string())),
+          districts: v.optional(v.array(v.string())),
+          sectors: v.optional(v.array(v.string())),
+          cells: v.optional(v.array(v.string())),
+          villages: v.optional(v.array(v.string())),
+        })
+      )
+    ),
     created_by: v.optional(v.id("users")),
-    logo: v.optional(v.id("_storage")),
     status: v.union(
       v.literal("active"),
       v.literal("inactive"),

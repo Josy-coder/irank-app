@@ -191,7 +191,7 @@ export function FileUpload({
           {!file ? (
             <div
               className={`
-            relative border-2 border-dashed rounded-lg p-6 text-center transition-colors
+            relative border-2 border-dashed rounded-lg p-2 text-center transition-colors
             ${dragOver
                 ? "border-primary bg-primary/5"
                 : "border-muted-foreground/25 hover:border-muted-foreground/50"
@@ -202,8 +202,8 @@ export function FileUpload({
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
             >
-                <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground mb-2">
+                <Upload className="h-6 w-6 mx-auto mb-1 text-muted-foreground" />
+                <p className="text-xs text-muted-foreground mb-1">
                     Click to upload or drag and drop
                 </p>
                 <p className="text-xs text-muted-foreground">
@@ -221,9 +221,10 @@ export function FileUpload({
                 />
             </div>
           ) : (
-            <div className="border rounded-lg p-4 flex items-center justify-between">
+            <div className="border rounded-lg p-2 flex items-center justify-between">
                 <div className="flex items-center space-x-3">
                     {file.type.startsWith('image/') ? (
+                      // eslint-disable-next-line jsx-a11y/alt-text
                       <Image className="h-8 w-8 text-blue-500" />
                     ) : (
                       <FileText className="h-8 w-8 text-blue-500" />
