@@ -9,7 +9,7 @@ import { TournamentList } from "@/components/tournaments/tournament-list"
 import { LeagueList } from "@/components/tournaments/league-list"
 import { Id } from "@/convex/_generated/dataModel";
 
-export default function AdminTournamentsPage() {
+export default function VolunteerTournamentsPage() {
   const { token} = useAuth()
   const [selectedLeagueId, setSelectedLeagueId] = useState<Id<"leagues"> | undefined>(undefined);
   const [mobileLeaguesOpen, setMobileLeaguesOpen] = useState(false)
@@ -23,7 +23,7 @@ export default function AdminTournamentsPage() {
     <div className="space-y-6">
       <div>
         <p className="text-muted-foreground">
-          Manage tournaments and leagues across the platform
+          See all tournaments and leagues across the platform
         </p>
       </div>
 
@@ -41,7 +41,7 @@ export default function AdminTournamentsPage() {
             </SheetTrigger>
             <SheetContent side="bottom" className="w-full bg-background p-0">
               <LeagueList
-                userRole="admin"
+                userRole="volunteer"
                 token={token}
                 selectedLeagueId={selectedLeagueId}
                 onLeagueSelect={handleLeagueSelect}
@@ -55,7 +55,7 @@ export default function AdminTournamentsPage() {
           <div className="sticky top-2">
             <div className="h-[calc(100vh-8rem)] overflow-hidden">
               <LeagueList
-                userRole="admin"
+                userRole="volunteer"
                 token={token}
                 selectedLeagueId={selectedLeagueId}
                 onLeagueSelect={handleLeagueSelect}
@@ -67,7 +67,7 @@ export default function AdminTournamentsPage() {
 
         <div className="flex-1 min-w-0">
           <TournamentList
-            userRole="admin"
+            userRole="volunteer"
             token={token}
             selectedLeagueId={selectedLeagueId}
           />
