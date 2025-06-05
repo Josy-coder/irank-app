@@ -20,6 +20,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { AdvancedOfflineBanner } from "@/components/offline-banner";
 
 export function SiteHeader() {
   const { user, signOut } = useAuth()

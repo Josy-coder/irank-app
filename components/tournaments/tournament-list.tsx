@@ -423,7 +423,7 @@ export function TournamentList({ userRole, token, selectedLeagueId, className }:
                     </div>
                   )}
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 4xl:grid-cols-3 gap-4">
                     {tournaments.map((tournament) => {
                       if (tournament.image && !imageUrls[tournament._id]) {
                         getTournamentImage(tournament.image, tournament._id)
@@ -432,8 +432,8 @@ export function TournamentList({ userRole, token, selectedLeagueId, className }:
                       <div
                         key={tournament._id}
                         className={cn(
-                          "border rounded-lg p-6 space-y-4 hover:shadow-md transition-shadow",
-                          selectedTournaments.has(tournament._id) && "ring-2 ring-primary"
+                          "border rounded-lg p-4 space-y-2 hover:shadow-md transition-shadow",
+                          selectedTournaments.has(tournament._id) && "ring-1 ring-primary"
                         )}
                       >
                         <div className="flex items-start gap-2">
@@ -471,13 +471,13 @@ export function TournamentList({ userRole, token, selectedLeagueId, className }:
                           )}
                         </div>
 
-                        <div className="space-y-3">
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <Calendar className="h-4 w-4" />
                             <span>{formatDateRange(tournament.start_date, tournament.end_date)}</span>
                           </div>
 
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             {tournament.is_virtual ? (
                               <>
                                 <Video className="h-4 w-4" />
@@ -493,7 +493,7 @@ export function TournamentList({ userRole, token, selectedLeagueId, className }:
                             )}
                           </div>
 
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <Users className="h-4 w-4" />
                             <span>
                               {tournament.teamCount || 0} teams • {tournament.schoolCount || 0} schools
@@ -501,7 +501,7 @@ export function TournamentList({ userRole, token, selectedLeagueId, className }:
                           </div>
 
                           {tournament.coordinator && (
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
                               <Building className="h-4 w-4" />
                               <span className="truncate" title={tournament.coordinator.name}>
                                 {tournament.coordinator.name}
@@ -509,7 +509,7 @@ export function TournamentList({ userRole, token, selectedLeagueId, className }:
                             </div>
                           )}
                         </div>
-                        <div className="flex items-center justify-between pt-4 border-t">
+                        <div className="flex items-center justify-between pt-2 border-t">
                           {isAdmin && (<>
                               {!tournament.hasTeams && (
                                 <Button

@@ -18,6 +18,7 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
 import React from "react";
+import { InstallPrompt } from "@/components/pwa/install-prompt";
 
 function generateBreadcrumbs(pathname: string, userRole: string) {
   const cleanPathname = pathname.split('?')[0]
@@ -135,7 +136,6 @@ export default function DashboardLayout({
 
   return (
     <>
-      <AdvancedOfflineBanner />
       <SidebarProvider>
         <AppSidebar />
         <SidebarInset>
@@ -181,6 +181,7 @@ export default function DashboardLayout({
           </div>
         </SidebarInset>
       </SidebarProvider>
+      <InstallPrompt />
     </>
   )
 }

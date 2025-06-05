@@ -1,7 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react";
-import { useTheme } from "next-themes"
+import { useEffect, useRef, useState } from "react"
 
 const loadingMessages = [
   "Warming up our debate muscles...",
@@ -37,14 +36,13 @@ const loadingMessages = [
 ]
 
 export default function AppLoader() {
-  const { theme } = useTheme()
   const [message, setMessage] = useState("Just a moment while we set things up...")
   const messageRef = useRef(message)
 
   useEffect(() => {
-    const firstRandom = loadingMessages[Math.floor(Math.random() * loadingMessages.length)]
-    setMessage(firstRandom)
-    messageRef.current = firstRandom
+    const firstMessage = loadingMessages[Math.floor(Math.random() * loadingMessages.length)]
+    setMessage(firstMessage)
+    messageRef.current = firstMessage
 
     const interval = setInterval(() => {
       let newMessage
@@ -54,18 +52,13 @@ export default function AppLoader() {
 
       messageRef.current = newMessage
       setMessage(newMessage)
-    }, 1000)
+    }, 800)
 
     return () => clearInterval(interval)
   }, [])
 
-  const bgColor = theme === "dark" ? "bg-background" : "bg-gray-100"
-  const textColor = theme === "dark" ? "text-gray-200" : "text-gray-800"
-
   return (
-    <div
-      className={`flex flex-col items-center justify-center min-h-screen ${bgColor}`}
-    >
+    <div className="flex flex-col items-center justify-center min-h-screen bg-background">
       <div className="w-48 h-48 relative">
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -135,7 +128,7 @@ export default function AppLoader() {
           </g>
         </svg>
       </div>
-      <p className={`text-md font-semibold mt-4 ${textColor}`}>{message}</p>
+      <p className={`text-md font-semibold mt-4 text-muted-foreground`}>{message}</p>
     </div>
   );
 }
