@@ -19,17 +19,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
   Plus,
   Eye,
   Archive,
   Trash2,
-  MoreVertical,
   ChevronLeft,
   ChevronRight,
   Calendar,
@@ -46,33 +39,8 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { Id } from "@/convex/_generated/dataModel"
 import { CardLayoutWithToolbar } from "@/components/shared/card-layout-with-toolbar"
-import { format, formatDistanceToNow } from "date-fns"
+import { format } from "date-fns"
 import { useRouter } from "next/navigation";
-
-interface Tournament {
-  _id: Id<"tournaments">
-  name: string
-  start_date: number
-  end_date: number
-  location?: string
-  is_virtual: boolean
-  league_id?: Id<"leagues">
-  league?: {
-    name: string
-    type: string
-  }
-  format: string
-  coordinator?: {
-    name: string
-  }
-  status: "draft" | "published" | "inProgress" | "completed" | "cancelled"
-  image?: Id<"_storage">
-  description?: string
-  teamCount?: number
-  schoolCount?: number
-  hasTeams?: boolean
-  _creationTime: number
-}
 
 interface TournamentListProps {
   userRole: "admin" | "school_admin" | "volunteer" | "student"
@@ -200,6 +168,18 @@ export function TournamentList({ userRole, token, selectedLeagueId, className }:
   const archiveTournament = useMutation(api.functions.admin.tournaments.archiveTournament)
   const bulkUpdateTournaments = useMutation(api.functions.admin.tournaments.bulkUpdateTournaments)
   const getUrl = useMutation(api.files.getUrl)
+  const [imageUrls, setImageUrls] = useState<Record<string, string>>({})
+
+
+  const getTournamentImage = async (storageId: Id<"_storage">, tournamentId: string) => {
+    try {
+      const url = await getUrl({ storageId })
+      setImageUrls((prev) => ({ ...prev, [tournamentId]: url || "" }))
+    } catch (err) {
+      console.error("Failed to fetch image for tournament", tournamentId, err)
+    }
+  }
+
 
   const isAdmin = userRole === "admin"
 
@@ -443,8 +423,12 @@ export function TournamentList({ userRole, token, selectedLeagueId, className }:
                     </div>
                   )}
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {tournaments.map((tournament) => (
+                  <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-6">
+                    {tournaments.map((tournament) => {
+                      if (tournament.image && !imageUrls[tournament._id]) {
+                        getTournamentImage(tournament.image, tournament._id)
+                      }
+                      return (
                       <div
                         key={tournament._id}
                         className={cn(
@@ -452,29 +436,19 @@ export function TournamentList({ userRole, token, selectedLeagueId, className }:
                           selectedTournaments.has(tournament._id) && "ring-2 ring-primary"
                         )}
                       >
-                        <div className="flex items-start gap-4">
-                          {isAdmin && (
-                            <Checkbox
-                              checked={selectedTournaments.has(tournament._id)}
-                              onCheckedChange={(checked) =>
-                                handleSelectTournament(tournament._id, checked as boolean)
-                              }
-                              className="mt-1"
-                            />
-                          )}
-
+                        <div className="flex items-start gap-2">
                           <Avatar className="h-16 w-16 rounded-lg">
-                            {tournament.image ? (
-                              <AvatarImage src="" alt={tournament.name} />
+                            {imageUrls[tournament._id] ? (
+                              <AvatarImage src={imageUrls[tournament._id]} alt={tournament.name} />
                             ) : (
                               <AvatarFallback className="bg-primary text-white rounded-lg">
-                                <Trophy className="h-8 w-8" />
+                                <Trophy className="h-6 w-6" />
                               </AvatarFallback>
                             )}
                           </Avatar>
 
-                          <div className="flex-1 min-w-0">
-                            <h3 className="font-semibold text-lg mb-2 line-clamp-2" title={tournament.name}>
+                          <div className="flex-1 min-w-0 max-w-200">
+                            <h3 className="font-semibold mb-2 line-clamp-2 truncate" title={tournament.name}>
                               {tournament.name}
                             </h3>
                             <div className="flex flex-wrap gap-2">
@@ -484,52 +458,16 @@ export function TournamentList({ userRole, token, selectedLeagueId, className }:
                               >
                                 {tournament.status}
                               </Badge>
-                              <Badge variant="outline" className="text-xs">
-                                {tournament.format}
-                              </Badge>
-                              {tournament.league && (
-                                <Badge variant="default" className="text-xs">
-                                  {tournament.league.name}
-                                </Badge>
-                              )}
                             </div>
                           </div>
-
                           {isAdmin && (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                  <MoreVertical className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => handleViewTournament(tournament._id)}>
-                                  <Eye className="h-4 w-4 mr-2" />
-                                  View Details
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setTournamentToArchive(tournament._id)
-                                    setShowArchiveDialog(true)
-                                  }}
-                                >
-                                  <Archive className="h-4 w-4 mr-2" />
-                                  Archive
-                                </DropdownMenuItem>
-                                {!tournament.hasTeams && (
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      setTournamentToDelete(tournament._id)
-                                      setShowDeleteDialog(true)
-                                    }}
-                                    className="text-destructive"
-                                  >
-                                    <Trash2 className="h-4 w-4 mr-2" />
-                                    Delete
-                                  </DropdownMenuItem>
-                                )}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                            <Checkbox
+                              checked={selectedTournaments.has(tournament._id)}
+                              onCheckedChange={(checked) =>
+                                handleSelectTournament(tournament._id, checked as boolean)
+                              }
+                              className="mt-1"
+                            />
                           )}
                         </div>
 
@@ -572,9 +510,31 @@ export function TournamentList({ userRole, token, selectedLeagueId, className }:
                           )}
                         </div>
                         <div className="flex items-center justify-between pt-4 border-t">
-                          <span className="text-xs text-muted-foreground">
-                            {formatDistanceToNow(new Date(tournament._creationTime), { addSuffix: true })}
-                          </span>
+                          {isAdmin && (<>
+                              {!tournament.hasTeams && (
+                                <Button
+                                  variant="ghost"
+                                  onClick={() => {
+                                    setTournamentToDelete(tournament._id)
+                                    setShowDeleteDialog(true)
+                                  }}
+                                  className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  <span className="hidden md:block">Delete</span>
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                onClick={() => {
+                                  setTournamentToArchive(tournament._id)
+                                  setShowArchiveDialog(true)
+                                }}>
+                                <Archive className="h-4 w-4" />
+                                <span className="hidden md:block">Archive</span>
+                              </Button>
+                            </>
+                          )}
                           <div className="flex gap-2">
                             <Button
                               variant="outline"
@@ -587,7 +547,7 @@ export function TournamentList({ userRole, token, selectedLeagueId, className }:
                           </div>
                         </div>
                       </div>
-                    ))}
+                      )})}
                   </div>
                 </div>
 

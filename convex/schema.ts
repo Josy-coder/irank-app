@@ -220,9 +220,19 @@ export default defineSchema({
     elimination_rounds: v.number(),
     judges_per_debate: v.number(),
     team_size: v.number(),
-    motions_release_time: v.optional(v.number()),
-    speaking_times: v.object({}),
+    motions: v.optional(
+      v.record(
+        v.string(),
+        v.object({
+          motion: v.string(),
+          round: v.number(),
+          releaseTime: v.number(),
+        })
+      )
+    ),
+    speaking_times: v.record(v.string(), v.number()),
     fee: v.optional(v.number()),
+    fee_currency: v.optional(v.union(v.literal("RWF"), v.literal("USD"))),
     description: v.optional(v.string()),
     image: v.optional(v.id("_storage")),
     status: v.union(

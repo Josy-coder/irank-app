@@ -23,9 +23,19 @@ export const createTournament = mutation({
     elimination_rounds: v.number(),
     judges_per_debate: v.number(),
     team_size: v.number(),
-    motions_release_time: v.optional(v.number()),
+    motions: v.optional(
+      v.record(
+        v.string(),
+        v.object({
+          motion: v.string(),
+          round: v.number(),
+          releaseTime: v.number(),
+        })
+      )
+    ),
     speaking_times: v.any(),
     fee: v.optional(v.number()),
+    fee_currency: v.optional(v.union(v.literal("RWF"), v.literal("USD"))),
     description: v.optional(v.string()),
     image: v.optional(v.id("_storage")),
     status: v.union(
@@ -52,6 +62,10 @@ export const createTournament = mutation({
       throw new Error("End date must be after start date");
     }
 
+    if (tournamentData.start_date < Date.now()) {
+      throw new Error("Start date cannot be in the past");
+    }
+
     if (tournamentData.prelim_rounds < 1) {
       throw new Error("At least 1 preliminary round is required");
     }
@@ -60,8 +74,12 @@ export const createTournament = mutation({
       throw new Error("At least 1 judge per debate is required");
     }
 
-    if (tournamentData.team_size < 1) {
-      throw new Error("Team size must be at least 1");
+    if (tournamentData.team_size < 1 || tournamentData.team_size > 5) {
+      throw new Error("Team size must be between 1 and 5");
+    }
+
+    if (tournamentData.format === "WorldSchools" && tournamentData.team_size > 3) {
+      throw new Error("World Schools format allows maximum 3 speakers per team");
     }
 
     if (tournamentData.league_id) {
@@ -87,9 +105,32 @@ export const createTournament = mutation({
       throw new Error("A tournament with this name already exists");
     }
 
+    let processedMotions = tournamentData.motions;
+    if (processedMotions) {
+      const now = Date.now();
+      const newMotions: Record<string, any> = {};
+
+      Object.entries(processedMotions).forEach(([key, motion]) => {
+        if (key.startsWith("preliminary_3")) {
+          newMotions[key] = {
+            ...motion,
+            releaseTime: 0
+          };
+        } else {
+          newMotions[key] = {
+            ...motion,
+            releaseTime: tournamentData.status === "published" ? now : 0
+          };
+        }
+      });
+
+      processedMotions = newMotions;
+    }
+
     const tournamentId = await ctx.db.insert("tournaments", {
       ...tournamentData,
       name: tournamentData.name.trim(),
+      motions: processedMotions,
       created_at: Date.now(),
       updated_at: Date.now(),
     });
@@ -128,9 +169,19 @@ export const updateTournament = mutation({
     elimination_rounds: v.number(),
     judges_per_debate: v.number(),
     team_size: v.number(),
-    motions_release_time: v.optional(v.number()),
+    motions: v.optional(
+      v.record(
+        v.string(),
+        v.object({
+          motion: v.string(),
+          round: v.number(),
+          releaseTime: v.number(),
+        })
+      )
+    ),
     speaking_times: v.any(),
     fee: v.optional(v.number()),
+    fee_currency: v.optional(v.union(v.literal("RWF"), v.literal("USD"))),
     description: v.optional(v.string()),
     image: v.optional(v.id("_storage")),
     status: v.union(
@@ -165,6 +216,14 @@ export const updateTournament = mutation({
       throw new Error("End date must be after start date");
     }
 
+    if (updateData.team_size < 1 || updateData.team_size > 5) {
+      throw new Error("Team size must be between 1 and 5");
+    }
+
+    if (updateData.format === "WorldSchools" && updateData.team_size > 3) {
+      throw new Error("World Schools format allows maximum 3 speakers per team");
+    }
+
     const duplicateTournament = await ctx.db
       .query("tournaments")
       .withSearchIndex("search_tournaments", (q) => q.search("name", updateData.name.trim()))
@@ -188,10 +247,33 @@ export const updateTournament = mutation({
         throw new Error("Selected coordinator does not exist");
       }
     }
+    let processedMotions = updateData.motions;
+    if (processedMotions) {
+      const now = Date.now();
+      const newMotions: Record<string, any> = {};
+
+      Object.entries(processedMotions).forEach(([key, motion]) => {
+        if (key.startsWith("preliminary_3")) {
+          const existingMotion = existingTournament.motions?.[key];
+          newMotions[key] = {
+            ...motion,
+            releaseTime: existingMotion?.releaseTime || 0
+          };
+        } else {
+          newMotions[key] = {
+            ...motion,
+            releaseTime: updateData.status === "published" ? now : (motion.releaseTime || now)
+          };
+        }
+      });
+
+      processedMotions = newMotions;
+    }
 
     await ctx.db.patch(tournament_id, {
       ...updateData,
       name: updateData.name.trim(),
+      motions: processedMotions,
       updated_at: Date.now(),
     });
 
