@@ -154,10 +154,13 @@ export const getTournaments = query({
   },
 });
 
-export const getTournamentById = query({
-  args: { tournament_id: v.id("tournaments") },
+export const getTournamentBySlug = query({
+  args: { slug: v.string() },
   handler: async (ctx, args) => {
-    const tournament = await ctx.db.get(args.tournament_id);
+    const tournament = await ctx.db
+      .query("tournaments")
+      .withIndex("by_slug", (q) => q.eq("slug", args.slug))
+      .first();
 
     if (!tournament) {
       throw new Error("Tournament not found");
@@ -221,7 +224,6 @@ export const getTournamentsByLeague = query({
 
     const enrichedTournaments = await Promise.all(
       tournaments.map(async (tournament) => {
-        // Get coordinator info
         let coordinator = null;
         if (tournament.coordinator_id) {
           coordinator = await ctx.db.get(tournament.coordinator_id);

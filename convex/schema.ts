@@ -203,6 +203,7 @@ export default defineSchema({
 
   tournaments: defineTable({
     name: v.string(),
+    slug: v.string(),
     start_date: v.number(),
     end_date: v.number(),
     location: v.optional(v.string()),
@@ -220,16 +221,6 @@ export default defineSchema({
     elimination_rounds: v.number(),
     judges_per_debate: v.number(),
     team_size: v.number(),
-    motions: v.optional(
-      v.record(
-        v.string(),
-        v.object({
-          motion: v.string(),
-          round: v.number(),
-          releaseTime: v.number(),
-        })
-      )
-    ),
     speaking_times: v.record(v.string(), v.number()),
     fee: v.optional(v.number()),
     fee_currency: v.optional(v.union(v.literal("RWF"), v.literal("USD"))),
@@ -253,6 +244,7 @@ export default defineSchema({
     .index("by_status_start_date", ["status", "start_date"])
     .index("by_league_id_status", ["league_id", "status"])
     .index("by_coordinator_id_status", ["coordinator_id", "status"])
+    .index("by_slug", ["slug"])
     .searchIndex("search_tournaments", {
       searchField: "name",
       filterFields: ["league_id", "format", "status", "is_virtual"]
@@ -306,8 +298,6 @@ export default defineSchema({
     responded_by: v.optional(v.id("users")),
     invited_at: v.number(),
     responded_at: v.optional(v.number()),
-    max_teams: v.optional(v.number()),
-    notes: v.optional(v.string()),
     expires_at: v.optional(v.number()),
   })
     .index("by_tournament_id", ["tournament_id"])

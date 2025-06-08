@@ -197,9 +197,9 @@ export function LeagueList({ userRole, token, selectedLeagueId, onLeagueSelect, 
 
   return (
     <div className={cn("flex flex-col h-full", className)}>
-      <div className="px-4 py-12 md:py-4 md:px-2">
+      <div className="px-4 py-12 md:py-4 md:px-0">
         <div className="flex items-center gap-2 mb-2">
-          <div className="relative flex-1 bg-background">
+          <div className="relative md:ml-[1px] flex-1 bg-background">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search leagues..."
@@ -220,14 +220,14 @@ export function LeagueList({ userRole, token, selectedLeagueId, onLeagueSelect, 
         </div>
 
         {leagues.length > 0 && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground md:ml-[1px]">
             {leagues.length} league{leagues.length !== 1 ? 's' : ''} found
           </p>
         )}
       </div>
 
       <ScrollArea className="flex-1" onScrollCapture={handleScroll}>
-        <div className="p-2">
+        <div className="">
           {isLoading ? (
             <LeagueListSkeleton />
           ) : leagues.length === 0 ? (
@@ -250,7 +250,7 @@ export function LeagueList({ userRole, token, selectedLeagueId, onLeagueSelect, 
                   <div
                     key={league._id}
                     className={cn(
-                      "flex items-center gap-3 p-3 rounded-md border border-[#E2E8F0] cursor-pointer transition-colors bg-background hover:bg-background/80",
+                      "flex items-center justify-between p-3 rounded-md border border-[#E2E8F0] cursor-pointer transition-colors bg-background hover:bg-background/80",
                       isSelected && "bg-primary/10 border-primary"
                     )}
                     onClick={() => handleLeagueClick(league)}

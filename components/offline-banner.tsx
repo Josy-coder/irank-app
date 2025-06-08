@@ -1,10 +1,17 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { WifiOff, Clock, CheckCircle, Wifi, AlertTriangle, Zap, X } from "lucide-react"
+import { WifiOff, Clock, CheckCircle, Wifi, AlertTriangle, Zap } from "lucide-react"
 import { useConvexOfflineDetector, useConvexConnectionStatus } from "@/lib/pwa/offline-detector"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 
-export function AdvancedOfflineBanner() {
+export function AdvancedOfflineSheet() {
   const {
     isOffline,
     isOnline,
@@ -17,30 +24,26 @@ export function AdvancedOfflineBanner() {
 
   useConvexConnectionStatus()
 
-  const [showBanner, setShowBanner] = useState(false)
+  const [showSheet, setShowSheet] = useState(false)
   const [justWentOnline, setJustWentOnline] = useState(false)
-  const [dismissed, setDismissed] = useState(false)
   const [previousOfflineState, setPreviousOfflineState] = useState(isOffline)
   const [previousConvexState, setPreviousConvexState] = useState(convexConnected)
 
   useEffect(() => {
-
     if (previousOfflineState !== isOffline) {
       setPreviousOfflineState(isOffline)
 
       if (isOffline) {
-        setShowBanner(true)
-        setDismissed(false)
+        setShowSheet(true)
         setJustWentOnline(false)
       } else {
         // Just went online
         setJustWentOnline(true)
-        setShowBanner(true)
-        setDismissed(false)
+        setShowSheet(true)
 
-        // Hide the "back online" banner after 3 seconds
+        // Hide the "back online" sheet after 3 seconds
         const timer = setTimeout(() => {
-          setShowBanner(false)
+          setShowSheet(false)
           setJustWentOnline(false)
         }, 3000)
 
@@ -53,18 +56,16 @@ export function AdvancedOfflineBanner() {
       setPreviousConvexState(convexConnected)
 
       if (!convexConnected) {
-        // Convex disconnected while online - show reconnecting banner
-        setShowBanner(true)
-        setDismissed(false)
+        // Convex disconnected while online - show reconnecting sheet
+        setShowSheet(true)
         setJustWentOnline(false)
       } else if (convexConnected && !isOffline) {
         // Convex reconnected - show brief success message
         setJustWentOnline(true)
-        setShowBanner(true)
-        setDismissed(false)
+        setShowSheet(true)
 
         const timer = setTimeout(() => {
-          setShowBanner(false)
+          setShowSheet(false)
           setJustWentOnline(false)
         }, 2000)
 
@@ -108,22 +109,20 @@ export function AdvancedOfflineBanner() {
     return 'unknown'
   }
 
-  const getBannerConfig = () => {
+  const getSheetConfig = () => {
     if (justWentOnline) {
       const quality = getConnectionQuality()
       let qualityText = ''
 
-      if (quality === 'good') qualityText = ' • Fast connection'
-      else if (quality === 'fair') qualityText = ' • Good connection'
-      else if (quality === 'slow') qualityText = ' • Slow connection'
+      if (quality === 'good') qualityText = 'Fast connection'
+      else if (quality === 'fair') qualityText = 'Good connection'
+      else if (quality === 'slow') qualityText = 'Slow connection'
 
       return {
-        icon: <CheckCircle className="h-4 w-4" />,
-        text: "Back Online",
-        subtext: `Connection restored${qualityText}`,
-        bgColor: "bg-green-500",
-        textColor: "text-white",
-        showDismiss: false,
+        icon: <CheckCircle className="h-6 w-6 text-green-500" />,
+        title: "Back Online",
+        description: `Connection restored${qualityText ? ` • ${qualityText}` : ''}`,
+        variant: "success" as const,
       }
     } else if (isOffline) {
       // Check if we have offline capabilities (cached data)
@@ -133,45 +132,39 @@ export function AdvancedOfflineBanner() {
 
       if (hasOfflineData) {
         return {
-          icon: <Clock className="h-4 w-4 animate-pulse" />,
-          text: "Offline Mode",
-          subtext: `Working offline ${getOfflineDuration()} • Limited features available`,
-          bgColor: "bg-amber-500",
-          textColor: "text-white",
-          showDismiss: true,
+          icon: <Clock className="h-6 w-6 text-amber-500 animate-pulse" />,
+          title: "Offline Mode",
+          description: `Working offline ${getOfflineDuration()}`,
+          details: "Limited features are available while offline. Some data may not be up to date.",
+          variant: "warning" as const,
         }
       } else {
         return {
-          icon: <WifiOff className="h-4 w-4 animate-bounce" />,
-          text: "No Connection",
-          subtext: `Offline ${getOfflineDuration()} • Please reconnect to continue`,
-          bgColor: "bg-red-500",
-          textColor: "text-white",
-          showDismiss: true,
+          icon: <WifiOff className="h-6 w-6 text-red-500 animate-bounce" />,
+          title: "No Connection",
+          description: `Offline ${getOfflineDuration()}`,
+          details: "Please check your internet connection and try again.",
+          variant: "error" as const,
         }
       }
     } else if (isOnline && !convexConnected) {
-      // Special case: HTTP works but Convex is disconnected
       return {
-        icon: <Zap className="h-4 w-4 animate-pulse" />,
-        text: "Reconnecting",
-        subtext: `App services temporarily unavailable • Trying to reconnect...`,
-        bgColor: "bg-blue-500",
-        textColor: "text-white",
-        showDismiss: true,
+        icon: <Zap className="h-6 w-6 text-blue-500 animate-pulse" />,
+        title: "Reconnecting",
+        description: "App services temporarily unavailable",
+        details: "We're trying to reconnect to our servers. Please wait a moment.",
+        variant: "info" as const,
       }
     } else if (isOnline) {
-      // Show connection quality info for slow connections
       const quality = getConnectionQuality()
 
       if (quality === 'slow') {
         return {
-          icon: <AlertTriangle className="h-4 w-4" />,
-          text: "Slow Connection",
-          subtext: `Limited connectivity • Some features may be delayed`,
-          bgColor: "bg-yellow-500",
-          textColor: "text-white",
-          showDismiss: true,
+          icon: <AlertTriangle className="h-6 w-6 text-yellow-500" />,
+          title: "Slow Connection",
+          description: "Limited connectivity detected",
+          details: "Some features may be delayed due to poor network conditions.",
+          variant: "warning" as const,
         }
       }
     }
@@ -179,75 +172,64 @@ export function AdvancedOfflineBanner() {
     return null
   }
 
-  const handleDismiss = () => {
-    setDismissed(true)
-    setShowBanner(false)
-  }
-
-  const config = getBannerConfig()
-
-  // Don't show banner if dismissed, no config
-  if (!showBanner || !config || dismissed) {
-    return null
-  }
+  const config = getSheetConfig()
 
   return (
-    <div className={`relative z-50 ${config.bgColor} ${config.textColor} shadow-lg transition-all duration-300 ease-in-out transform ${showBanner ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0'}`}>
-      <div className="container mx-auto px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3 min-w-0 flex-1">
-            <div className="flex-shrink-0">
-              {config.icon}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2">
-                <span className="font-semibold text-sm">{config.text}</span>
-                <span className="opacity-90 text-xs leading-tight">
-                  {config.subtext}
-                </span>
+    <Sheet open={showSheet} onOpenChange={setShowSheet}>
+      <SheetContent side="top" className="w-full">
+        {config && (
+          <>
+            <SheetHeader className="text-center">
+              <div className="flex items-center justify-center mb-4">
+                {config.icon}
               </div>
-            </div>
-          </div>
+              <SheetTitle className="text-xl">{config.title}</SheetTitle>
+              <SheetDescription className="text-base">
+                {config.description}
+              </SheetDescription>
+            </SheetHeader>
 
-          {config.showDismiss && (
-            <button
-              onClick={handleDismiss}
-              className="flex-shrink-0 ml-4 p-1 rounded-full hover:bg-white/20 transition-colors focus:outline-none focus:ring-2 focus:ring-white/50"
-              aria-label="Dismiss notification"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-
-        {/* Additional info for connection quality */}
-        {isOnline && !isOffline && (effectiveType || downlink || !convexConnected) && (
-          <div className="mt-2 pt-2 border-t border-white/20">
-            <div className="flex items-center space-x-4 text-xs opacity-75">
-              {effectiveType && (
-                <div className="flex items-center space-x-1">
-                  <Wifi className="h-3 w-3" />
-                  <span>{effectiveType.toUpperCase()}</span>
-                </div>
-              )}
-              {downlink && (
-                <div>
-                  <span>{downlink.toFixed(1)} Mbps</span>
-                </div>
-              )}
-              {rtt && (
-                <div>
-                  <span>{rtt}ms latency</span>
-                </div>
-              )}
-              <div className="flex items-center space-x-1">
-                <div className={`w-2 h-2 rounded-full ${convexConnected ? 'bg-green-400' : 'bg-red-400'}`} />
-                <span>{convexConnected ? 'Connected' : 'Disconnected'}</span>
+            {config.details && (
+              <div className="mt-4 p-3 bg-muted rounded-lg">
+                <p className="text-sm text-muted-foreground">{config.details}</p>
               </div>
-            </div>
-          </div>
+            )}
+
+            {/* Connection details */}
+            {isOnline && !isOffline && (effectiveType || downlink || rtt) && (
+              <div className="mt-6 space-y-3">
+                <h4 className="text-sm font-medium">Connection Details</h4>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  {effectiveType && (
+                    <div className="flex items-center space-x-2">
+                      <Wifi className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-muted-foreground">Network:</span>
+                      <span className="font-medium">{effectiveType.toUpperCase()}</span>
+                    </div>
+                  )}
+                  {downlink && (
+                    <div className="flex items-center space-x-2">
+                      <span className="text-muted-foreground">Speed:</span>
+                      <span className="font-medium">{downlink.toFixed(1)} Mbps</span>
+                    </div>
+                  )}
+                  {rtt && (
+                    <div className="flex items-center space-x-2">
+                      <span className="text-muted-foreground">Latency:</span>
+                      <span className="font-medium">{rtt}ms</span>
+                    </div>
+                  )}
+                  <div className="flex items-center space-x-2">
+                    <div className={`w-3 h-3 rounded-full ${convexConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+                    <span className="text-muted-foreground">App Status:</span>
+                    <span className="font-medium">{convexConnected ? 'Connected' : 'Disconnected'}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         )}
-      </div>
-    </div>
+      </SheetContent>
+    </Sheet>
   )
 }

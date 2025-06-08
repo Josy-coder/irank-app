@@ -82,11 +82,11 @@ interface DateTimeRange {
 
 interface FormData {
   name: string
-  description: string
   dateRange: DateTimeRange | undefined
   location: string
   isVirtual: boolean
   leagueId: string
+  coordinatorId: Id<"users">
   format: string
   teamSize: number
   prelimRounds: number
@@ -121,19 +121,20 @@ const DEFAULT_SPEAKING_TIMES = {
 
 export default function CreateTournamentPage() {
   const router = useRouter()
-  const { token } = useAuth()
+  const { user, token } = useAuth()
   const [loading, setLoading] = useState(false)
   const [showImageDialog, setShowImageDialog] = useState(false)
   const [showMotionsDialog, setShowMotionsDialog] = useState(false)
   const [uploadedImages, setUploadedImages] = useState<Id<"_storage">[]>([])
   const [leagueSearch, setLeagueSearch] = useState("")
   const [showLeaguePopover, setShowLeaguePopover] = useState(false)
+  const [coordinatorSearch, setCoordinatorSearch] = useState("")
+  const [showCoordinatorPopover, setShowCoordinatorPopover] = useState(false)
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [motionInput, setMotionInput] = useState("")
 
   const [formData, setFormData] = useState<FormData>({
     name: "",
-    description: "",
     dateRange: {
       from: undefined,
       to: undefined,
@@ -143,6 +144,7 @@ export default function CreateTournamentPage() {
     location: "",
     isVirtual: false,
     leagueId: "",
+    coordinatorId: user?.id as Id<"users">,
     format: "WorldSchools",
     teamSize: 3,
     prelimRounds: 3,
@@ -161,6 +163,18 @@ export default function CreateTournamentPage() {
     limit: 20
   })
 
+  const coordinatorsData = useQuery(api.functions.admin.users.getUsers, {
+    admin_token: token as string,
+    search: coordinatorSearch,
+    role: "all",
+    status: "active",
+    verified: "verified",
+    page: 1,
+    limit: 30
+  })
+
+
+
   const createTournament = useMutation(api.functions.admin.tournaments.createTournament)
   const deleteFile = useMutation(api.files.deleteFile)
   const getUrl = useMutation(api.files.getUrl)
@@ -168,17 +182,21 @@ export default function CreateTournamentPage() {
   const leagues = leaguesData?.leagues || []
   const selectedLeague = leagues.find(l => l._id === formData.leagueId)
 
+  const coordinators = coordinatorsData?.users || []
+  const selectedCoordinator = coordinators.find(c => c._id === formData.coordinatorId)
+
   useEffect(() => {
     const newMotions: Record<string, any> = {}
     const now = Date.now()
 
     for (let i = 1; i <= formData.prelimRounds; i++) {
       const key = `preliminary_${i}`
+      const isLastPrelimRound = i === formData.prelimRounds
       if (!formData.motions[key]) {
         newMotions[key] = {
           motion: "",
           round: i,
-          releaseTime: i === 3 ? 0 : now
+          releaseTime: isLastPrelimRound ? 0 : now
         }
       } else {
         newMotions[key] = formData.motions[key]
@@ -395,12 +413,12 @@ export default function CreateTournamentPage() {
       const tournamentData = {
         admin_token: token,
         name: formData.name.trim(),
-        description: formData.description.trim() || undefined,
         start_date: startDateTime,
         end_date: endDateTime,
         location: formData.isVirtual ? undefined : formData.location.trim(),
         is_virtual: formData.isVirtual,
         league_id: formData.leagueId ? formData.leagueId as Id<"leagues"> : undefined,
+        coordinator_id: formData.coordinatorId ? formData.coordinatorId as Id<"users"> : undefined,
         format: formData.format as any,
         team_size: formData.teamSize,
         prelim_rounds: formData.prelimRounds,
@@ -417,7 +435,7 @@ export default function CreateTournamentPage() {
       const result = await createTournament(tournamentData)
 
       toast.success(`Tournament ${status === "draft" ? "saved as draft" : "published"} successfully`)
-      router.push(`/tournaments/${result.tournamentId}#overview`)
+      router.push(`/admin/tournaments/${result.slug}#overview`)
 
     } catch (error: any) {
       console.error("Error creating tournament:", error)
@@ -455,8 +473,6 @@ export default function CreateTournamentPage() {
         <div>
           <p className="text-muted-foreground">Set up a new debate tournament</p>
         </div>
-      <div className="w-full rounded-md overflow-hidden border border-[#E2E8F0] bg-background p-2">
-
       {imageUrl && (
         <div className="relative mb-8 h-48 rounded-lg overflow-hidden bg-gradient-to-r from-blue-500 to-purple-600">
           <Image
@@ -478,12 +494,12 @@ export default function CreateTournamentPage() {
           </div>
           <div className="absolute bottom-4 left-4 text-white">
             <h2 className="text-xl font-bold">{formData.name || "Tournament Name"}</h2>
-            {formData.description && (
-              <p className="text-sm opacity-90 mt-1">{formData.description}</p>
-            )}
           </div>
         </div>
       )}
+      <Card className=" overflow-hidden  p-2">
+
+
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
         <div className="space-y-6">
@@ -604,6 +620,62 @@ export default function CreateTournamentPage() {
                 {errors.leagueId && (
                   <p className="text-destructive text-sm">{errors.leagueId}</p>
                 )}
+              </div>
+              <div className="space-y-2">
+                <Label>Tournament Coordinator</Label>
+                <Popover open={showCoordinatorPopover} onOpenChange={setShowCoordinatorPopover}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={showCoordinatorPopover}
+                      className={cn(
+                        "w-full justify-between",
+                        !formData.coordinatorId && "text-muted-foreground"
+                      )}
+                    >
+                      {selectedCoordinator
+                        ? `${selectedCoordinator.name} (${selectedCoordinator.role})`
+                        : "Select coordinator..."}
+                      <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0">
+                    <Command>
+                      <CommandInput
+                        placeholder="Search coordinators..."
+                        value={coordinatorSearch}
+                        onValueChange={setCoordinatorSearch}
+                      />
+                      <CommandEmpty>No coordinators found.</CommandEmpty>
+                      <CommandGroup className="max-h-64 overflow-auto">
+                        {coordinators.map((coordinator) => (
+                          <CommandItem
+                            key={coordinator._id}
+                            value={coordinator._id}
+                            onSelect={() => {
+                              handleInputChange("coordinatorId", coordinator._id)
+                              setShowCoordinatorPopover(false)
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                formData.coordinatorId === coordinator._id ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            <div>
+                              <div className="font-medium">{coordinator.name}</div>
+                              <div className="text-sm text-muted-foreground capitalize">
+                                {coordinator.role} • {coordinator.email}
+                              </div>
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
             </CardContent>
           </Card>
@@ -903,7 +975,7 @@ export default function CreateTournamentPage() {
                             <h4 className="font-medium text-sm text-muted-foreground">Preliminary Rounds</h4>
                             {Array.from({ length: formData.prelimRounds }, (_, i) => i + 1).map((round) => {
                               const key = `preliminary_${round}`
-                              const isImpromptu = round === 3
+                              const isImpromptu = round === formData.prelimRounds
                               return (
                                 <div key={key} className="space-y-2">
                                   <Label htmlFor={key} className="text-sm">
@@ -1037,7 +1109,7 @@ export default function CreateTournamentPage() {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      </div>
+      </Card>
     </div>
   )
 }

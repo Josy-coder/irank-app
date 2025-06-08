@@ -16,6 +16,7 @@ import type {
 import type * as actions_email from "../actions/email.js";
 import type * as files from "../files.js";
 import type * as functions_admin_dashboard from "../functions/admin/dashboard.js";
+import type * as functions_admin_invitations from "../functions/admin/invitations.js";
 import type * as functions_admin_leagues from "../functions/admin/leagues.js";
 import type * as functions_admin_tournaments from "../functions/admin/tournaments.js";
 import type * as functions_admin_users from "../functions/admin/users.js";
@@ -39,6 +40,7 @@ declare const fullApi: ApiFromModules<{
   "actions/email": typeof actions_email;
   files: typeof files;
   "functions/admin/dashboard": typeof functions_admin_dashboard;
+  "functions/admin/invitations": typeof functions_admin_invitations;
   "functions/admin/leagues": typeof functions_admin_leagues;
   "functions/admin/tournaments": typeof functions_admin_tournaments;
   "functions/admin/users": typeof functions_admin_users;

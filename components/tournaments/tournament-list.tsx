@@ -30,9 +30,9 @@ import {
   Users,
   Video,
   Trophy,
-  Building
-} from "lucide-react"
-import { useDebounce } from "@/hooks/use-debounce"
+  Contact
+} from "lucide-react";
+import { useDebounce }from "@/hooks/use-debounce"
 import { DataToolbar } from "@/components/shared/data-toolbar"
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter"
 import { cn } from "@/lib/utils"
@@ -240,8 +240,8 @@ export function TournamentList({ userRole, token, selectedLeagueId, className }:
     }
   }
 
-  const handleViewTournament = (tournamentId: string) => {
-    router.push(`tournaments/${tournamentId}`)
+  const handleViewTournament = (slug: string) => {
+    router.push(`tournaments/${slug}`)
   }
 
   const handleDeleteTournament = async () => {
@@ -471,7 +471,7 @@ export function TournamentList({ userRole, token, selectedLeagueId, className }:
                           )}
                         </div>
 
-                        <div className="space-y-2">
+                        <div className="grid grid-cols-1 custom:grid-cols-2 gap-2">
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <Calendar className="h-4 w-4" />
                             <span>{formatDateRange(tournament.start_date, tournament.end_date)}</span>
@@ -502,7 +502,7 @@ export function TournamentList({ userRole, token, selectedLeagueId, className }:
 
                           {tournament.coordinator && (
                             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <Building className="h-4 w-4" />
+                              <Contact className="h-4 w-4" />
                               <span className="truncate" title={tournament.coordinator.name}>
                                 {tournament.coordinator.name}
                               </span>
@@ -521,7 +521,7 @@ export function TournamentList({ userRole, token, selectedLeagueId, className }:
                                   className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                                 >
                                   <Trash2 className="h-4 w-4 mr-2" />
-                                  <span className="hidden md:block">Delete</span>
+                                  <span className="hide-at-1230">Delete</span>
                                 </Button>
                               )}
                               <Button
@@ -531,7 +531,7 @@ export function TournamentList({ userRole, token, selectedLeagueId, className }:
                                   setShowArchiveDialog(true)
                                 }}>
                                 <Archive className="h-4 w-4" />
-                                <span className="hidden md:block">Archive</span>
+                                <span className="hide-at-1230">Archive</span>
                               </Button>
                             </>
                           )}
@@ -539,7 +539,7 @@ export function TournamentList({ userRole, token, selectedLeagueId, className }:
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleViewTournament(tournament._id)}
+                              onClick={() => handleViewTournament(tournament.slug)}
                             >
                               <Eye className="h-4 w-4 mr-1" />
                               View

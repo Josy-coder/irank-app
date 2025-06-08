@@ -8,7 +8,7 @@ import AppLoader from "@/components/app-loader"
 import { AppSidebar } from "@/components/navigation/app-sidebar"
 import { SiteHeader } from "@/components/navigation/site-header"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
-import { AdvancedOfflineBanner } from "@/components/offline-banner"
+import { AdvancedOfflineSheet} from "@/components/offline-banner"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -176,6 +176,7 @@ export default function DashboardLayout({
               </div>
             </div>
             <main className="flex-1 overflow-y-auto px-4 md:px-6 ">
+              <AdvancedOfflineSheet />
               {children}
             </main>
           </div>

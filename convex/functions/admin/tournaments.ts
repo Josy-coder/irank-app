@@ -1,6 +1,16 @@
-import { mutation } from "../../_generated/server";
+import { mutation, query } from "../../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../../_generated/api";
+
+function generateSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
 
 export const createTournament = mutation({
   args: {
@@ -105,35 +115,68 @@ export const createTournament = mutation({
       throw new Error("A tournament with this name already exists");
     }
 
-    let processedMotions = tournamentData.motions;
-    if (processedMotions) {
-      const now = Date.now();
-      const newMotions: Record<string, any> = {};
+    const slug = generateSlug(tournamentData.name);
 
-      Object.entries(processedMotions).forEach(([key, motion]) => {
-        if (key.startsWith("preliminary_3")) {
-          newMotions[key] = {
-            ...motion,
-            releaseTime: 0
-          };
-        } else {
-          newMotions[key] = {
-            ...motion,
-            releaseTime: tournamentData.status === "published" ? now : 0
-          };
-        }
-      });
-
-      processedMotions = newMotions;
-    }
+    const { motions, ...tournamentWithoutMotions } = tournamentData;
 
     const tournamentId = await ctx.db.insert("tournaments", {
-      ...tournamentData,
-      name: tournamentData.name.trim(),
-      motions: processedMotions,
+      ...tournamentWithoutMotions,
+      name: tournamentWithoutMotions.name.trim(),
+      slug: slug,
       created_at: Date.now(),
       updated_at: Date.now(),
     });
+
+    if (args.motions) {
+      const roundDuration = 90;
+      const breakBetweenRounds = 15;
+      let currentTime = tournamentData.start_date + (30 * 60 * 1000);
+
+      for (let i = 1; i <= tournamentData.prelim_rounds; i++) {
+        const key = `preliminary_${i}`;
+        const motion = args.motions[key];
+        const isImpromptu = i === tournamentData.prelim_rounds;
+
+        const startTime = currentTime;
+        const endTime = currentTime + (roundDuration * 60 * 1000);
+
+        await ctx.db.insert("rounds", {
+          tournament_id: tournamentId,
+          round_number: i,
+          type: "preliminary",
+          status: "pending",
+          start_time: startTime,
+          end_time: endTime,
+          motion: motion?.motion || "",
+          is_impromptu: isImpromptu,
+          motion_released_at: isImpromptu ? undefined : (tournamentData.status === "published" ? Date.now() : undefined),
+        });
+
+        currentTime = endTime + (breakBetweenRounds * 60 * 1000);
+      }
+
+      for (let i = 1; i <= tournamentData.elimination_rounds; i++) {
+        const key = `elimination_${i}`;
+        const motion = args.motions[key];
+
+        const startTime = currentTime;
+        const endTime = currentTime + (roundDuration * 60 * 1000);
+
+        await ctx.db.insert("rounds", {
+          tournament_id: tournamentId,
+          round_number: i,
+          type: i === tournamentData.elimination_rounds ? "final" : "elimination",
+          status: "pending",
+          start_time: startTime,
+          end_time: endTime,
+          motion: motion?.motion || "",
+          is_impromptu: false,
+          motion_released_at: tournamentData.status === "published" ? Date.now() : undefined,
+        });
+
+        currentTime = endTime + (breakBetweenRounds * 60 * 1000);
+      }
+    }
 
     await ctx.runMutation(internal.functions.audit.createAuditLog, {
       user_id: sessionResult.user.id,
@@ -143,7 +186,7 @@ export const createTournament = mutation({
       description: `Created tournament: ${tournamentData.name}`,
     });
 
-    return { tournamentId, success: true };
+    return { slug, success: true };
   },
 });
 
@@ -201,7 +244,7 @@ export const updateTournament = mutation({
       throw new Error("Admin access required");
     }
 
-    const { admin_token, tournament_id, ...updateData } = args;
+    const { admin_token, tournament_id, motions, ...updateData } = args;
 
     const existingTournament = await ctx.db.get(tournament_id);
     if (!existingTournament) {
@@ -234,6 +277,23 @@ export const updateTournament = mutation({
       throw new Error("A tournament with this name already exists");
     }
 
+    let finalSlug = existingTournament.slug;
+    if (updateData.name.trim() !== existingTournament.name) {
+      const newSlug = generateSlug(updateData.name);
+
+      const existingSlug = await ctx.db
+        .query("tournaments")
+        .withIndex("by_slug", (q) => q.eq("slug", newSlug))
+        .filter((q) => q.neq(q.field("_id"), tournament_id))
+        .first();
+
+      if (existingSlug) {
+        throw new Error("A tournament with a similar name already exists. Please choose a different name.");
+      }
+
+      finalSlug = newSlug;
+    }
+
     if (updateData.league_id) {
       const league = await ctx.db.get(updateData.league_id);
       if (!league) {
@@ -247,35 +307,97 @@ export const updateTournament = mutation({
         throw new Error("Selected coordinator does not exist");
       }
     }
-    let processedMotions = updateData.motions;
-    if (processedMotions) {
-      const now = Date.now();
-      const newMotions: Record<string, any> = {};
-
-      Object.entries(processedMotions).forEach(([key, motion]) => {
-        if (key.startsWith("preliminary_3")) {
-          const existingMotion = existingTournament.motions?.[key];
-          newMotions[key] = {
-            ...motion,
-            releaseTime: existingMotion?.releaseTime || 0
-          };
-        } else {
-          newMotions[key] = {
-            ...motion,
-            releaseTime: updateData.status === "published" ? now : (motion.releaseTime || now)
-          };
-        }
-      });
-
-      processedMotions = newMotions;
-    }
 
     await ctx.db.patch(tournament_id, {
       ...updateData,
       name: updateData.name.trim(),
-      motions: processedMotions,
+      slug: finalSlug,
       updated_at: Date.now(),
     });
+
+    if (motions) {
+
+      const existingRounds = await ctx.db
+        .query("rounds")
+        .withIndex("by_tournament_id", (q) => q.eq("tournament_id", tournament_id))
+        .collect();
+
+      const currentPrelimCount = existingRounds.filter(r => r.type === "preliminary").length;
+      const currentElimCount = existingRounds.filter(r => r.type === "elimination" || r.type === "final").length;
+
+      if (currentPrelimCount !== updateData.prelim_rounds || currentElimCount !== updateData.elimination_rounds) {
+        for (const round of existingRounds) {
+          await ctx.db.delete(round._id);
+        }
+
+        const roundDuration = 90;
+        const breakBetweenRounds = 15;
+        let currentTime = updateData.start_date + (30 * 60 * 1000);
+
+        for (let i = 1; i <= updateData.prelim_rounds; i++) {
+          const key = `preliminary_${i}`;
+          const motion = motions[key];
+          const isImpromptu = i === updateData.prelim_rounds;
+
+          const startTime = currentTime;
+          const endTime = currentTime + (roundDuration * 60 * 1000);
+
+          await ctx.db.insert("rounds", {
+            tournament_id: tournament_id,
+            round_number: i,
+            type: "preliminary",
+            status: "pending",
+            start_time: startTime,
+            end_time: endTime,
+            motion: motion?.motion || "",
+            is_impromptu: isImpromptu,
+            motion_released_at: isImpromptu ? undefined : (updateData.status === "published" ? Date.now() : undefined),
+          });
+
+          currentTime = endTime + (breakBetweenRounds * 60 * 1000);
+        }
+
+        for (let i = 1; i <= updateData.elimination_rounds; i++) {
+          const key = `elimination_${i}`;
+          const motion = motions[key];
+
+          const startTime = currentTime;
+          const endTime = currentTime + (roundDuration * 60 * 1000);
+
+          await ctx.db.insert("rounds", {
+            tournament_id: tournament_id,
+            round_number: i,
+            type: i === updateData.elimination_rounds ? "final" : "elimination",
+            status: "pending",
+            start_time: startTime,
+            end_time: endTime,
+            motion: motion?.motion || "",
+            is_impromptu: false,
+            motion_released_at: updateData.status === "published" ? Date.now() : undefined,
+          });
+
+          currentTime = endTime + (breakBetweenRounds * 60 * 1000);
+        }
+      } else {
+        for (const round of existingRounds) {
+          const key = round.type === "preliminary"
+            ? `preliminary_${round.round_number}`
+            : `elimination_${round.round_number}`;
+
+          const motion = motions[key];
+          if (motion) {
+            const isImpromptu = round.type === "preliminary" && round.round_number === updateData.prelim_rounds;
+
+            await ctx.db.patch(round._id, {
+              motion: motion.motion,
+              is_impromptu: isImpromptu,
+              motion_released_at: isImpromptu ? round.motion_released_at : (updateData.status === "published" ? Date.now() : round.motion_released_at),
+              type: round.type === "elimination" && round.round_number === updateData.elimination_rounds ? "final" : round.type,
+            });
+          }
+        }
+      }
+    }
 
     await ctx.runMutation(internal.functions.audit.createAuditLog, {
       user_id: sessionResult.user.id,
@@ -297,7 +419,7 @@ export const updateTournament = mutation({
       }),
     });
 
-    return { success: true };
+    return { slug: finalSlug,  success: true };
   },
 });
 
@@ -334,10 +456,10 @@ export const deleteTournament = mutation({
     const rounds = await ctx.db
       .query("rounds")
       .withIndex("by_tournament_id", (q) => q.eq("tournament_id", tournament_id))
-      .first();
+      .collect();
 
-    if (rounds) {
-      throw new Error("Cannot delete tournament that has rounds. Please remove all rounds first.");
+    for (const round of rounds) {
+      await ctx.db.delete(round._id);
     }
 
     if (tournament.image) {
@@ -503,5 +625,22 @@ export const bulkUpdateTournaments = mutation({
     }
 
     return { results };
+  },
+});
+
+export const getTournamentRounds = query({
+  args: { tournament_id: v.id("tournaments") },
+  handler: async (ctx, args) => {
+    const rounds = await ctx.db
+      .query("rounds")
+      .withIndex("by_tournament_id", (q) => q.eq("tournament_id", args.tournament_id))
+      .order("asc")
+      .collect();
+
+    return rounds.sort((a, b) => {
+      if (a.type === "preliminary" && b.type !== "preliminary") return -1;
+      if (a.type !== "preliminary" && b.type === "preliminary") return 1;
+      return a.round_number - b.round_number;
+    });
   },
 });
