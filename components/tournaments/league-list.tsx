@@ -72,24 +72,6 @@ function LeagueListSkeleton() {
   )
 }
 
-function getTypeColor(type: string) {
-  switch (type) {
-    case "Local": return "bg-blue-100 text-blue-800"
-    case "International": return "bg-green-100 text-green-800"
-    case "Dreams Mode": return "bg-purple-100 text-purple-800"
-    default: return "bg-gray-100 text-gray-800"
-  }
-}
-
-function getStatusColor(status: string) {
-  switch (status) {
-    case "active": return "bg-green-100 text-green-800"
-    case "inactive": return "bg-orange-100 text-orange-800"
-    case "banned": return "bg-red-100 text-red-800"
-    default: return "bg-gray-100 text-gray-800"
-  }
-}
-
 function getTypeIcon(type: string) {
   switch (type) {
     case "Local": return "🏠"
@@ -259,13 +241,28 @@ export function LeagueList({ userRole, token, selectedLeagueId, onLeagueSelect, 
                       <div className="flex items-center gap-2 mb-1">
                         <Badge
                           variant="default"
-                          className={cn("text-xs", getTypeColor(league.type))}
+                          className={`${league.type === "Local"
+                            ? "bg-blue-100 text-blue-800"
+                            : league.type === "International"
+                              ? "bg-green-100 text-green-800"
+                              : league.type === "Dreams Mode"
+                                ? "bg-purple-100 text-purple-800"
+                                : "bg-gray-100 text-gray-800"
+                          }`}
+
                         >
                           {getTypeIcon(league.type)} {league.type}
                         </Badge>
                         <Badge
                           variant="secondary"
-                          className={cn("text-xs", getStatusColor(league.status))}
+                          className={`${league.status === "active"
+                            ? "bg-green-100 text-green-800"
+                            : league.status === "inactive"
+                              ? "bg-orange-100 text-orange-800"
+                              : league.status === "banned"
+                                ? "bg-red-100 text-red-800"
+                                : "bg-gray-100 text-gray-800"
+                          }`}
                         >
                           {league.status}
                         </Badge>

@@ -59,7 +59,9 @@ import {
   Check,
   Upload,
   Plus,
-  Copy
+  Copy,
+  ChevronDown,
+  Globe, PauseCircle, PlayCircle
 } from "lucide-react";
 import Image from "next/image"
 import DateRangePicker from "@/components/date-range-picker"
@@ -67,6 +69,17 @@ import { FileUpload } from "@/components/file-upload"
 import { VolunteerSchoolSelector } from "@/components/school-selector"
 import { Id } from "@/convex/_generated/dataModel"
 import { type DateRange } from "react-day-picker"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from "@/components/ui/alert-dialog";
 
 interface TournamentOverviewProps {
   tournament: any
@@ -101,17 +114,6 @@ function formatDateRange(startDate: number, endDate: number) {
   }
 }
 
-function getStatusColor(status: string) {
-  switch (status) {
-    case "draft": return "bg-gray-100 text-gray-800"
-    case "published": return "bg-blue-100 text-blue-800"
-    case "inProgress": return "bg-yellow-100 text-yellow-800"
-    case "completed": return "bg-green-100 text-green-800"
-    case "cancelled": return "bg-red-100 text-red-800"
-    default: return "bg-gray-100 text-gray-800"
-  }
-}
-
 export function TournamentOverview({ tournament, userRole, token, onSlugChange }: TournamentOverviewProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [editingCard, setEditingCard] = useState<string | null>(null)
@@ -127,6 +129,11 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
   const [showLeaguePopover, setShowLeaguePopover] = useState(false)
   const [coordinatorSearch, setCoordinatorSearch] = useState("")
   const [showCoordinatorPopover, setShowCoordinatorPopover] = useState(false)
+  const [showStatusDialog, setShowStatusDialog] = useState(false)
+  const [pendingStatusChange, setPendingStatusChange] = useState<{
+    action: string
+    newStatus: string
+  } | null>(null)
 
   const [structureEditForm, setStructureEditForm] = useState({
     format: "",
@@ -156,7 +163,6 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
 
   const getUrl = useMutation(api.files.getUrl)
   const updateTournament = useMutation(api.functions.admin.tournaments.updateTournament)
-
   const rounds = useQuery(
     api.functions.admin.tournaments.getTournamentRounds,
     tournament?._id ? { tournament_id: tournament._id } : "skip"
@@ -265,6 +271,42 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
       }
     })
     setMotionsEditForm({ motions: motionsObj })
+  }
+
+  const handleStatusChange = async () => {
+    if (!pendingStatusChange || !token) return
+
+    try {
+      await updateTournament({
+        admin_token: token,
+        tournament_id: tournament._id,
+        name: tournament.name,
+        start_date: tournament.start_date,
+        end_date: tournament.end_date,
+        location: tournament.location,
+        is_virtual: tournament.is_virtual,
+        league_id: tournament.league_id,
+        coordinator_id: tournament.coordinator_id,
+        format: tournament.format as any,
+        team_size: tournament.team_size,
+        prelim_rounds: tournament.prelim_rounds,
+        elimination_rounds: tournament.elimination_rounds,
+        judges_per_debate: tournament.judges_per_debate,
+        fee: tournament.fee,
+        fee_currency: tournament.fee_currency,
+        speaking_times: tournament.speaking_times,
+        motions: {},
+        image: tournament.image,
+        status: pendingStatusChange.newStatus as any
+      })
+
+      toast.success(`Tournament ${pendingStatusChange.action}ed successfully`)
+      setShowStatusDialog(false)
+      setPendingStatusChange(null)
+    } catch (error: any) {
+      console.error("Error updating tournament status:", error)
+      toast.error(error.message || `Failed to ${pendingStatusChange.action} tournament`)
+    }
   }
 
 
@@ -583,22 +625,70 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
                 <CardTitle>Tournament Information</CardTitle>
                 <CardDescription>Basic details about the tournament</CardDescription>
               </div>
-              {canEditBasicInfo && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    if (editingCard === 'basic') {
-                      setEditingCard(null)
-                    } else {
-                      initializeBasicEditForm()
-                      setEditingCard('basic')
-                    }
-                  }}
-                >
-                  {editingCard === 'basic' ? <X className="h-4 w-4" /> : <Edit className="h-4 w-4" />}
-                </Button>
-              )}
+              <div className="flex gap-2">
+                {isAdmin && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        Status
+                        <ChevronDown className="h-4 w-4 ml-2" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {tournament.status === "draft" && (
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setPendingStatusChange({ action: "publish", newStatus: "published" })
+                            setShowStatusDialog(true)
+                          }}
+                        >
+                          <Globe className="h-4 w-4 mr-2" />
+                          Publish Tournament
+                        </DropdownMenuItem>
+                      )}
+                      {(tournament.status === "published" || tournament.status === "inProgress") && (
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setPendingStatusChange({ action: "cancel", newStatus: "cancelled" })
+                            setShowStatusDialog(true)
+                          }}
+                        >
+                          <PauseCircle className="h-4 w-4 mr-2" />
+                          Cancel Tournament
+                        </DropdownMenuItem>
+                      )}
+                      {tournament.status === "cancelled" && (
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setPendingStatusChange({ action: "reactivate", newStatus: "draft" })
+                            setShowStatusDialog(true)
+                          }}
+                        >
+                          <PlayCircle className="h-4 w-4 mr-2" />
+                          Reactivate Tournament
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+                {canEditBasicInfo && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (editingCard === 'basic') {
+                        setEditingCard(null)
+                      } else {
+                        initializeBasicEditForm()
+                        setEditingCard('basic')
+                      }
+                    }}
+                  >
+                    {editingCard === 'basic' ? <X className="h-4 w-4" /> : <Edit className="h-4 w-4" />}
+                  </Button>
+                )}
+
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               {editingCard === 'basic' ? (
@@ -834,7 +924,17 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
                       {userRole === "admin" && (
                         <Badge
                           variant="secondary"
-                          className={cn("text-xs", getStatusColor(tournament.status))}
+                          className={`${
+                            tournament.status === "draft"
+                              ? "bg-yellow-100 text-yellow-800"
+                              : tournament.status === "published"
+                                ? "bg-green-100 text-green-800"
+                                : tournament.status === "inProgress"
+                                  ? "bg-blue-100 text-blue-800"
+                                  : tournament.status === "cancelled"
+                                    ? "bg-red-100 text-red-800"
+                                    : ""
+                          }`}
                         >
                           {tournament.status}
                         </Badge>
@@ -1538,6 +1638,37 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
           </div>
         )}
       </Card>
+
+      <AlertDialog open={showStatusDialog} onOpenChange={setShowStatusDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingStatusChange?.action === "publish" && "Publish Tournament"}
+              {pendingStatusChange?.action === "cancel" && "Cancel Tournament"}
+              {pendingStatusChange?.action === "reactivate" && "Reactivate Tournament"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingStatusChange?.action === "publish" &&
+                "Are you sure you want to publish this tournament? Once published, teams can register and some settings will be locked."
+              }
+              {pendingStatusChange?.action === "cancel" &&
+                "Are you sure you want to cancel this tournament? This will prevent new registrations and may affect existing teams."
+              }
+              {pendingStatusChange?.action === "reactivate" &&
+                "Are you sure you want to reactivate this tournament? This will change its status back to draft."
+              }
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleStatusChange}>
+              {pendingStatusChange?.action === "publish" && "Publish"}
+              {pendingStatusChange?.action === "cancel" && "Cancel Tournament"}
+              {pendingStatusChange?.action === "reactivate" && "Reactivate"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

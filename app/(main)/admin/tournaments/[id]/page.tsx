@@ -17,6 +17,7 @@ import {
   Trophy
 } from "lucide-react"
 import { TournamentOverview } from "@/components/tournaments/tournament-overview"
+import { TournamentInvitations } from "@/components/tournaments/tournament-invitations";
 
 const navigationItems = [
   {
@@ -213,11 +214,13 @@ export default function TournamentPage() {
         )
       case "invitations":
         return (
-          <div className="text-center py-12">
-            <Mail className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-medium mb-2">Invitations</h3>
-            <p className="text-muted-foreground">Coming soon...</p>
-          </div>
+          <TournamentInvitations
+            tournament={tournament}
+            userRole={userRole}
+            token={token}
+            userId={user?.id}
+            schoolId={user?.school?.id}
+          />
         )
       case "teams":
         return (
@@ -273,13 +276,17 @@ export default function TournamentPage() {
             tournament={tournament}
             userRole={userRole}
             token={token}
+            onSlugChange={(newSlug) => {
+              setSlug(newSlug);
+              router.replace(`/admin/tournaments/${newSlug}${window.location.hash}`);
+            }}
           />
         )
     }
   }
 
   return (
-    <div className="">
+    <div>
 
       <div className="flex gap-6">
         <div className="hidden md:block w-42 shrink-0">

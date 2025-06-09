@@ -277,6 +277,18 @@ export const updateTournament = mutation({
       throw new Error("A tournament with this name already exists");
     }
 
+    if (updateData.status === "draft") {
+      const teamsCount = await ctx.db
+        .query("teams")
+        .withIndex("by_tournament_id", (q) => q.eq("tournament_id", tournament_id))
+        .collect()
+        .then(teams => teams.length);
+
+      if (teamsCount > 0) {
+        throw new Error("Cannot change tournament to draft status when it has registered teams. Please remove all teams first.");
+      }
+    }
+
     let finalSlug = existingTournament.slug;
     if (updateData.name.trim() !== existingTournament.name) {
       const newSlug = generateSlug(updateData.name);

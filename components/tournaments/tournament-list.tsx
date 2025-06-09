@@ -30,7 +30,7 @@ import {
   Users,
   Video,
   Trophy,
-  Contact
+  Contact, Globe
 } from "lucide-react";
 import { useDebounce }from "@/hooks/use-debounce"
 import { DataToolbar } from "@/components/shared/data-toolbar"
@@ -109,17 +109,6 @@ function TournamentCardSkeleton() {
       </div>
     </div>
   )
-}
-
-function getStatusColor(status: string) {
-  switch (status) {
-    case "draft": return "bg-gray-100 text-gray-800"
-    case "published": return "bg-blue-100 text-blue-800"
-    case "inProgress": return "bg-yellow-100 text-yellow-800"
-    case "completed": return "bg-green-100 text-green-800"
-    case "cancelled": return "bg-red-100 text-red-800"
-    default: return "bg-gray-100 text-gray-800"
-  }
 }
 
 function formatDateRange(startDate: number, endDate: number) {
@@ -347,6 +336,14 @@ export function TournamentList({ userRole, token, selectedLeagueId, className }:
 
   const bulkActions = isAdmin ? [
     {
+      label: "Publish Tournaments",
+      icon: <Globe className="h-4 w-4" />,
+      onClick: () => {
+        setBulkAction("publish")
+        setShowBulkDialog(true)
+      }
+    },
+    {
       label: "Archive Tournaments",
       icon: <Archive className="h-4 w-4" />,
       onClick: () => {
@@ -454,7 +451,17 @@ export function TournamentList({ userRole, token, selectedLeagueId, className }:
                             <div className="flex flex-wrap gap-2">
                               <Badge
                                 variant="secondary"
-                                className={cn("text-xs", getStatusColor(tournament.status))}
+                                className={`${
+                                  tournament.status === "draft"
+                                    ? "bg-yellow-100 text-yellow-800"
+                                    : tournament.status === "published"
+                                      ? "bg-green-100 text-green-800"
+                                      : tournament.status === "inProgress"
+                                        ? "bg-blue-100 text-blue-800"
+                                        : tournament.status === "cancelled"
+                                          ? "bg-red-100 text-red-800"
+                                          : ""
+                                }`}
                               >
                                 {tournament.status}
                               </Badge>
@@ -631,7 +638,9 @@ export function TournamentList({ userRole, token, selectedLeagueId, className }:
             <AlertDialogTitle>Bulk Action</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to {bulkAction} {selectedTournaments.size} selected tournament{selectedTournaments.size > 1 ? 's' : ''}?
-              This action will be applied to all selected tournaments.
+              {bulkAction === "publish" && " This will make the tournaments available for team registration."}
+              {bulkAction === "delete" && " This action cannot be undone and will permanently remove all tournament data."}
+              {bulkAction === "archive" && " Archived tournaments can be restored later but will be hidden from the main view."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -640,7 +649,10 @@ export function TournamentList({ userRole, token, selectedLeagueId, className }:
               onClick={handleBulkAction}
               className={bulkAction === "delete" ? "bg-red-600 hover:bg-red-700" : ""}
             >
-              {bulkAction === "delete" ? "Delete" : "Archive"} Tournaments
+              {bulkAction === "delete" && "Delete"}
+              {bulkAction === "archive" && "Archive"}
+              {bulkAction === "publish" && "Publish"}
+              {!["delete", "archive", "publish"].includes(bulkAction) && bulkAction} Tournaments
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
