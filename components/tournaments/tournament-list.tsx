@@ -245,7 +245,7 @@ export function TournamentList({ userRole, token, selectedLeagueId, className }:
       setShowDeleteDialog(false)
       setTournamentToDelete(null)
     } catch (error: any) {
-      toast.error(error.message || "Failed to delete tournament")
+      toast.error(error.message?.split("Uncaught Error:")[1]?.split(/\.|Called by client/)[0]?.trim() || "Failed to delete tournament")
     }
   }
 
@@ -261,7 +261,7 @@ export function TournamentList({ userRole, token, selectedLeagueId, className }:
       setShowArchiveDialog(false)
       setTournamentToArchive(null)
     } catch (error: any) {
-      toast.error(error.message || "Failed to archive tournament")
+      toast.error(error.message?.split("Uncaught Error:")[1]?.split(/\.|Called by client/)[0]?.trim() || "Failed to archive tournament")
     }
   }
 

@@ -92,7 +92,7 @@ type PhoneSignInData = {
   security_answer: string
 }
 
-type MagicLinkPurpose = "login" | "password_reset" | "email_verification" | "account_recovery"
+type MagicLinkPurpose = "login" | "password_reset"
 
 type SignInResult = {
   success: boolean

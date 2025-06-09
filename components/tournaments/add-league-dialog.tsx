@@ -25,6 +25,7 @@ import {
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { SimpleLocationMultiSelector } from "./league-location-multiselector"
+import { Loader2 } from "lucide-react";
 
 interface SelectedLocations {
   countries: string[]
@@ -189,7 +190,7 @@ export function AddLeagueDialog({ open, onOpenChange, token }: AddLeagueDialogPr
       onOpenChange(false)
       resetForm()
     } catch (error: any) {
-      toast.error(error.message || "Failed to create league")
+      toast.error(error.message?.split("Uncaught Error:")[1]?.split(/\.|Called by client/)[0]?.trim() || "Failed to create league")
     } finally {
       setIsLoading(false)
     }
@@ -322,7 +323,14 @@ export function AddLeagueDialog({ open, onOpenChange, token }: AddLeagueDialogPr
             onClick={handleSubmit}
             disabled={isLoading}
           >
-            {isLoading ? "Creating..." : "Create League"}
+            {isLoading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Creating...
+              </>
+            ) : (
+              "Create League"
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

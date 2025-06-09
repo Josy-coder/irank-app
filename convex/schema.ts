@@ -489,6 +489,24 @@ export default defineSchema({
     .index("by_expires_at", ["expires_at"])
     .index("by_user_id_expires_at", ["user_id", "expires_at"]),
 
+  push_subscriptions: defineTable({
+    user_id: v.id("users"),
+    endpoint: v.string(),
+    p256dh: v.string(),
+    auth: v.string(),
+    device_info: v.optional(v.object({
+      user_agent: v.optional(v.string()),
+      platform: v.optional(v.string()),
+      device_name: v.optional(v.string()),
+    })),
+    is_active: v.boolean(),
+    created_at: v.number(),
+    last_used_at: v.number(),
+  })
+    .index("by_user_id", ["user_id"])
+    .index("by_endpoint", ["endpoint"])
+    .index("by_user_id_active", ["user_id", "is_active"]),
+
   report_shares: defineTable({
     report_type: v.union(
       v.literal("tournament"),

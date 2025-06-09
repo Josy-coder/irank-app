@@ -67,8 +67,8 @@ import {
   Check,
   Edit,
   Plus,
-  Copy
-} from "lucide-react"
+  Copy, Loader2
+} from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel"
 import { type DateRange } from "react-day-picker"
 import Image from "next/image"
@@ -1087,6 +1087,7 @@ export default function CreateTournamentPage() {
             <Button disabled={loading} className="w-full sm:w-auto">
               {loading ? (
                 <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Saving...
                 </>
               ) : (

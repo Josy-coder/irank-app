@@ -355,7 +355,7 @@ export default function UsersPage() {
       })
       toast.success(`User ${verified ? 'verified' : 'unverified'} successfully`)
     } catch (error: any) {
-      toast.error(error.message || "Failed to update user verification")
+      toast.error(error.message?.split("Uncaught Error:")[1]?.split(/\.|Called by client/)[0]?.trim() || "Failed to update user verification")
     }
   }
 
@@ -371,7 +371,7 @@ export default function UsersPage() {
       setShowDeleteDialog(false)
       setUserToDelete(null)
     } catch (error: any) {
-      toast.error(error.message || "Failed to delete user")
+      toast.error(error.message?.split("Uncaught Error:")[1]?.split(/\.|Called by client/)[0]?.trim() || "Failed to delete user")
     }
   }
 
@@ -399,7 +399,7 @@ export default function UsersPage() {
       setShowBulkDialog(false)
       setBulkAction("")
     } catch (error: any) {
-      toast.error(error.message || "Failed to perform bulk action")
+      toast.error(error.message?.split("Uncaught Error:")[1]?.split(/\.|Called by client/)[0]?.trim() || "Failed to perform bulk action")
     }
   }
 

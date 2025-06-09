@@ -19,15 +19,18 @@ import type * as functions_admin_invitations from "../functions/admin/invitation
 import type * as functions_admin_leagues from "../functions/admin/leagues.js";
 import type * as functions_admin_tournaments from "../functions/admin/tournaments.js";
 import type * as functions_admin_users from "../functions/admin/users.js";
+import type * as functions_alerts from "../functions/alerts.js";
 import type * as functions_audit from "../functions/audit.js";
 import type * as functions_auth from "../functions/auth.js";
 import type * as functions_email from "../functions/email.js";
 import type * as functions_invitations from "../functions/invitations.js";
 import type * as functions_leagues from "../functions/leagues.js";
+import type * as functions_notifications from "../functions/notifications.js";
 import type * as functions_schools from "../functions/schools.js";
 import type * as functions_tournaments from "../functions/tournaments.js";
 import type * as functions_users from "../functions/users.js";
 import type * as lib_password from "../lib/password.js";
+import type * as lib_push_service from "../lib/push_service.js";
 
 /**
  * A utility for referencing Convex functions in your app's API.
@@ -44,15 +47,18 @@ declare const fullApi: ApiFromModules<{
   "functions/admin/leagues": typeof functions_admin_leagues;
   "functions/admin/tournaments": typeof functions_admin_tournaments;
   "functions/admin/users": typeof functions_admin_users;
+  "functions/alerts": typeof functions_alerts;
   "functions/audit": typeof functions_audit;
   "functions/auth": typeof functions_auth;
   "functions/email": typeof functions_email;
   "functions/invitations": typeof functions_invitations;
   "functions/leagues": typeof functions_leagues;
+  "functions/notifications": typeof functions_notifications;
   "functions/schools": typeof functions_schools;
   "functions/tournaments": typeof functions_tournaments;
   "functions/users": typeof functions_users;
   "lib/password": typeof lib_password;
+  "lib/push_service": typeof lib_push_service;
 }>;
 export declare const api: FilterApi<
   typeof fullApi,

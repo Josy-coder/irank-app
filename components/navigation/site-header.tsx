@@ -4,10 +4,9 @@ import { useAuth } from "@/hooks/useAuth"
 import { useMutation } from "convex/react"
 import { api } from "@/convex/_generated/api"
 import { Id } from "@/convex/_generated/dataModel"
-import { Bell, User, Settings, LogOut, ChevronDown } from "lucide-react"
+import { User, Settings, LogOut, ChevronDown } from "lucide-react"
 import Link from "next/link"
 import { useState, useEffect } from "react"
-
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
@@ -20,6 +19,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { NotificationCenter } from "@/components/notifications/notification-center"
 
 export function SiteHeader() {
   const { user, signOut } = useAuth()
@@ -50,15 +50,9 @@ export function SiteHeader() {
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="hidden md:block mr-2 h-4" />
         </div>
+
         <div className="flex items-center gap-4">
-          <div className="relative">
-            <div className="w-8 h-8 bg-white border border-gray-200 dark:border-gray-700 rounded-full flex items-center justify-center">
-              <Bell className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <div className="absolute -top-1 -right-2 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
-              <span className="text-xs text-white">9+</span>
-            </div>
-          </div>
+          <NotificationCenter />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -119,6 +113,5 @@ export function SiteHeader() {
         </div>
       </div>
     </header>
-
   )
 }

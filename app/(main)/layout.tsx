@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/breadcrumb"
 import React from "react";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
+import { NotificationPermissionBanner } from "@/components/notifications/permission-banner";
 
 function generateBreadcrumbs(pathname: string, userRole: string) {
   const cleanPathname = pathname.split('?')[0]
@@ -176,8 +177,14 @@ export default function DashboardLayout({
               </div>
             </div>
             <main className="flex-1 overflow-y-auto px-4 md:px-6 ">
+              <NotificationPermissionBanner />
+
               <AdvancedOfflineSheet />
               {children}
+              <div className="bg-red-100 p-4 mb-4">
+                <p>Test banner - if you see this, the positioning works</p>
+              </div>
+
             </main>
           </div>
         </SidebarInset>

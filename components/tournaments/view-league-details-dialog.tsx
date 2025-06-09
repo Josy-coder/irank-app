@@ -35,7 +35,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
-import { Edit, Calendar, Info, ChevronDown, ChevronUp, Globe, MapPin } from "lucide-react"
+import { Edit, Calendar, Info, ChevronDown, ChevronUp, Globe, MapPin, Loader2 } from "lucide-react";
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { Id } from "@/convex/_generated/dataModel"
@@ -705,7 +705,15 @@ export function ViewLeagueDetailsDialog({
                   disabled={isLoading}
                   className="flex-1 sm:flex-none"
                 >
-                  {isLoading ? "Saving..." : "Save Changes"}
+                  {isLoading ?
+                    (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ): (
+                      "Save Changes"
+                    )}
                 </Button>
               </div>
             ) : (
