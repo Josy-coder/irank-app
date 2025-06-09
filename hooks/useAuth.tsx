@@ -177,8 +177,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const enableMFAMutation = useMutation(api.functions.auth.enableMFA)
   const disableMFAMutation = useMutation(api.functions.auth.disableMFA)
   const updateSecurityQuestionMutation = useMutation(api.functions.auth.updateSecurityQuestion)
-  const sendWelcomeEmail = useAction(api.actions.email.sendWelcomeEmail);
-  const sendMagicLinkEmail = useAction(api.actions.email.sendMagicLinkEmail);
+  const sendWelcomeEmail = useAction(api.functions.email.sendWelcomeEmail);
+  const sendMagicLinkEmail = useAction(api.functions.email.sendMagicLinkEmail);
 
   const currentUser = useQuery(
     api.functions.auth.getCurrentUser,

@@ -1,6 +1,6 @@
 "use client"
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import SignInForm from "@/components/auth/sign-in-form"
 import { motion } from "framer-motion"
 import Image from "next/image"

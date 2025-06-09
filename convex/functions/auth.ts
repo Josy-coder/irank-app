@@ -278,7 +278,7 @@ export const signUp = mutation({
         password_salt: passwordSalt,
         role: args.role,
         school_id,
-        status: "inactive",
+        status: "active",
         verified: false,
         gender: args.gender,
         date_of_birth: args.date_of_birth,
