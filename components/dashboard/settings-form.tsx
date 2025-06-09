@@ -557,8 +557,8 @@ export default function SettingsForm() {
                   <Dialog open={deleteAccountDialogOpen} onOpenChange={setDeleteAccountDialogOpen}>
                     <DialogTrigger asChild>
                       <Button variant="destructive" size="sm">
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Delete Account
+                        <Trash2 className="md:mr-2 h-4 w-4" />
+                        <span className="hidden md:block">Delete Account</span>
                       </Button>
                     </DialogTrigger>
                     <DialogContent>

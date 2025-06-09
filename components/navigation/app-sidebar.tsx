@@ -10,8 +10,8 @@ import {
   BarChart3,
   LayoutDashboard,
   FileBadge2Icon,
-  FilePieChart
-} from "lucide-react"
+  FilePieChart, X
+} from "lucide-react";
 
 import { NavMain } from "@/components/navigation/nav-main"
 import { NavUser } from "@/components/navigation/nav-user"
@@ -21,8 +21,9 @@ import {
   SidebarFooter,
   SidebarHeader, SidebarMenu,
   SidebarMenuButton, SidebarMenuItem,
-  SidebarRail
+  SidebarRail, useSidebar
 } from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
 
 const sidebarItems = {
   student: [
@@ -53,6 +54,8 @@ const sidebarItems = {
 }
 
 function AppHeader() {
+  const { setOpenMobile, isMobile } = useSidebar()
+
   return (
     <SidebarMenu>
       <SidebarMenuItem>
@@ -68,11 +71,24 @@ function AppHeader() {
               height={20}
             />
           </div>
-          <div className="grid flex-1 text-left text-sm leading-tight ">
+          <div className="grid flex-1 text-left text-sm leading-tight">
             <span className="truncate font-semibold text-white">
               iRankHub
             </span>
           </div>
+          {isMobile && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 text-white hover:bg-white/10"
+              onClick={(e) => {
+                e.preventDefault()
+                setOpenMobile(false)
+              }}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
         </SidebarMenuButton>
       </SidebarMenuItem>
     </SidebarMenu>
@@ -96,6 +112,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar
       collapsible="icon"
+      variant="sidebar"
       className="bg-primary border-r-0"
       {...props}
     >

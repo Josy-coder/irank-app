@@ -104,14 +104,26 @@ export function LeagueList({ userRole, token, selectedLeagueId, onLeagueSelect, 
     }
   )
 
+  console.log('leaguesData:', leaguesData)
+  console.log('leagues state:', leagues)
+  console.log('debouncedSearch:', debouncedSearch)
+  console.log('page:', page)
+
   const deleteLeague = useMutation(api.functions.admin.leagues.deleteLeague)
 
   useEffect(() => {
-    if (leaguesData?.leagues) {
-      if (page === 1) {
-        setLeagues(leaguesData.leagues)
+    if (leaguesData) {
+      if (leaguesData.leagues) {
+        if (page === 1) {
+          setLeagues(leaguesData.leagues)
+        } else {
+          setLeagues(prev => [...prev, ...leaguesData.leagues])
+        }
       } else {
-        setLeagues(prev => [...prev, ...leaguesData.leagues])
+        if (page === 1) {
+          console.log('Setting empty leagues array')
+          setLeagues([])
+        }
       }
       setHasMore(leaguesData.hasMore)
       setIsLoadingMore(false)
@@ -119,9 +131,11 @@ export function LeagueList({ userRole, token, selectedLeagueId, onLeagueSelect, 
   }, [leaguesData, page])
 
   useEffect(() => {
-    setPage(1)
-    setLeagues([])
-    setHasMore(true)
+    if (debouncedSearch !== "" || leagues.length > 0) {
+      setPage(1)
+      setLeagues([])
+      setHasMore(true)
+    }
   }, [debouncedSearch])
 
   const loadMore = useCallback(() => {
@@ -179,7 +193,7 @@ export function LeagueList({ userRole, token, selectedLeagueId, onLeagueSelect, 
 
   return (
     <div className={cn("flex flex-col h-full", className)}>
-      <div className="px-4 py-12 md:py-4 md:px-0">
+      <div className="px-4 py-6 md:py-4 md:px-0">
         <div className="flex items-center gap-2 mb-2">
           <div className="relative md:ml-[1px] flex-1 bg-background">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -224,7 +238,7 @@ export function LeagueList({ userRole, token, selectedLeagueId, onLeagueSelect, 
               </p>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2 px-4 md:px-0">
               {leagues.map((league) => {
                 const isSelected = selectedLeagueId === league._id
 
@@ -232,7 +246,7 @@ export function LeagueList({ userRole, token, selectedLeagueId, onLeagueSelect, 
                   <div
                     key={league._id}
                     className={cn(
-                      "flex items-center justify-between p-3 rounded-md border border-[#E2E8F0] cursor-pointer transition-colors bg-background hover:bg-background/80",
+                      "flex items-center justify-between py-2 px-3 md:px-3 md:py-3 rounded-md border border-[#E2E8F0] cursor-pointer transition-colors bg-background hover:bg-background/80",
                       isSelected && "bg-primary/10 border-primary"
                     )}
                     onClick={() => handleLeagueClick(league)}

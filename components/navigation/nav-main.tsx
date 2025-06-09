@@ -10,6 +10,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar"
 
 export function NavMain({
@@ -23,6 +24,14 @@ export function NavMain({
   }[]
 }) {
   const pathname = usePathname()
+  const { setOpenMobile, isMobile } = useSidebar()
+
+  const handleNavClick = () => {
+    // Close mobile sidebar when navigation item is clicked
+    if (isMobile) {
+      setOpenMobile(false)
+    }
+  }
 
   return (
     <SidebarGroup>
@@ -42,7 +51,7 @@ export function NavMain({
                     : "text-white/80 hover:bg-white/10 hover:text-white"
                 )}
               >
-                <Link href={item.url}>
+                <Link href={item.url} onClick={handleNavClick}>
                   {item.icon && <item.icon className="h-5 w-5" />}
                   <span className="font-medium text-sm">{item.title}</span>
                 </Link>

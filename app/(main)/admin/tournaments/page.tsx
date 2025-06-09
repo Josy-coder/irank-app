@@ -39,7 +39,7 @@ export default function AdminTournamentsPage() {
                 <Building className="h-6 w-6" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="bottom" className="w-full bg-background p-0">
+            <SheetContent side="bottom" className="w-full bg-background">
               <LeagueList
                 userRole="admin"
                 token={token}
