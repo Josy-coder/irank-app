@@ -27,7 +27,6 @@ export function NavMain({
   const { setOpenMobile, isMobile } = useSidebar()
 
   const handleNavClick = () => {
-    // Close mobile sidebar when navigation item is clicked
     if (isMobile) {
       setOpenMobile(false)
     }
