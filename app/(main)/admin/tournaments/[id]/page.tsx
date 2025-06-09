@@ -288,9 +288,9 @@ export default function TournamentPage() {
   return (
     <div>
 
-      <div className="flex gap-6">
-        <div className="hidden md:block w-42 shrink-0">
-          <div className="sticky top-6 h-screen">
+      <div className="flex min-h-screen gap-6">
+        <div className="hidden md:block w-42 shrink-0 mt-6">
+          <div className="h-full">
             <TournamentSidebar
               activeSection={activeSection}
               onSectionChange={handleSectionChange}
@@ -298,6 +298,7 @@ export default function TournamentPage() {
             />
           </div>
         </div>
+
         <div className="flex-1 min-w-0">
           <div className="py-6 lg:pb-6">
             {renderSection()}
@@ -309,6 +310,7 @@ export default function TournamentPage() {
         activeSection={activeSection}
         onSectionChange={handleSectionChange}
       />
+
     </div>
   )
 }
