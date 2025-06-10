@@ -98,16 +98,13 @@ export function NotificationPermissionBanner() {
             </p>
             <ul className="text-xs text-blue-700 dark:text-blue-300 space-y-1">
               <li className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 bg-foreground rounded-full"></div>
-                Tournament announcements
+                • Tournament announcements
               </li>
               <li className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 bg-foreground rounded-full"></div>
-                Debate schedules & results
+                • Debate schedules & results
               </li>
               <li className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 bg-foreground rounded-full"></div>
-                Important system updates
+                • Important system updates
               </li>
             </ul>
           </div>

@@ -288,6 +288,7 @@ export const signUp = mutation({
         national_id: args.national_id,
         safeguarding_certificate: args.safeguarding_certificate,
         mfa_enabled: false,
+        biometric_enabled: false,
         failed_login_attempts: 0,
         created_at: now,
       });

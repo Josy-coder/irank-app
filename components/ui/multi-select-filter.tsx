@@ -6,7 +6,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { CirclePlus, Filter } from "lucide-react";
+import { CirclePlus } from "lucide-react";
 import { cn } from "@/lib/utils"
 
 interface MultiSelectFilterProps {
@@ -37,9 +37,7 @@ export function MultiSelectFilter({
 
   const displayText = selected.length === 0
     ? title
-    : selected.length === 1
-      ? options.find(o => o.value === selected[0])?.label || title
-      : `${selected.length} selected`
+    : `${selected.length} selected`;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

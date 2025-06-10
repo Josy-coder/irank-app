@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Table,
@@ -39,11 +39,10 @@ import {
   UserCog,
   Clock,
   CheckCircle,
-  XCircle,
   Mail,
   AlertTriangle,
-  Copy
-} from "lucide-react"
+  Copy, CheckCircle2, CircleX
+} from "lucide-react";
 import { useDebounce } from "@/hooks/use-debounce"
 import { DataToolbar } from "@/components/shared/data-toolbar"
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter"
@@ -133,9 +132,9 @@ function getStatusIcon(status: string) {
     case "pending":
       return Clock;
     case "accepted":
-      return CheckCircle;
+      return CheckCircle2;
     case "declined":
-      return XCircle;
+      return CircleX;
     default:
       return Clock;
   }
@@ -223,7 +222,7 @@ export function TournamentInvitations({
   const [showBulkInviteDialog, setShowBulkInviteDialog] = useState(false);
   const [showResponseDialog, setShowResponseDialog] = useState(false);
   const [responseAction, setResponseAction] = useState<"accepted" | "declined">("accepted");
-  const [selectedInvitation, setSelectedInvitation] = useState<string | null>(null);
+  const [, setSelectedInvitation] = useState<string | null>(null);
 
   const debouncedSearch = useDebounce(searchTerm, 300);
   const isAdmin = userRole === "admin";
@@ -290,6 +289,44 @@ export function TournamentInvitations({
       }
       : "skip"
   );
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const invitationId = urlParams.get('id');
+    const response = urlParams.get('response');
+
+    if (invitationId && response && (response === 'accepted' || response === 'declined')) {
+      const invitations = isAdmin
+        ? (invitationsData as any)?.invitations || []
+        : invitationsData || [];
+
+      const invitation = invitations.find((inv: any) => inv._id === invitationId);
+
+      if (invitation) {
+        const isExpired = invitation.expires_at && Date.now() > invitation.expires_at;
+
+        if (!isAdmin && isExpired) {
+          toast.error("This invitation has expired and cannot be responded to.");
+          window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
+          return;
+        }
+        const canRespond = (isAdmin || invitation.target_id === userId) &&
+          invitation.status === "pending";
+
+        if (canRespond) {
+          handleRespondToInvitation(invitationId as Id<"tournament_invitations">, response as "accepted" | "declined");
+        } else if (invitation.status !== "pending") {
+          toast.info(`This invitation has already been ${invitation.status}.`);
+        } else {
+          toast.error("You don't have permission to respond to this invitation.");
+        }
+      } else {
+        toast.error("Invitation not found.");
+      }
+
+      window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
+    }
+  }, [invitationsData, isAdmin, userId, token]);
 
   const sendInvitation = useMutation(api.functions.admin.invitations.sendInvitation);
   const bulkSendInvitations = useMutation(api.functions.admin.invitations.bulkSendInvitations);
@@ -492,18 +529,6 @@ export function TournamentInvitations({
           </div>
         ) : (
           <>
-            {isAdmin && (
-              <div className="flex items-center gap-2 mb-6 px-6">
-                <Checkbox
-                  checked={selectedItems.size === invitations.length && invitations.length > 0}
-                  onCheckedChange={handleSelectAll}
-                />
-                <span className="text-sm text-muted-foreground">
-                  Select all invitations
-                </span>
-              </div>
-            )}
-
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -515,7 +540,6 @@ export function TournamentInvitations({
                       />
                     </TableHead>}
                     <TableHead>Invitee</TableHead>
-                    <TableHead>Type</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Invited</TableHead>
                     {isAdmin && <TableHead>Invited By</TableHead>}
@@ -526,10 +550,11 @@ export function TournamentInvitations({
                   {invitations.map((invitation: any) => {
                     const StatusIcon = getStatusIcon(invitation.status)
                     const TypeIcon = getTypeIcon(invitation.target_type)
+                    const isExpired = invitation.expires_at && Date.now() > invitation.expires_at
                     const canRespond = canRespondToInvitations &&
                       (isAdmin || invitation.target_id === userId) &&
-                      invitation.status === "pending"
-                    const isExpired = invitation.expires_at && Date.now() > invitation.expires_at
+                      invitation.status === "pending" &&
+                      (isAdmin || !isExpired)
 
                     return (
                       <TableRow key={invitation._id}>
@@ -551,8 +576,14 @@ export function TournamentInvitations({
                               </AvatarFallback>
                             </Avatar>
                             <div className="min-w-0">
-                              <div className="font-medium truncate">
-                                {invitation.target?.name}
+                              <div className="flex items-center gap-2">
+                                <div className="font-medium truncate">
+                                  {invitation.target?.name}
+                                </div>
+                                <Badge variant="secondary" className={getTypeColor(invitation.target_type)}>
+                                  <TypeIcon className="w-3 h-3 mr-1" />
+                                  {invitation.target_type.charAt(0).toUpperCase() + invitation.target_type.slice(1)}
+                                </Badge>
                               </div>
                               <CopyableEmail email={invitation.target?.email} />
                               {invitation.target?.school && (
@@ -564,19 +595,16 @@ export function TournamentInvitations({
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Badge variant="secondary" className={getTypeColor(invitation.target_type)}>
-                            <TypeIcon className="w-3 h-3 mr-1" />
-                            {invitation.target_type.charAt(0).toUpperCase() + invitation.target_type.slice(1)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
+                          <div className="grid grid-cols-1 gap-2">
                             <Badge variant="secondary" className={getStatusColor(invitation.status)}>
                               <StatusIcon className="w-3 h-3 mr-1" />
                               {invitation.status.charAt(0).toUpperCase() + invitation.status.slice(1)}
                             </Badge>
-                            {isExpired && !isAdmin && (
-                              <AlertTriangle className="w-4 h-4 text-orange-500" />
+                            {isExpired && (
+                              <Badge variant="outline" className="bg-orange-50 text-orange-600 border-orange-200">
+                                <AlertTriangle className="w-3 h-3 mr-1" />
+                                Expired
+                              </Badge>
                             )}
                           </div>
                         </TableCell>
@@ -585,7 +613,7 @@ export function TournamentInvitations({
                             <div>{formatDistanceToNow(new Date(invitation.invited_at), { addSuffix: true })}</div>
                             {invitation.responded_at && (
                               <div className="text-xs text-muted-foreground">
-                                Responded {formatDistanceToNow(new Date(invitation.responded_at), { addSuffix: true })}
+                                Replied {formatDistanceToNow(new Date(invitation.responded_at), { addSuffix: true })}
                               </div>
                             )}
                           </div>
@@ -599,26 +627,32 @@ export function TournamentInvitations({
                         )}
                         <TableCell>
                           <div className="flex gap-2">
-                            {canRespond && (
+                            {!canRespond && isExpired && !isAdmin ? (
+                              <span className="text-sm text-muted-foreground">Expired</span>
+                            ) : canRespond ? (
                               <>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleRespondToInvitation(invitation._id, "accepted")}
-                                  className="text-green-600 hover:bg-green-50"
-                                >
-                                  <UserCheck className="w-4 h-4" />
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleRespondToInvitation(invitation._id, "declined")}
-                                  className="text-red-600 hover:bg-red-50"
-                                >
-                                  <UserX className="w-4 h-4" />
-                                </Button>
+                                {invitation.status !== "accepted" && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleRespondToInvitation(invitation._id, "accepted")}
+                                    className="text-green-600 hover:bg-green-50"
+                                  >
+                                    <UserCheck className="w-4 h-4" />
+                                  </Button>
+                                )}
+                                {invitation.status !== "declined" && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleRespondToInvitation(invitation._id, "declined")}
+                                    className="text-red-600 hover:bg-red-50"
+                                  >
+                                    <UserX className="w-4 h-4" />
+                                  </Button>
+                                )}
                               </>
-                            )}
+                            ) : null}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -642,10 +676,10 @@ export function TournamentInvitations({
                 </Button>
 
                 <span className="text-sm text-foreground">
-                  <span className="text-muted-foreground">
-                    Page {page} • {(currentData as any)?.totalCount || 0} total
-                  </span>
+                <span className="text-muted-foreground">
+                  Page {page} • {(currentData as any)?.totalCount || 0} total
                 </span>
+              </span>
 
                 <Button
                   variant="outline"
@@ -685,16 +719,6 @@ export function TournamentInvitations({
           </div>
         ) : (
           <>
-            <div className="flex items-center gap-2 mb-6 px-6">
-              <Checkbox
-                checked={selectedItems.size === users.length && users.length > 0}
-                onCheckedChange={handleSelectAll}
-              />
-              <span className="text-sm text-muted-foreground">
-                Select all users
-              </span>
-            </div>
-
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>

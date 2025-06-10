@@ -18,6 +18,7 @@ import {
 } from "lucide-react"
 import { TournamentOverview } from "@/components/tournaments/tournament-overview"
 import { TournamentInvitations } from "@/components/tournaments/tournament-invitations";
+import { TournamentTeams } from "@/components/tournaments/tournament-teams";
 
 const navigationItems = [
   {
@@ -224,11 +225,13 @@ export default function TournamentPage() {
         )
       case "teams":
         return (
-          <div className="text-center py-12">
-            <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-medium mb-2">Teams</h3>
-            <p className="text-muted-foreground">Coming soon...</p>
-          </div>
+          <TournamentTeams
+            tournament={tournament}
+            userRole={userRole}
+            token={token}
+            userId={user?.id}
+            schoolId={user?.school?.id}
+          />
         )
       case "pairings":
         return (

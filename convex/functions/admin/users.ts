@@ -551,6 +551,8 @@ export const createUser = mutation({
       gender: args.gender,
       date_of_birth: args.date_of_birth,
       created_at: Date.now(),
+      failed_login_attempts: 0,
+      biometric_enabled:false,
     };
 
     if (args.role === "student") {
@@ -833,6 +835,8 @@ export const bulkCreateUsers = mutation({
           verified: true,
           gender: userData.gender,
           created_at: Date.now(),
+          failed_login_attempts: 0,
+          biometric_enabled: false,
         };
 
         if (userData.role === "student") {

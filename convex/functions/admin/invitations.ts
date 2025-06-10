@@ -66,57 +66,91 @@ export const sendInvitation = mutation({
       if (!league) {
         throw new Error("Tournament league not found");
       }
-      if (league.type === "Dreams Mode" && target_type === "school") {
-        throw new Error("Schools cannot be invited to Dreams Mode tournaments");
-      }
-      if ((league.type === "Local" || league.type === "International") &&
-        target_type === "student") {
-        throw new Error("Students cannot be directly invited to Local/International tournaments");
-      }
-      if (target_type === "school" &&
-        (league.type === "Local" || league.type === "International")) {
-        const school = await ctx.db
-          .query("schools")
-          .filter((q) => q.eq(q.field("contact_email"), target.email))
-          .first();
+      if (league.type === "Dreams Mode") {
+      } else if (league.type === "Local") {
+        if (target_type === "school" || target_type === "student") {
+          let school = null;
 
-        if (school && league.geographic_scope) {
-          const schoolCountry = school.country;
-          const schoolProvince = school.province;
-          const schoolDistrict = school.district;
-          const schoolSector = school.sector;
-          const schoolCell = school.cell;
-          const schoolVillage = school.village;
-          const scopeForCountry = league.geographic_scope[schoolCountry];
-          if (!scopeForCountry) {
-            throw new Error(`School's country (${schoolCountry}) is not within this league's geographic scope`);
-          }
-          if (scopeForCountry.provinces && scopeForCountry.provinces.length > 0) {
-            if (!schoolProvince || !scopeForCountry.provinces.includes(schoolProvince)) {
-              throw new Error(`School's province (${schoolProvince}) is not within this league's geographic scope`);
+          if (target_type === "school") {
+            if (target.school_id) {
+              school = await ctx.db.get(target.school_id);
+            } else {
+              school = await ctx.db
+                .query("schools")
+                .filter((q) => q.eq(q.field("contact_email"), target.email))
+                .first();
             }
+          } else if (target_type === "student" && target.school_id) {
+            school = await ctx.db.get(target.school_id);
           }
-          if (scopeForCountry.districts && scopeForCountry.districts.length > 0) {
-            if (!schoolDistrict || !scopeForCountry.districts.includes(schoolDistrict)) {
-              throw new Error(`School's district (${schoolDistrict}) is not within this league's geographic scope`);
+
+          if (school && school.country !== "RW") {
+            throw new Error(`Local tournaments are restricted to Rwanda. School's country (${school.country}) is not allowed.`);
+          }
+        }
+      } else if (league.type === "International") {
+        if (target_type === "school" || target_type === "student") {
+          let school = null;
+
+          if (target_type === "school") {
+            if (target.school_id) {
+              school = await ctx.db.get(target.school_id);
+            } else {
+              school = await ctx.db
+                .query("schools")
+                .filter((q) => q.eq(q.field("contact_email"), target.email))
+                .first();
             }
+          } else if (target_type === "student" && target.school_id) {
+            school = await ctx.db.get(target.school_id);
           }
-          if (scopeForCountry.sectors && scopeForCountry.sectors.length > 0) {
-            if (!schoolSector || !scopeForCountry.sectors.includes(schoolSector)) {
-              throw new Error(`School's sector (${schoolSector}) is not within this league's geographic scope`);
+
+          if (school && league.geographic_scope) {
+            const schoolCountry = school.country;
+            const schoolProvince = school.province;
+            const schoolDistrict = school.district;
+            const schoolSector = school.sector;
+            const schoolCell = school.cell;
+            const schoolVillage = school.village;
+
+            const scopeForCountry = league.geographic_scope[schoolCountry];
+            if (!scopeForCountry) {
+              throw new Error(`School's country (${schoolCountry}) is not within this league's geographic scope`);
             }
-          }
-          if (scopeForCountry.cells && scopeForCountry.cells.length > 0) {
-            if (!schoolCell || !scopeForCountry.cells.includes(schoolCell)) {
-              throw new Error(`School's cell (${schoolCell}) is not within this league's geographic scope`);
+            if (scopeForCountry.provinces && scopeForCountry.provinces.length > 0) {
+              if (!schoolProvince || !scopeForCountry.provinces.includes(schoolProvince)) {
+                throw new Error(`School's province (${schoolProvince}) is not within this league's geographic scope`);
+              }
             }
-          }
-          if (scopeForCountry.villages && scopeForCountry.villages.length > 0) {
-            if (!schoolVillage || !scopeForCountry.villages.includes(schoolVillage)) {
-              throw new Error(`School's village (${schoolVillage}) is not within this league's geographic scope`);
+            if (scopeForCountry.districts && scopeForCountry.districts.length > 0) {
+              if (!schoolDistrict || !scopeForCountry.districts.includes(schoolDistrict)) {
+                throw new Error(`School's district (${schoolDistrict}) is not within this league's geographic scope`);
+              }
+            }
+            if (scopeForCountry.sectors && scopeForCountry.sectors.length > 0) {
+              if (!schoolSector || !scopeForCountry.sectors.includes(schoolSector)) {
+                throw new Error(`School's sector (${schoolSector}) is not within this league's geographic scope`);
+              }
+            }
+            if (scopeForCountry.cells && scopeForCountry.cells.length > 0) {
+              if (!schoolCell || !scopeForCountry.cells.includes(schoolCell)) {
+                throw new Error(`School's cell (${schoolCell}) is not within this league's geographic scope`);
+              }
+            }
+            if (scopeForCountry.villages && scopeForCountry.villages.length > 0) {
+              if (!schoolVillage || !scopeForCountry.villages.includes(schoolVillage)) {
+                throw new Error(`School's village (${schoolVillage}) is not within this league's geographic scope`);
+              }
             }
           }
         }
+      }
+      if (league.type === "Dreams Mode" && target_type === "school") {
+        throw new Error("Schools cannot be invited to Dreams Mode tournaments");
+      }
+
+      if ((league.type === "Local" || league.type === "International") && target_type === "student") {
+        throw new Error("Students cannot be directly invited to Local/International tournaments");
       }
     }
 
@@ -250,6 +284,120 @@ export const bulkSendInvitations = mutation({
           continue;
         }
         if (league) {
+          if (league.type === "Dreams Mode") {
+          } else if (league.type === "Local") {
+            if (target_type === "school" || target_type === "student") {
+              let school = null;
+
+              if (target_type === "school") {
+                if (target.school_id) {
+                  school = await ctx.db.get(target.school_id);
+                } else {
+                  school = await ctx.db
+                    .query("schools")
+                    .filter((q) => q.eq(q.field("contact_email"), target.email))
+                    .first();
+                }
+              } else if (target_type === "student" && target.school_id) {
+                school = await ctx.db.get(target.school_id);
+              }
+
+              if (school && school.country !== "RW") {
+                results.push({
+                  target_id,
+                  success: false,
+                  error: `Local tournaments are restricted to Rwanda. School's country (${school.country}) is not allowed.`,
+                });
+                continue;
+              }
+            }
+          } else if (league.type === "International") {
+            if (target_type === "school" || target_type === "student") {
+              let school = null;
+
+              if (target_type === "school") {
+                if (target.school_id) {
+                  school = await ctx.db.get(target.school_id);
+                } else {
+                  school = await ctx.db
+                    .query("schools")
+                    .filter((q) => q.eq(q.field("contact_email"), target.email))
+                    .first();
+                }
+              } else if (target_type === "student" && target.school_id) {
+                school = await ctx.db.get(target.school_id);
+              }
+
+              if (school && league.geographic_scope) {
+                const schoolCountry = school.country;
+                const schoolProvince = school.province;
+                const schoolDistrict = school.district;
+                const schoolSector = school.sector;
+                const schoolCell = school.cell;
+                const schoolVillage = school.village;
+
+                const scopeForCountry = league.geographic_scope[schoolCountry];
+                if (!scopeForCountry) {
+                  results.push({
+                    target_id,
+                    success: false,
+                    error: `School's country (${schoolCountry}) is not within this league's geographic scope`,
+                  });
+                  continue;
+                }
+                if (scopeForCountry.provinces && scopeForCountry.provinces.length > 0) {
+                  if (!schoolProvince || !scopeForCountry.provinces.includes(schoolProvince)) {
+                    results.push({
+                      target_id,
+                      success: false,
+                      error: `School's province (${schoolProvince}) is not within this league's geographic scope`,
+                    });
+                    continue;
+                  }
+                }
+                if (scopeForCountry.districts && scopeForCountry.districts.length > 0) {
+                  if (!schoolDistrict || !scopeForCountry.districts.includes(schoolDistrict)) {
+                    results.push({
+                      target_id,
+                      success: false,
+                      error: `School's district (${schoolDistrict}) is not within this league's geographic scope`,
+                    });
+                    continue;
+                  }
+                }
+                if (scopeForCountry.sectors && scopeForCountry.sectors.length > 0) {
+                  if (!schoolSector || !scopeForCountry.sectors.includes(schoolSector)) {
+                    results.push({
+                      target_id,
+                      success: false,
+                      error: `School's sector (${schoolSector}) is not within this league's geographic scope`,
+                    });
+                    continue;
+                  }
+                }
+                if (scopeForCountry.cells && scopeForCountry.cells.length > 0) {
+                  if (!schoolCell || !scopeForCountry.cells.includes(schoolCell)) {
+                    results.push({
+                      target_id,
+                      success: false,
+                      error: `School's cell (${schoolCell}) is not within this league's geographic scope`,
+                    });
+                    continue;
+                  }
+                }
+                if (scopeForCountry.villages && scopeForCountry.villages.length > 0) {
+                  if (!schoolVillage || !scopeForCountry.villages.includes(schoolVillage)) {
+                    results.push({
+                      target_id,
+                      success: false,
+                      error: `School's village (${schoolVillage}) is not within this league's geographic scope`,
+                    });
+                    continue;
+                  }
+                }
+              }
+            }
+          }
           if (league.type === "Dreams Mode" && target_type === "school") {
             results.push({
               target_id,
@@ -258,8 +406,8 @@ export const bulkSendInvitations = mutation({
             });
             continue;
           }
-          if ((league.type === "Local" || league.type === "International") &&
-            target_type === "student") {
+
+          if ((league.type === "Local" || league.type === "International") && target_type === "student") {
             results.push({
               target_id,
               success: false,
@@ -267,82 +415,8 @@ export const bulkSendInvitations = mutation({
             });
             continue;
           }
-          if (target_type === "school" &&
-            (league.type === "Local" || league.type === "International")) {
-            const school = await ctx.db
-              .query("schools")
-              .filter((q) => q.eq(q.field("contact_email"), target.email))
-              .first();
-
-            if (school && league.geographic_scope) {
-              const schoolCountry = school.country;
-              const schoolProvince = school.province;
-              const schoolDistrict = school.district;
-              const schoolSector = school.sector;
-              const schoolCell = school.cell;
-              const schoolVillage = school.village;
-              const scopeForCountry = league.geographic_scope[schoolCountry];
-              if (!scopeForCountry) {
-                results.push({
-                  target_id,
-                  success: false,
-                  error: `School's country (${schoolCountry}) is not within this league's geographic scope`,
-                });
-                continue;
-              }
-              if (scopeForCountry.provinces && scopeForCountry.provinces.length > 0) {
-                if (!schoolProvince || !scopeForCountry.provinces.includes(schoolProvince)) {
-                  results.push({
-                    target_id,
-                    success: false,
-                    error: `School's province (${schoolProvince}) is not within this league's geographic scope`,
-                  });
-                  continue;
-                }
-              }
-              if (scopeForCountry.districts && scopeForCountry.districts.length > 0) {
-                if (!schoolDistrict || !scopeForCountry.districts.includes(schoolDistrict)) {
-                  results.push({
-                    target_id,
-                    success: false,
-                    error: `School's district (${schoolDistrict}) is not within this league's geographic scope`,
-                  });
-                  continue;
-                }
-              }
-              if (scopeForCountry.sectors && scopeForCountry.sectors.length > 0) {
-                if (!schoolSector || !scopeForCountry.sectors.includes(schoolSector)) {
-                  results.push({
-                    target_id,
-                    success: false,
-                    error: `School's sector (${schoolSector}) is not within this league's geographic scope`,
-                  });
-                  continue;
-                }
-              }
-              if (scopeForCountry.cells && scopeForCountry.cells.length > 0) {
-                if (!schoolCell || !scopeForCountry.cells.includes(schoolCell)) {
-                  results.push({
-                    target_id,
-                    success: false,
-                    error: `School's cell (${schoolCell}) is not within this league's geographic scope`,
-                  });
-                  continue;
-                }
-              }
-              if (scopeForCountry.villages && scopeForCountry.villages.length > 0) {
-                if (!schoolVillage || !scopeForCountry.villages.includes(schoolVillage)) {
-                  results.push({
-                    target_id,
-                    success: false,
-                    error: `School's village (${schoolVillage}) is not within this league's geographic scope`,
-                  });
-                  continue;
-                }
-              }
-            }
-          }
         }
+
         const invitationId = await ctx.db.insert("tournament_invitations", {
           tournament_id,
           target_type,
@@ -433,7 +507,7 @@ export const getPotentialInvitees = query({
           q.eq("role", "volunteer").eq("status", "active"));
 
       const volunteers = await volunteerQuery.collect();
-      users.push(...volunteers.filter(u => !invitedUserIds.has(u._id)));
+      users.push(...volunteers.filter(u => u.verified && !invitedUserIds.has(u._id)));
     }
 
     if (target_type === "student" || !target_type) {
@@ -445,7 +519,7 @@ export const getPotentialInvitees = query({
             q.eq("role", "student").eq("status", "active"));
 
         const students = await studentQuery.collect();
-        users.push(...students.filter(u => !invitedUserIds.has(u._id)));
+        users.push(...students.filter(u => u.verified && !invitedUserIds.has(u._id)));
       }
     }
 
@@ -457,10 +531,81 @@ export const getPotentialInvitees = query({
           : ctx.db.query("users").withIndex("by_role_status", (q) =>
             q.eq("role", "school_admin").eq("status", "active"));
 
-        const schoolAdmins = await schoolAdminQuery.collect();
-        users.push(...schoolAdmins.filter(u => !invitedUserIds.has(u._id)));
+        let schoolAdmins = await schoolAdminQuery.collect();
+        schoolAdmins = schoolAdmins.filter(u => u.verified && !invitedUserIds.has(u._id));
+        if (league && schoolAdmins.length > 0) {
+          const filteredSchoolAdmins = [];
+
+          for (const admin of schoolAdmins) {
+            let school = null;
+            if (admin.school_id) {
+              school = await ctx.db.get(admin.school_id);
+            } else {
+              school = await ctx.db
+                .query("schools")
+                .filter((q) => q.eq(q.field("contact_email"), admin.email))
+                .first();
+            }
+
+            if (!school) {
+              continue;
+            }
+            if (league.type === "Local") {
+              if (school.country === "RW") {
+                filteredSchoolAdmins.push(admin);
+              }
+            } else if (league.type === "International" && league.geographic_scope) {
+              const schoolCountry = school.country;
+              const scopeForCountry = league.geographic_scope[schoolCountry];
+
+              if (scopeForCountry) {
+                let isValid = true;
+                if (scopeForCountry.provinces && scopeForCountry.provinces.length > 0) {
+                  if (!school.province || !scopeForCountry.provinces.includes(school.province)) {
+                    isValid = false;
+                  }
+                }
+
+                if (isValid && scopeForCountry.districts && scopeForCountry.districts.length > 0) {
+                  if (!school.district || !scopeForCountry.districts.includes(school.district)) {
+                    isValid = false;
+                  }
+                }
+
+                if (isValid && scopeForCountry.sectors && scopeForCountry.sectors.length > 0) {
+                  if (!school.sector || !scopeForCountry.sectors.includes(school.sector)) {
+                    isValid = false;
+                  }
+                }
+
+                if (isValid && scopeForCountry.cells && scopeForCountry.cells.length > 0) {
+                  if (!school.cell || !scopeForCountry.cells.includes(school.cell)) {
+                    isValid = false;
+                  }
+                }
+
+                if (isValid && scopeForCountry.villages && scopeForCountry.villages.length > 0) {
+                  if (!school.village || !scopeForCountry.villages.includes(school.village)) {
+                    isValid = false;
+                  }
+                }
+
+                if (isValid) {
+                  filteredSchoolAdmins.push(admin);
+                }
+              }
+            } else {
+              filteredSchoolAdmins.push(admin);
+            }
+          }
+
+          users.push(...filteredSchoolAdmins);
+        } else {
+          users.push(...schoolAdmins);
+        }
       }
     }
+
     if (search && !target_type) {
       users = users.filter(user =>
         user.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -468,8 +613,10 @@ export const getPotentialInvitees = query({
       );
     }
     users.sort((a, b) => a.name.localeCompare(b.name));
+
     const offset = (page - 1) * limit;
     const paginatedUsers = users.slice(offset, offset + limit);
+
     const enrichedUsers = await Promise.all(
       paginatedUsers.map(async (user) => {
         let school = null;

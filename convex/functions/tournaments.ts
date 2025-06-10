@@ -1,5 +1,6 @@
 import { query } from "../_generated/server";
 import { v } from "convex/values";
+import { internal } from "../_generated/api";
 
 export const getTournaments = query({
   args: {
@@ -255,5 +256,44 @@ export const getTournamentsByLeague = query({
       page,
       limit,
     };
+  },
+});
+
+
+export const getTournamentSchools = query({
+  args: {
+    token: v.string(),
+    tournament_id: v.id("tournaments"),
+  },
+  handler: async (ctx, args) => {
+    const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
+      token: args.token,
+    });
+
+    if (!sessionResult.valid) {
+      throw new Error("Authentication required");
+    }
+
+    const teams = await ctx.db
+      .query("teams")
+      .withIndex("by_tournament_id", (q) => q.eq("tournament_id", args.tournament_id))
+      .collect();
+
+    const schoolIds = new Set(teams.map(team => team.school_id).filter(Boolean));
+
+    const schools = await Promise.all(
+      Array.from(schoolIds).map(async (schoolId) => {
+        if (!schoolId) return null;
+        const school = await ctx.db.get(schoolId);
+        return school ? {
+          id: school._id,
+          name: school.name,
+          type: school.type,
+          location: `${school.district || ''} ${school.province || ''} ${school.country}`.trim(),
+        } : null;
+      })
+    );
+
+    return schools.filter(Boolean);
   },
 });

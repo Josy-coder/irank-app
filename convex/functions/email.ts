@@ -27,10 +27,22 @@ async function sendTournamentInvitation({
   expiresAt: string;
   invitationId: string;
 }) {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.FRONTEND_SITE_URL || "http://localhost:3000";
-  const tournamentUrl = `${baseUrl}/tournaments/${tournamentSlug}`;
-  const acceptUrl = `${baseUrl}/api/invitations/respond?id=${invitationId}&response=accepted`;
-  const declineUrl = `${baseUrl}/api/invitations/respond?id=${invitationId}&response=declined`;
+  const baseUrl = process.env.FRONTEND_SITE_URL || "http://localhost:3000";
+
+  // Generate role-based URLs
+  const getUserRole = (type: string) => {
+    switch (type) {
+      case "school": return "school";
+      case "student": return "student";
+      case "volunteer": return "volunteer";
+      default: return "student";
+    }
+  };
+
+  const userRole = getUserRole(invitationType);
+  const tournamentUrl = `${baseUrl}/${userRole}/tournament/${tournamentSlug}#invitations`;
+  const acceptUrl = `${baseUrl}/${userRole}/tournament/${tournamentSlug}#invitations?id=${invitationId}&response=accepted`;
+  const declineUrl = `${baseUrl}/${userRole}/tournament/${tournamentSlug}#invitations?id=${invitationId}&response=declined`;
 
   const emailHtml = getTournamentInvitationEmailTemplate(
     recipientName,

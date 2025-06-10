@@ -222,6 +222,15 @@ export default defineSchema({
     judges_per_debate: v.number(),
     team_size: v.number(),
     speaking_times: v.record(v.string(), v.number()),
+    waiver_codes: v.optional(v.array(v.object({
+      code: v.string(),
+      usage_limit: v.number(),
+      usage_count: v.number(),
+      created_by: v.id("users"),
+      created_at: v.number(),
+      expires_at: v.optional(v.number()),
+      is_active: v.boolean(),
+    }))),
     fee: v.optional(v.number()),
     fee_currency: v.optional(v.union(v.literal("RWF"), v.literal("USD"))),
     description: v.optional(v.string()),
@@ -631,7 +640,7 @@ export default defineSchema({
 
   payments: defineTable({
     tournament_id: v.id("tournaments"),
-    school_id: v.id("schools"),
+    school_id: v.optional(v.id("schools")),
     amount: v.number(),
     currency: v.string(),
     status: v.union(
