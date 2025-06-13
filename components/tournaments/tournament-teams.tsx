@@ -43,8 +43,8 @@ import {
   CircleDollarSign,
   AlertTriangle,
   LogOut,
-  QrCode
-} from "lucide-react"
+  QrCode, Ticket
+} from "lucide-react";
 import { useDebounce } from "@/hooks/use-debounce"
 import { DataToolbar } from "@/components/shared/data-toolbar"
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter"
@@ -55,6 +55,7 @@ import { formatDistanceToNow } from "date-fns"
 import { TeamManagementDialog } from "@/components/tournaments/team-management-dialog"
 import { JoinTeamDialog } from "@/components/tournaments/join-team-dialog"
 import { ShareTeamDialog } from "@/components/tournaments/share-team-dialog"
+import { WaiverCodeDialog } from "@/components/tournaments/waiver-code-dialog";
 
 interface TournamentTeamsProps {
   tournament: any;
@@ -197,6 +198,7 @@ export function TournamentTeams({
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showJoinDialog, setShowJoinDialog] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
+  const [showWaiverDialog, setShowWaiverDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showBulkDialog, setShowBulkDialog] = useState(false);
   const [teamToEdit, setTeamToEdit] = useState<any>(null);
@@ -412,28 +414,50 @@ export function TournamentTeams({
   ];
 
   const actions = [
-    <Button
-      key="join"
-      variant="outline"
-      size="sm"
-      className="h-8 border-white/20"
-      onClick={() => setShowJoinDialog(true)}
-      disabled={!isStudent || tournament.league?.type !== "Dreams Mode"}
-    >
-      <QrCode className="h-4 w-4" />
-      <span className="hidden md:block">Join Team</span>
-    </Button>,
-    <Button
-      key="create"
-      size="sm"
-      className="h-8 hover:bg-white hover:text-foreground"
-      onClick={() => setShowCreateDialog(true)}
-      disabled={!canCreateTeams}
-    >
-      <UserPlus className="h-4 w-4" />
-      <span className="hidden md:block">Create Team</span>
-    </Button>
-  ];
+    ...(isAdmin && tournament.league?.type !== "Dreams Mode" ? [{
+      key: "waiver",
+      component: (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 border-white/20"
+          onClick={() => setShowWaiverDialog(true)}
+        >
+          <Ticket className="h-4 w-4" />
+          <span className="hidden md:block">Waiver Codes</span>
+        </Button>
+      )
+    }] : []),
+    {
+      key: "join",
+      component: (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 border-white/20"
+          onClick={() => setShowJoinDialog(true)}
+          disabled={!isStudent || tournament.league?.type !== "Dreams Mode"}
+        >
+          <QrCode className="h-4 w-4" />
+          <span className="hidden md:block">Join Team</span>
+        </Button>
+      )
+    },
+    {
+      key: "create",
+      component: (
+        <Button
+          size="sm"
+          className="h-8 hover:bg-white hover:text-foreground"
+          onClick={() => setShowCreateDialog(true)}
+          disabled={!canCreateTeams}
+        >
+          <UserPlus className="h-4 w-4" />
+          <span className="hidden md:block">Create Team</span>
+        </Button>
+      )
+    }
+  ].map(action => action.component);
 
   const bulkActions = isAdmin ? [
     {
@@ -785,6 +809,13 @@ export function TournamentTeams({
         onOpenChange={setShowShareDialog}
         team={teamToShare}
         tournament={tournament}
+      />
+
+      <WaiverCodeDialog
+        open={showWaiverDialog}
+        onOpenChange={setShowWaiverDialog}
+        tournament={tournament}
+        token={token}
       />
     </CardLayoutWithToolbar>
   );

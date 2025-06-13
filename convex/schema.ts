@@ -242,6 +242,19 @@ export default defineSchema({
       v.literal("completed"),
       v.literal("cancelled")
     ),
+    ranking_released: v.optional(v.object({
+      prelims: v.object({
+        schools: v.boolean(),
+        students: v.boolean(),
+        volunteers: v.boolean(),
+      }),
+      full_tournament: v.object({
+        schools: v.boolean(),
+        students: v.boolean(),
+        volunteers: v.boolean(),
+      }),
+      visible_to_roles: v.array(v.string()),
+    })),
     created_at: v.number(),
     updated_at: v.optional(v.number()),
   })
@@ -312,6 +325,7 @@ export default defineSchema({
     .index("by_tournament_id", ["tournament_id"])
     .index("by_target_type_target_id", ["target_type", "target_id"])
     .index("by_tournament_id_target_type_target_id", ["tournament_id", "target_type", "target_id"])
+    .index("by_tournament_id_target_type_status", ["tournament_id", "target_type", "status"])
     .index("by_status", ["status"])
     .index("by_expires_at", ["expires_at"])
     .index("by_status_expires_at", ["status", "expires_at"]),
@@ -415,7 +429,8 @@ export default defineSchema({
     .index("by_head_judge_id", ["head_judge_id"])
     .index("by_status", ["status"])
     .index("by_round_id_status", ["round_id", "status"])
-    .index("by_tournament_id_status", ["tournament_id", "status"]),
+    .index("by_tournament_id_status", ["tournament_id", "status"])
+    .index("by_round_room_name", ["round_id", "room_name"]),
 
   judging_scores: defineTable({
     debate_id: v.id("debates"),

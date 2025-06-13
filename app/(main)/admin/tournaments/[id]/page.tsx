@@ -12,13 +12,13 @@ import {
   Mail,
   Users,
   GitBranch,
-  Building,
-  Gavel,
-  Trophy
-} from "lucide-react"
+  Trophy, SquareLibrary
+} from "lucide-react";
 import { TournamentOverview } from "@/components/tournaments/tournament-overview"
 import { TournamentInvitations } from "@/components/tournaments/tournament-invitations";
 import { TournamentTeams } from "@/components/tournaments/tournament-teams";
+import TournamentPairings from "@/components/tournaments/tournament-pairing";
+import TournamentRankings from "@/components/tournaments/tournament-ranking";
 
 const navigationItems = [
   {
@@ -45,7 +45,7 @@ const navigationItems = [
   {
     id: "ballots",
     label: "Ballots",
-    icon: FileText,
+    icon: SquareLibrary,
   },
   {
     id: "ranking",
@@ -193,7 +193,7 @@ export default function TournamentPage() {
     )
   }
 
-  if (!user) {
+  if (!user || !token) {
     return <div>Please sign in to view tournament details</div>
   }
 
@@ -235,27 +235,13 @@ export default function TournamentPage() {
         )
       case "pairings":
         return (
-          <div className="text-center py-12">
-            <GitBranch className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-medium mb-2">Pairings</h3>
-            <p className="text-muted-foreground">Coming soon...</p>
-          </div>
-        )
-      case "rooms":
-        return (
-          <div className="text-center py-12">
-            <Building className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-medium mb-2">Rooms</h3>
-            <p className="text-muted-foreground">Coming soon...</p>
-          </div>
-        )
-      case "judges":
-        return (
-          <div className="text-center py-12">
-            <Gavel className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-medium mb-2">Judges</h3>
-            <p className="text-muted-foreground">Coming soon...</p>
-          </div>
+          <TournamentPairings
+            tournament={tournament}
+            userRole={userRole}
+            token={token}
+            userId={user?.id}
+            schoolId={user?.school?.id}
+          />
         )
       case "ballots":
         return (
@@ -267,11 +253,13 @@ export default function TournamentPage() {
         )
       case "ranking":
         return (
-          <div className="text-center py-12">
-            <Trophy className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-medium mb-2">Ranking</h3>
-            <p className="text-muted-foreground">Coming soon...</p>
-          </div>
+          <TournamentRankings
+            tournament={tournament}
+            userRole={userRole}
+            token={token}
+            userId={user?.id}
+            schoolId={user?.school?.id}
+          />
         )
       default:
         return (

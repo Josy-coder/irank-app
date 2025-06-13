@@ -1,11 +1,7 @@
 import { v } from "convex/values";
-import { mutation, query, action } from "../_generated/server";
+import { internalMutation, mutation, query } from "../_generated/server";
 import { Doc, Id } from "../_generated/dataModel";
 import { api, internal } from "../_generated/api";
-import {
-  NotificationPayload,
-  PushSubscriptionData
-} from "../lib/push_service";
 
 export const createNotification = mutation({
   args: {
@@ -126,7 +122,7 @@ export const sendBulkNotifications = mutation({
   },
 });
 
-export const sendTournamentNotification = mutation({
+export const sendTournamentNotification = internalMutation({
   args: {
     token: v.string(),
     tournament_id: v.id("tournaments"),

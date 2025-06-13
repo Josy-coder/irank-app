@@ -27,6 +27,8 @@ import type * as functions_email from "../functions/email.js";
 import type * as functions_invitations from "../functions/invitations.js";
 import type * as functions_leagues from "../functions/leagues.js";
 import type * as functions_notifications from "../functions/notifications.js";
+import type * as functions_pairings from "../functions/pairings.js";
+import type * as functions_rankings from "../functions/rankings.js";
 import type * as functions_schools from "../functions/schools.js";
 import type * as functions_student_teams from "../functions/student/teams.js";
 import type * as functions_teams from "../functions/teams.js";
@@ -58,6 +60,8 @@ declare const fullApi: ApiFromModules<{
   "functions/invitations": typeof functions_invitations;
   "functions/leagues": typeof functions_leagues;
   "functions/notifications": typeof functions_notifications;
+  "functions/pairings": typeof functions_pairings;
+  "functions/rankings": typeof functions_rankings;
   "functions/schools": typeof functions_schools;
   "functions/student/teams": typeof functions_student_teams;
   "functions/teams": typeof functions_teams;
