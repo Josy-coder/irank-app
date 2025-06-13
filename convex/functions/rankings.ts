@@ -3,6 +3,13 @@ import { v } from "convex/values";
 import { api, internal } from "../_generated/api";
 import { Id, Doc } from "../_generated/dataModel";
 
+interface RankingResponse<T> {
+  success: boolean;
+  error: string | null;
+  data: T;
+  type: 'success' | 'permission_error' | 'validation_error' | 'data_insufficient' | 'not_released';
+}
+
 interface SchoolRanking {
   rank: number;
   school_id: Id<"schools">;
@@ -430,7 +437,7 @@ export const getSchoolRankings = query({
     tournament_id: v.id("tournaments"),
     include_elimination: v.optional(v.boolean()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<RankingResponse<SchoolRanking[]>> => {
     const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
       token: args.token,
     });
@@ -450,7 +457,12 @@ export const getSchoolRankings = query({
         tournament.ranking_released.visible_to_roles.includes(user.role));
 
     if (!canSeeRankings) {
-      throw new Error("Rankings not yet released");
+      return {
+        success: false,
+        error: "Rankings not yet released",
+        data: [],
+        type: 'not_released'
+      };
     }
 
     const includeElims = args.include_elimination && user.role === "admin";
@@ -458,14 +470,24 @@ export const getSchoolRankings = query({
     try {
       await validateTournamentData(ctx, tournament, includeElims);
     } catch (error: any) {
-      throw new Error(`School rankings not available: ${error.message}`);
+      return {
+        success: false,
+        error: `School rankings not available: ${error.message}`,
+        data: [],
+        type: 'data_insufficient'
+      };
     }
 
     const rankingType = includeElims ? "full_tournament" : "prelims";
 
     if (!includeElims && tournament.ranking_released &&
       !tournament.ranking_released[rankingType].schools) {
-      throw new Error("School rankings not yet released for this phase");
+      return {
+        success: false,
+        error: "School rankings not yet released for this phase",
+        data: [],
+        type: 'not_released'
+      };
     }
 
     const teams = await ctx.db
@@ -571,7 +593,12 @@ export const getSchoolRankings = query({
       school.rank = index + 1;
     });
 
-    return schoolRankings;
+    return {
+      success: true,
+      error: null,
+      data: schoolRankings,
+      type: 'success'
+    };
   },
 });
 
@@ -581,7 +608,7 @@ export const getStudentRankings = query({
     tournament_id: v.id("tournaments"),
     include_elimination: v.optional(v.boolean()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<RankingResponse<StudentRanking[]>> => {
     const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
       token: args.token,
     });
@@ -601,7 +628,12 @@ export const getStudentRankings = query({
         tournament.ranking_released.visible_to_roles.includes(user.role));
 
     if (!canSeeRankings) {
-      throw new Error("Rankings not yet released");
+      return {
+        success: false,
+        error: "Rankings not yet released",
+        data: [],
+        type: 'not_released'
+      };
     }
 
     const includeElims = args.include_elimination && user.role === "admin";
@@ -609,14 +641,24 @@ export const getStudentRankings = query({
     try {
       await validateTournamentData(ctx, tournament, includeElims);
     } catch (error: any) {
-      throw new Error(`Student rankings not available: ${error.message}`);
+      return {
+        success: false,
+        error: `Student rankings not available: ${error.message}`,
+        data: [],
+        type: 'data_insufficient'
+      };
     }
 
     const rankingType = includeElims ? "full_tournament" : "prelims";
 
     if (!includeElims && tournament.ranking_released &&
       !tournament.ranking_released[rankingType].students) {
-      throw new Error("Student rankings not yet released for this phase");
+      return {
+        success: false,
+        error: "Student rankings not yet released for this phase",
+        data: [],
+        type: 'not_released'
+      };
     }
 
     const league = tournament.league_id ? await ctx.db.get(tournament.league_id) : null;
@@ -781,7 +823,14 @@ export const getStudentRankings = query({
       })
     );
 
-    return enrichedSpeakers.filter(Boolean).sort((a, b) => a!.rank - b!.rank) as StudentRanking[];
+    const filteredSpeakers = enrichedSpeakers.filter(Boolean).sort((a, b) => a!.rank - b!.rank) as StudentRanking[];
+
+    return {
+      success: true,
+      error: null,
+      data: filteredSpeakers,
+      type: 'success'
+    };
   },
 });
 
@@ -790,7 +839,7 @@ export const getVolunteerRankings = query({
     token: v.string(),
     tournament_id: v.id("tournaments"),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<RankingResponse<VolunteerRanking[]>> => {
     const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
       token: args.token,
     });
@@ -810,17 +859,32 @@ export const getVolunteerRankings = query({
         tournament.ranking_released.visible_to_roles.includes(user.role));
 
     if (!canSeeRankings) {
-      throw new Error("Rankings not yet released");
+      return {
+        success: false,
+        error: "Rankings not yet released",
+        data: [],
+        type: 'not_released'
+      };
     }
 
     try {
       await validateTournamentData(ctx, tournament, false);
     } catch (error: any) {
-      throw new Error(`Volunteer rankings not available: ${error.message}`);
+      return {
+        success: false,
+        error: `Volunteer rankings not available: ${error.message}`,
+        data: [],
+        type: 'data_insufficient'
+      };
     }
 
     if (tournament.ranking_released && !tournament.ranking_released.full_tournament.volunteers) {
-      throw new Error("Volunteer rankings not yet released");
+      return {
+        success: false,
+        error: "Volunteer rankings not yet released",
+        data: [],
+        type: 'not_released'
+      };
     }
 
     const league = tournament.league_id ? await ctx.db.get(tournament.league_id) : null;
@@ -968,7 +1032,12 @@ export const getVolunteerRankings = query({
       volunteer.rank = index + 1;
     });
 
-    return volunteerStats;
+    return {
+      success: true,
+      error: null,
+      data: volunteerStats,
+      type: 'success'
+    };
   },
 });
 
@@ -1078,7 +1147,12 @@ export const generateEliminationBrackets = query({
     try {
       await validateTournamentData(ctx, tournament, true);
     } catch (error: any) {
-      throw new Error(`Elimination brackets not available: ${error.message}`);
+      return {
+        success: false,
+        error: `Elimination brackets not available: ${error.message}`,
+        data: null,
+        type: 'data_insufficient'
+      };
     }
 
     const teamResults = await ctx.db
@@ -1179,7 +1253,7 @@ export const generateEliminationBrackets = query({
       })),
     };
 
-    return {
+    const bracketData = {
       tournament_id: args.tournament_id,
       elimination_rounds: elimRounds,
       bracket_size: bracketSize,
@@ -1196,6 +1270,13 @@ export const generateEliminationBrackets = query({
         qualified: index < bracketSize,
       })),
     };
+
+    return {
+      success: true,
+      error: null,
+      data: bracketData,
+      type: 'success'
+    };
   },
 });
 
@@ -1210,18 +1291,33 @@ export const getRankingStatistics = query({
     });
 
     if (!sessionResult.valid || sessionResult.user?.role !== "admin") {
-      throw new Error("Admin access required");
+      return {
+        success: false,
+        error: "Admin access required",
+        data: null,
+        type: 'permission_error'
+      };
     }
 
     const tournament = await ctx.db.get(args.tournament_id);
     if (!tournament) {
-      throw new Error("Tournament not found");
+      return {
+        success: false,
+        error: "Tournament not found",
+        data: null,
+        type: 'validation_error'
+      };
     }
 
     try {
       await validateTournamentData(ctx, tournament, false);
     } catch (error: any) {
-      throw new Error(`Ranking statistics not available: ${error.message}`);
+      return {
+        success: false,
+        error: `Ranking statistics not available: ${error.message}`,
+        data: null,
+        type: 'data_insufficient'
+      };
     }
 
     const teamResults = await ctx.db
@@ -1404,7 +1500,7 @@ export const getRankingStatistics = query({
       insights.push("Speaker scores show consistent judging standards");
     }
 
-    return {
+    const statsData = {
       tournament_summary: {
         total_teams: teamStats.total_teams,
         total_speakers: speakerStats.total_speakers,
@@ -1422,6 +1518,13 @@ export const getRankingStatistics = query({
         scored_debates_percentage: (tournamentScores.length / debateStats.total_debates) * 100,
       },
     };
+
+    return {
+      success: true,
+      error: null,
+      data: statsData,
+      type: 'success'
+    };
   },
 });
 
@@ -1432,7 +1535,7 @@ export const exportRankingsData = query({
     ranking_type: v.union(v.literal("schools"), v.literal("students"), v.literal("volunteers")),
     include_elimination: v.optional(v.boolean()),
   },
-  handler: async (ctx, args): Promise<ExportedRankingResult> => {
+  handler: async (ctx, args): Promise<RankingResponse<ExportedRankingResult>> => {
     const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
       token: args.token,
     });
@@ -1451,17 +1554,31 @@ export const exportRankingsData = query({
     try {
       await validateTournamentData(ctx, tournament, includeElims);
     } catch (error: any) {
-      throw new Error(`Rankings export not available: ${error.message}`);
+      return {
+        success: false,
+        error: `Rankings export not available: ${error.message}`,
+        data: [],
+        type: 'data_insufficient'
+      };
     }
 
     if (args.ranking_type === "schools") {
-      const rankings = await ctx.runQuery(api.functions.rankings.getSchoolRankings, {
+      const schoolResponse = await ctx.runQuery(api.functions.rankings.getSchoolRankings, {
         token: args.token,
         tournament_id: args.tournament_id,
         include_elimination: args.include_elimination,
       });
 
-      return rankings.map(school => ({
+      if (!schoolResponse.success) {
+        return {
+          success: false,
+          error: schoolResponse.error,
+          data: [],
+          type: schoolResponse.type
+        };
+      }
+
+      const exportData = schoolResponse.data.map(school => ({
         rank: school.rank,
         school_name: school.school_name,
         school_type: school.school_type,
@@ -1472,16 +1589,32 @@ export const exportRankingsData = query({
         avg_team_rank: school.avg_team_rank.toFixed(2),
         teams_list: school.teams.map(t => `${t.team_name} (Rank ${t.rank})`).join('; '),
       }));
+
+      return {
+        success: true,
+        error: null,
+        data: exportData,
+        type: 'success'
+      };
     }
 
     if (args.ranking_type === "students") {
-      const rankings = await ctx.runQuery(api.functions.rankings.getStudentRankings, {
+      const studentResponse = await ctx.runQuery(api.functions.rankings.getStudentRankings, {
         token: args.token,
         tournament_id: args.tournament_id,
         include_elimination: args.include_elimination,
       });
 
-      return rankings.map(student => ({
+      if (!studentResponse.success) {
+        return {
+          success: false,
+          error: studentResponse.error,
+          data: [],
+          type: studentResponse.type
+        };
+      }
+
+      const exportData = studentResponse.data.map(student => ({
         rank: student.rank,
         speaker_name: student.speaker_name,
         speaker_email: student.speaker_email,
@@ -1496,15 +1629,31 @@ export const exportRankingsData = query({
         speaking_efficiency: student.speaking_time_efficiency.toFixed(2),
         cross_tournament_participation: student.cross_tournament_performance.tournaments_participated,
       }));
+
+      return {
+        success: true,
+        error: null,
+        data: exportData,
+        type: 'success'
+      };
     }
 
     if (args.ranking_type === "volunteers") {
-      const rankings = await ctx.runQuery(api.functions.rankings.getVolunteerRankings, {
+      const volunteerResponse = await ctx.runQuery(api.functions.rankings.getVolunteerRankings, {
         token: args.token,
         tournament_id: args.tournament_id,
       });
 
-      return rankings.map(volunteer => ({
+      if (!volunteerResponse.success) {
+        return {
+          success: false,
+          error: volunteerResponse.error,
+          data: [],
+          type: volunteerResponse.type
+        };
+      }
+
+      const exportData = volunteerResponse.data.map(volunteer => ({
         rank: volunteer.rank,
         volunteer_name: volunteer.volunteer_name,
         volunteer_email: volunteer.volunteer_email,
@@ -1518,8 +1667,20 @@ export const exportRankingsData = query({
         consistency_score: volunteer.consistency_score.toFixed(2),
         cross_tournament_debates: volunteer.cross_tournament_stats.total_debates_across_tournaments,
       }));
+
+      return {
+        success: true,
+        error: null,
+        data: exportData,
+        type: 'success'
+      };
     }
 
-    throw new Error("Invalid ranking type");
+    return {
+      success: false,
+      error: "Invalid ranking type",
+      data: [],
+      type: 'validation_error'
+    };
   },
 });

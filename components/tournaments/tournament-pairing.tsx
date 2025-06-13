@@ -1160,12 +1160,12 @@ export default function TournamentPairings({
               >
                 {isGenerating ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin custom:mr-2" />
+                    <Loader2 className="h-4 w-4 animate-spin" />
                     <span className="hidden custom:block"> {generationProgress}% </span>
                   </>
                 ) : (
                   <>
-                    <Shuffle className="h-4 w-4 custom:mr-2" />
+                    <Shuffle className="h-4 w-4" />
                     <span className="hidden custom:block"> Generate </span>
                   </>
                 )}
@@ -1175,12 +1175,12 @@ export default function TournamentPairings({
                 <Button onClick={savePairings} variant="default" disabled={isRecalculating}>
                   {isRecalculating ? (
                     <>
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      <Loader2 className="h-4 w-4 animate-spin" />
                       <span className="hidden custom:block">Recalculating...</span>
                     </>
                   ) : (
                     <>
-                      <Save className="h-4 w-4 md:mr-2" />
+                      <Save className="h-4 w-4" />
                       <span className="hidden custom:block">Save Pairings </span>
                     </>
                   )}
