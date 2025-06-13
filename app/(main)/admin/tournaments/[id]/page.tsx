@@ -19,6 +19,7 @@ import { TournamentInvitations } from "@/components/tournaments/tournament-invit
 import { TournamentTeams } from "@/components/tournaments/tournament-teams";
 import TournamentPairings from "@/components/tournaments/tournament-pairing";
 import TournamentRankings from "@/components/tournaments/tournament-ranking";
+import TournamentBallots from "@/components/tournaments/tournament-ballot";
 
 const navigationItems = [
   {
@@ -245,11 +246,12 @@ export default function TournamentPage() {
         )
       case "ballots":
         return (
-          <div className="text-center py-12">
-            <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-medium mb-2">Ballots</h3>
-            <p className="text-muted-foreground">Coming soon...</p>
-          </div>
+          <TournamentBallots
+            tournament={tournament}
+            userRole={userRole}
+            token={token}
+            userId={user.id}
+          />
         )
       case "ranking":
         return (

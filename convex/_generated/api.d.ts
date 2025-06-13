@@ -14,6 +14,7 @@ import type {
   FunctionReference,
 } from "convex/server";
 import type * as files from "../files.js";
+import type * as functions_admin_ballots from "../functions/admin/ballots.js";
 import type * as functions_admin_dashboard from "../functions/admin/dashboard.js";
 import type * as functions_admin_invitations from "../functions/admin/invitations.js";
 import type * as functions_admin_leagues from "../functions/admin/leagues.js";
@@ -23,6 +24,7 @@ import type * as functions_admin_users from "../functions/admin/users.js";
 import type * as functions_alerts from "../functions/alerts.js";
 import type * as functions_audit from "../functions/audit.js";
 import type * as functions_auth from "../functions/auth.js";
+import type * as functions_ballots from "../functions/ballots.js";
 import type * as functions_email from "../functions/email.js";
 import type * as functions_invitations from "../functions/invitations.js";
 import type * as functions_leagues from "../functions/leagues.js";
@@ -34,6 +36,7 @@ import type * as functions_student_teams from "../functions/student/teams.js";
 import type * as functions_teams from "../functions/teams.js";
 import type * as functions_tournaments from "../functions/tournaments.js";
 import type * as functions_users from "../functions/users.js";
+import type * as functions_volunteers_ballots from "../functions/volunteers/ballots.js";
 import type * as lib_password from "../lib/password.js";
 import type * as lib_push_service from "../lib/push_service.js";
 
@@ -47,6 +50,7 @@ import type * as lib_push_service from "../lib/push_service.js";
  */
 declare const fullApi: ApiFromModules<{
   files: typeof files;
+  "functions/admin/ballots": typeof functions_admin_ballots;
   "functions/admin/dashboard": typeof functions_admin_dashboard;
   "functions/admin/invitations": typeof functions_admin_invitations;
   "functions/admin/leagues": typeof functions_admin_leagues;
@@ -56,6 +60,7 @@ declare const fullApi: ApiFromModules<{
   "functions/alerts": typeof functions_alerts;
   "functions/audit": typeof functions_audit;
   "functions/auth": typeof functions_auth;
+  "functions/ballots": typeof functions_ballots;
   "functions/email": typeof functions_email;
   "functions/invitations": typeof functions_invitations;
   "functions/leagues": typeof functions_leagues;
@@ -67,6 +72,7 @@ declare const fullApi: ApiFromModules<{
   "functions/teams": typeof functions_teams;
   "functions/tournaments": typeof functions_tournaments;
   "functions/users": typeof functions_users;
+  "functions/volunteers/ballots": typeof functions_volunteers_ballots;
   "lib/password": typeof lib_password;
   "lib/push_service": typeof lib_push_service;
 }>;
