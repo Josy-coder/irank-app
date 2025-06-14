@@ -181,11 +181,21 @@ function calculateFinalScore(scores: Record<string, number>): number {
   return Math.round(finalScore * 10) / 10;
 }
 
-function DebateTimer({ debate }: any) {
+function DebateTimer({ debate, onUpdateDebate }: any) {
   const [currentTime, setCurrentTime] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [speakingTime, setSpeakingTime] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const [audioChunks, setAudioChunks] = useState<Blob[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  const generateUploadUrl = useMutation(api.files.generateUploadUrl);
+  const getFileUrl = useMutation(api.files.getUrl);
+  const updateDebateRecording = useMutation(api.functions.ballots.updateRecording);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -198,11 +208,162 @@ function DebateTimer({ debate }: any) {
     return () => clearInterval(interval);
   }, [isRunning]);
 
+  useEffect(() => {
+    let recordingInterval: NodeJS.Timeout;
+    if (isRecording) {
+      recordingInterval = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+    }
+    return () => clearInterval(recordingInterval);
+  }, [isRecording]);
+
+  useEffect(() => {
+    const loadRecordingUrl = async () => {
+      if (debate.recording && !audioUrl) {
+        try {
+          const url = await getFileUrl({ storageId: debate.recording });
+          setAudioUrl(url);
+        } catch (error) {
+          console.error('Error loading recording:', error);
+        }
+      }
+    };
+
+    loadRecordingUrl();
+  }, [debate.recording, audioUrl, getFileUrl]);
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100
+        }
+      });
+
+      const recorder = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
+      });
+
+      setAudioChunks([]);
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          setAudioChunks(prev => [...prev, event.data]);
+        }
+      };
+
+      recorder.onstop = async () => {
+
+        const audioBlob = new Blob(audioChunks, { type: recorder.mimeType });
+        await uploadRecording(audioBlob);
+
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      recorder.start(1000);
+      setMediaRecorder(recorder);
+      setIsRecording(true);
+      setRecordingDuration(0);
+
+      toast.success("Recording started");
+    } catch (error) {
+      console.error('Error starting recording:', error);
+      toast.error("Failed to start recording. Please check microphone permissions.");
+    }
+  };
+  
+  const stopRecording = () => {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+      setIsRecording(false);
+      toast.success("Recording stopped. Uploading...");
+    }
+  };
+
+  const uploadRecording = async (audioBlob: Blob) => {
+    setIsUploading(true);
+    try {
+
+      const uploadUrl = await generateUploadUrl();
+
+      const result = await fetch(uploadUrl, {
+        method: "POST",
+        headers: { "Content-Type": audioBlob.type },
+        body: audioBlob,
+      });
+
+      if (!result.ok) {
+        throw new Error("Upload failed");
+      }
+
+      const { storageId } = await result.json();
+
+      await updateDebateRecording({
+        debate_id: debate._id,
+        recording_id: storageId,
+        duration: recordingDuration,
+      });
+
+      const url = await getFileUrl({ storageId });
+      setAudioUrl(url);
+
+      toast.success("Recording uploaded successfully!");
+
+      if (onUpdateDebate) {
+        onUpdateDebate({
+          ...debate,
+          recording: storageId,
+          recording_duration: recordingDuration
+        });
+      }
+    } catch (error) {
+      console.error('Error uploading recording:', error);
+      toast.error("Failed to upload recording");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const playRecording = () => {
+    if (audioUrl) {
+      const audio = new Audio(audioUrl);
+      audio.play();
+      setIsPlaying(true);
+
+      audio.onended = () => setIsPlaying(false);
+      audio.onerror = () => {
+        setIsPlaying(false);
+        toast.error("Failed to play recording");
+      };
+    }
+  };
+
+  const downloadRecording = () => {
+    if (audioUrl) {
+      const link = document.createElement('a');
+      link.href = audioUrl;
+      link.download = `debate-${debate.room_name}-recording.webm`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+
+  const formatFileSize = (bytes: number) => {
+    const mb = bytes / (1024 * 1024);
+    return `${mb.toFixed(1)} MB`;
+  };
+
+  const estimatedSize = recordingDuration * 8 * 1024;
 
   return (
     <Card className="p-4">
@@ -215,6 +376,7 @@ function DebateTimer({ debate }: any) {
           <Button
             onClick={() => setIsRunning(!isRunning)}
             variant={isRunning ? "destructive" : "default"}
+            size="sm"
           >
             {isRunning ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
           </Button>
@@ -226,15 +388,24 @@ function DebateTimer({ debate }: any) {
               setIsRunning(false);
             }}
             variant="outline"
+            size="sm"
           >
             <Square className="h-4 w-4" />
           </Button>
 
           <Button
-            onClick={() => setIsRecording(!isRecording)}
+            onClick={isRecording ? stopRecording : startRecording}
             variant={isRecording ? "destructive" : "outline"}
+            disabled={isUploading}
+            size="sm"
           >
-            {isRecording ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+            {isUploading ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : isRecording ? (
+              <MicOff className="h-4 w-4" />
+            ) : (
+              <Mic className="h-4 w-4" />
+            )}
           </Button>
         </div>
 
@@ -242,12 +413,54 @@ function DebateTimer({ debate }: any) {
           <div>Speaking Time: {formatTime(speakingTime)}</div>
           <div>Current Speaker: {debate.current_speaker || "None"}</div>
           <div>POIs: {debate.poi_count || 0}</div>
+
+          {isRecording && (
+            <div className="text-red-600 font-medium flex items-center justify-center gap-1">
+              <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse"></div>
+              Recording: {formatTime(recordingDuration)}
+              <span className="text-xs">({formatFileSize(estimatedSize)})</span>
+            </div>
+          )}
+
+          {debate.recording && (
+            <div className="text-green-600 text-xs space-y-2">
+              <div className="flex items-center justify-center gap-1">
+                <CheckCircle className="h-3 w-3" />
+                Recorded ({formatTime(debate.recording_duration || 0)})
+              </div>
+
+              <div className="flex justify-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={playRecording}
+                  disabled={isPlaying || !audioUrl}
+                  className="h-6 px-2"
+                >
+                  {isPlaying ? (
+                    <Pause className="h-3 w-3" />
+                  ) : (
+                    <Play className="h-3 w-3" />
+                  )}
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={downloadRecording}
+                  disabled={!audioUrl}
+                  className="h-6 px-2"
+                >
+                  <Download className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </Card>
   );
 }
-
 function ArgumentFlow({ debate, onAddArgument, onUpdateArgumentFlow }: any) {
   const [newArgument, setNewArgument] = useState("");
   const [argumentType, setArgumentType] = useState<"main" | "rebuttal" | "poi">("main");
@@ -2493,8 +2706,6 @@ export default function TournamentBallots({
           )}
         </div>
       </Card>
-
-      {/* Enhanced Judging Interface Dialog */}
       {showJudgingInterface && judgingDebate && (
         <Dialog open={showJudgingInterface} onOpenChange={setShowJudgingInterface}>
           <DialogContent className="max-w-7xl max-h-[95vh] overflow-hidden">
@@ -2522,7 +2733,6 @@ export default function TournamentBallots({
         </Dialog>
       )}
 
-      {/* Ballot Details Dialog */}
       <BallotDetailsDialog
         debate={selectedDebate}
         isOpen={showDetailsDialog}
@@ -2531,7 +2741,6 @@ export default function TournamentBallots({
         token={token}
       />
 
-      {/* Flag Ballot Dialog */}
       <FlagBallotDialog
         debate={flaggingDebate}
         isOpen={showFlagDialog}

@@ -1,4 +1,4 @@
-import { query } from "../_generated/server";
+import { mutation, query } from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import { Id, Doc } from "../_generated/dataModel";
@@ -162,5 +162,21 @@ export const getTournamentBallots = query({
         if (!a.round || !b.round) return 0;
         return a.round.round_number - b.round.round_number;
       });
+  },
+});
+
+export const updateRecording = mutation({
+  args: {
+    debate_id: v.id("debates"),
+    recording_id: v.id("_storage"),
+    duration: v.number(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.debate_id, {
+      recording: args.recording_id,
+      recording_duration: args.duration,
+    });
+
+    return { success: true };
   },
 });

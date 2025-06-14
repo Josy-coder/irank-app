@@ -160,7 +160,7 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div className="flex flex-col md:flex-row md:items-stretch space-y-3 md:space-y-0 md:space-x-3">
                 <StatCard
-                  title="Number of Users"
+                  title="No. of Users"
                   value={dashboardStats?.totalUsers || 0}
                   subtitle="Approved Users"
                   percentage={dashboardStats?.userGrowth || 0}
@@ -170,7 +170,7 @@ export default function AdminDashboard() {
               <div className="flex flex-col md:flex-row md:items-stretch space-y-3 md:space-y-0 md:space-x-3">
                 <div className="border-t md:border-t-0 md:border-l border-dashed border-foreground/30" />
                 <StatCard
-                  title="New User Registrations"
+                  title="New User Reg."
                   value={dashboardStats?.newRegistrations || 0}
                   subtitle="Last 30 Days"
                   percentage={dashboardStats?.registrationGrowth || 0}
@@ -181,7 +181,7 @@ export default function AdminDashboard() {
               <div className="flex flex-col md:flex-row md:items-stretch space-y-3 md:space-y-0 md:space-x-3">
                 <div className="border-t md:border-t-0 md:border-l border-dashed border-foreground/30" />
                 <StatCard
-                  title="Number of Tournaments"
+                  title="No. of Tournaments"
                   value={dashboardStats?.totalTournaments || 0}
                   subtitle="Past and Upcoming"
                   percentage={dashboardStats?.tournamentGrowth || 0}
@@ -192,7 +192,7 @@ export default function AdminDashboard() {
               <div className="flex flex-col md:flex-row md:items-stretch space-y-3 md:space-y-0 md:space-x-3">
                 <div className="border-t md:border-t-0 md:border-l border-dashed border-foreground/30" />
                 <StatCard
-                  title="Upcoming Tournaments"
+                  title="Upcom. Tournaments"
                   value={dashboardStats?.upcomingTournaments || 0}
                   subtitle="Next 30 days"
                   percentage={dashboardStats?.upcomingGrowth || 0}
