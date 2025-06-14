@@ -38,7 +38,7 @@ export const getVolunteerDashboardStats = query({
 
     const totalRoundsJudged = judgedDebates.length;
 
-    const tournamentIds = [...new Set(judgedDebates.map(d => d.tournament_id))];
+    const tournamentIds = Array.from(new Set(judgedDebates.map(d => d.tournament_id)));
     const allTournaments = await Promise.all(
       tournamentIds.map(id => ctx.db.get(id))
     );

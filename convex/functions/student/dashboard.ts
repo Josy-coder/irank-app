@@ -34,7 +34,7 @@ export const getStudentDashboardStats = query({
 
     const userTeams = studentTeams.filter(team => team.members.includes(student.id));
 
-    const tournamentIds = [...new Set(userTeams.map(t => t.tournament_id))];
+    const tournamentIds = Array.from(new Set(userTeams.map(t => t.tournament_id)));
     const allTournaments = await Promise.all(
       tournamentIds.map(id => ctx.db.get(id))
     );

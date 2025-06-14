@@ -46,7 +46,7 @@ export const getSchoolDashboardStats = query({
       .withIndex("by_school_id", (q) => q.eq("school_id", schoolUser.school_id))
       .collect();
 
-    const tournamentIds = [...new Set(schoolTeams.map(t => t.tournament_id))];
+    const tournamentIds = Array.from(new Set(schoolTeams.map(t => t.tournament_id)));
     const allTournaments = await Promise.all(
       tournamentIds.map(id => ctx.db.get(id))
     );
