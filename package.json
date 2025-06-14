@@ -12,8 +12,6 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@auth/core": "^0.37.0",
-    "@convex-dev/auth": "^0.0.85",
     "@google/generative-ai": "^0.24.1",
     "@hookform/resolvers": "^5.0.1",
     "@radix-ui/react-alert-dialog": "^1.1.14",
@@ -40,10 +38,11 @@
     "country-state-city": "^3.2.1",
     "date-fns": "^4.1.0",
     "framer-motion": "^12.12.1",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^3.0.1",
     "lucide-react": "^0.511.0",
     "next": "14.2.3",
     "next-themes": "^0.4.6",
-    "nodemailer": "^6.10.1",
     "npm-run-all": "^4.1.5",
     "react": "^18",
     "react-day-picker": "^9.7.0",
@@ -58,11 +57,11 @@
     "tailwindcss-radix": "^4.0.2",
     "vaul": "^1.1.2",
     "web-push": "^3.6.7",
+    "xlsx": "^0.18.5",
     "zod": "^3.24.4"
   },
   "devDependencies": {
     "@types/node": "^20",
-    "@types/nodemailer": "^6.4.17",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "@types/web-push": "^3.6.4",

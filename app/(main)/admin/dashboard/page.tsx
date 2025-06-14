@@ -73,6 +73,7 @@ function StatCard({ title, value, subtitle, percentage, loading }: StatCardProps
               <span
                 className={cn(
                   "text-xs font-medium",
+                  "block md:hidden lg:block",
                   percentage > 0
                     ? "text-green-600"
                     : percentage < 0
@@ -158,7 +159,7 @@ export default function AdminDashboard() {
         <Card>
           <CardContent className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <div className="flex flex-col md:flex-row md:items-stretch space-y-3 md:space-y-0 md:space-x-3">
+              <div className="flex flex-col custom:flex-row md:items-stretch space-y-3 md:space-y-0 md:space-x-3">
                 <StatCard
                   title="No. of Users"
                   value={dashboardStats?.totalUsers || 0}
@@ -212,9 +213,9 @@ export default function AdminDashboard() {
             <CardHeader>
               <CardTitle>Users Per Category</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-[14.6px]">
               {isLoading ? (
-                <div className="space-y-4">
+                <div className="space-y-[14.6px]">
                   {[1, 2, 3, 4].map((i) => (
                     <div key={i} className="flex items-center gap-3">
                       <Skeleton className="h-8 w-8 rounded" />

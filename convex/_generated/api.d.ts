@@ -14,6 +14,7 @@ import type {
   FunctionReference,
 } from "convex/server";
 import type * as files from "../files.js";
+import type * as functions_admin_analytics from "../functions/admin/analytics.js";
 import type * as functions_admin_ballots from "../functions/admin/ballots.js";
 import type * as functions_admin_dashboard from "../functions/admin/dashboard.js";
 import type * as functions_admin_invitations from "../functions/admin/invitations.js";
@@ -22,6 +23,7 @@ import type * as functions_admin_teams from "../functions/admin/teams.js";
 import type * as functions_admin_tournaments from "../functions/admin/tournaments.js";
 import type * as functions_admin_users from "../functions/admin/users.js";
 import type * as functions_alerts from "../functions/alerts.js";
+import type * as functions_analytics from "../functions/analytics.js";
 import type * as functions_audit from "../functions/audit.js";
 import type * as functions_auth from "../functions/auth.js";
 import type * as functions_ballots from "../functions/ballots.js";
@@ -50,6 +52,7 @@ import type * as lib_push_service from "../lib/push_service.js";
  */
 declare const fullApi: ApiFromModules<{
   files: typeof files;
+  "functions/admin/analytics": typeof functions_admin_analytics;
   "functions/admin/ballots": typeof functions_admin_ballots;
   "functions/admin/dashboard": typeof functions_admin_dashboard;
   "functions/admin/invitations": typeof functions_admin_invitations;
@@ -58,6 +61,7 @@ declare const fullApi: ApiFromModules<{
   "functions/admin/tournaments": typeof functions_admin_tournaments;
   "functions/admin/users": typeof functions_admin_users;
   "functions/alerts": typeof functions_alerts;
+  "functions/analytics": typeof functions_analytics;
   "functions/audit": typeof functions_audit;
   "functions/auth": typeof functions_auth;
   "functions/ballots": typeof functions_ballots;
