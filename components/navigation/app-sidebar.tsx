@@ -5,8 +5,6 @@ import { useAuth } from "@/hooks/useAuth"
 import Image from "next/image"
 import {
   Users,
-  School,
-  Calendar,
   BarChart3,
   LayoutDashboard,
   FileBadge2Icon,
@@ -29,21 +27,18 @@ const sidebarItems = {
   student: [
     { icon: LayoutDashboard, label: "Dashboard", href: "/student/dashboard" },
     { icon: FileBadge2Icon, label: "Tournaments", href: "/student/tournaments" },
-    { icon: Calendar, label: "Schedule", href: "/student/schedule" },
-    { icon: BarChart3, label: "Performance", href: "/student/performance" },
+    { icon: BarChart3, label: "Performance", href: "/student/analytics" },
   ],
   school_admin: [
     { icon: LayoutDashboard, label: "Dashboard", href: "/school/dashboard" },
-    { icon: Users, label: "Students", href: "/school/students" },
-    { icon: Users, label: "Teams", href: "/school/teams" },
     { icon: FileBadge2Icon, label: "Tournaments", href: "/school/tournaments" },
+    { icon: Users, label: "Students", href: "/school/students" },
     { icon: FilePieChart, label: "Analytics", href: "/school/analytics" },
   ],
   volunteer: [
     { icon: LayoutDashboard, label: "Dashboard", href: "/volunteer/dashboard" },
-    { icon: Calendar, label: "Assignments", href: "/volunteer/assignments" },
     { icon: FileBadge2Icon, label: "Tournaments", href: "/volunteer/tournaments" },
-    { icon: BarChart3, label: "History", href: "/volunteer/history" },
+    { icon: BarChart3, label: "History", href: "/volunteer/analytics" },
   ],
   admin: [
     { icon: LayoutDashboard, label: "Dashboard", href: "/admin/dashboard" },
