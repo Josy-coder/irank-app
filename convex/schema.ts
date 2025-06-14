@@ -485,6 +485,7 @@ export default defineSchema({
     .index("by_tournament_id", ["tournament_id"])
     .index("by_tournament_id_result_type", ["tournament_id", "result_type"])
     .index("by_team_id", ["team_id"])
+    .index("by_result_type", ["result_type"])
     .index("by_tournament_id_team_id", ["tournament_id", "team_id"])
     .index("by_speaker_id", ["speaker_id"])
     .index("by_tournament_id_speaker_id", ["tournament_id", "speaker_id"]),
