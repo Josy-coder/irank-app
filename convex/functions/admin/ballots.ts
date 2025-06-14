@@ -77,6 +77,7 @@ export const getAllTournamentBallots = query({
               has_submitted: !!submission,
               is_final: submission?.feedback_submitted || false,
               is_head_judge: debate.head_judge_id === judgeId,
+              is_flagged: submission?.notes?.includes("[FLAG:") || submission?.notes?.includes("[JUDGE FLAG:") || false,
             };
           })
         );
@@ -94,6 +95,9 @@ export const getAllTournamentBallots = query({
           submissions_count: submissions.length,
           final_submissions_count: submissions.filter(s => s.feedback_submitted).length,
           completion_percentage: completionPercentage,
+          has_flagged_ballots: submissions.some(s =>
+            s.notes?.includes("[FLAG:") || s.notes?.includes("[JUDGE FLAG:")
+          ),
         };
       })
     );
@@ -131,6 +135,33 @@ export const updateBallot = mutation({
         bias_explanation: v.optional(v.string()),
       }))),
       notes: v.optional(v.string()),
+
+      fact_checks: v.optional(v.array(v.object({
+        claim: v.string(),
+        result: v.union(
+          v.literal("true"),
+          v.literal("false"),
+          v.literal("partially_true"),
+          v.literal("inconclusive")
+        ),
+        sources: v.optional(v.array(v.string())),
+        checked_by: v.id("users"),
+        timestamp: v.number(),
+        explanation: v.optional(v.string())
+      }))),
+      argument_flow: v.optional(v.array(v.object({
+        type: v.union(
+          v.literal("main"),
+          v.literal("rebuttal"),
+          v.literal("poi")
+        ),
+        content: v.string(),
+        speaker: v.id("users"),
+        team: v.id("teams"),
+        timestamp: v.number(),
+        rebutted_by: v.optional(v.array(v.string())),
+        strength: v.optional(v.number())
+      }))),
     }),
   },
   handler: async (ctx, args): Promise<{ success: boolean }> => {
@@ -147,7 +178,26 @@ export const updateBallot = mutation({
       throw new Error("Ballot not found");
     }
 
-    await ctx.db.patch(args.ballot_id, args.updates);
+    const { fact_checks, argument_flow, ...ballotUpdates } = args.updates;
+
+    await ctx.db.patch(args.ballot_id, ballotUpdates);
+
+    if (fact_checks || argument_flow) {
+      const debate = await ctx.db.get(ballot.debate_id);
+      if (debate) {
+        const debateUpdates: any = {};
+
+        if (fact_checks) {
+          debateUpdates.fact_checks = fact_checks;
+        }
+
+        if (argument_flow) {
+          debateUpdates.argument_flow = argument_flow;
+        }
+
+        await ctx.db.patch(ballot.debate_id, debateUpdates);
+      }
+    }
 
     await ctx.runMutation(internal.functions.audit.createAuditLog, {
       user_id: sessionResult.user.id,
@@ -194,6 +244,48 @@ export const flagBallotForReview = mutation({
       resource_type: "judging_scores",
       resource_id: args.ballot_id,
       description: `Flagged ballot for review: ${args.reason}`,
+    });
+
+    return { success: true };
+  },
+});
+
+export const unflagBallot = mutation({
+  args: {
+    token: v.string(),
+    ballot_id: v.id("judging_scores"),
+  },
+  handler: async (ctx, args): Promise<{ success: boolean }> => {
+    const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
+      token: args.token,
+    });
+
+    if (!sessionResult.valid || !sessionResult.user || sessionResult.user.role !== "admin") {
+      throw new Error("Admin access required");
+    }
+
+    const ballot: Doc<"judging_scores"> | null = await ctx.db.get(args.ballot_id);
+    if (!ballot) {
+      throw new Error("Ballot not found");
+    }
+
+    const currentNotes: string = ballot.notes || "";
+
+    const unflaggedNotes: string = currentNotes
+      .replace(/\n\[ADMIN FLAG:.*?]/g, '')
+      .replace(/\n\[JUDGE FLAG:.*?]/g, '')
+      .trim();
+
+    await ctx.db.patch(args.ballot_id, {
+      notes: unflaggedNotes,
+    });
+
+    await ctx.runMutation(internal.functions.audit.createAuditLog, {
+      user_id: sessionResult.user.id,
+      action: "ballot_submitted",
+      resource_type: "judging_scores",
+      resource_id: args.ballot_id,
+      description: "Admin unflagged ballot",
     });
 
     return { success: true };

@@ -122,6 +122,32 @@ export const submitBallot = mutation({
     })),
     notes: v.optional(v.string()),
     is_final_submission: v.boolean(),
+    fact_checks: v.optional(v.array(v.object({
+      claim: v.string(),
+      result: v.union(
+        v.literal("true"),
+        v.literal("false"),
+        v.literal("partially_true"),
+        v.literal("inconclusive")
+      ),
+      sources: v.optional(v.array(v.string())),
+      checked_by: v.id("users"),
+      timestamp: v.number(),
+      explanation: v.optional(v.string())
+    }))),
+    argument_flow: v.optional(v.array(v.object({
+      type: v.union(
+        v.literal("main"),
+        v.literal("rebuttal"),
+        v.literal("poi")
+      ),
+      content: v.string(),
+      speaker: v.id("users"),
+      team: v.id("teams"),
+      timestamp: v.number(),
+      rebutted_by: v.optional(v.array(v.string())),
+      strength: v.optional(v.number())
+    }))),
   },
   handler: async (ctx, args): Promise<{ success: boolean; ballot_id: Id<"judging_scores"> }> => {
     const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
@@ -229,6 +255,39 @@ export const submitBallot = mutation({
       });
     }
 
+    if (args.fact_checks || args.argument_flow) {
+      const currentDebate = await ctx.db.get(args.debate_id);
+      if (currentDebate) {
+        const updates: any = {};
+
+        if (args.fact_checks) {
+
+          const existingFactChecks = currentDebate.fact_checks || [];
+          const newFactChecks = args.fact_checks.filter(newCheck =>
+            !existingFactChecks.some(existing =>
+              existing.claim === newCheck.claim && existing.checked_by === newCheck.checked_by
+            )
+          );
+          updates.fact_checks = [...existingFactChecks, ...newFactChecks];
+        }
+
+        if (args.argument_flow) {
+
+          const existingFlow = currentDebate.argument_flow || [];
+          const newFlow = args.argument_flow.filter(newArg =>
+            !existingFlow.some(existing =>
+              existing.content === newArg.content &&
+              existing.speaker === newArg.speaker &&
+              existing.timestamp === newArg.timestamp
+            )
+          );
+          updates.argument_flow = [...existingFlow, ...newFlow];
+        }
+
+        await ctx.db.patch(args.debate_id, updates);
+      }
+    }
+
     if (args.is_final_submission && debate.head_judge_id === judgeId) {
       await ctx.db.patch(args.debate_id, {
         winning_team_id: args.winning_team_id,
@@ -314,5 +373,49 @@ export const getDebateJudgeSubmissions = query({
         };
       })
     );
+  },
+});
+
+export const flagBallot = mutation({
+  args: {
+    token: v.string(),
+    ballot_id: v.id("judging_scores"),
+    reason: v.string(),
+  },
+  handler: async (ctx, args): Promise<{ success: boolean }> => {
+    const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
+      token: args.token,
+    });
+
+    if (!sessionResult.valid || !sessionResult.user || sessionResult.user.role !== "volunteer") {
+      throw new Error("Volunteer access required");
+    }
+
+    const ballot: Doc<"judging_scores"> | null = await ctx.db.get(args.ballot_id);
+    if (!ballot) {
+      throw new Error("Ballot not found");
+    }
+
+    const debate: Doc<"debates"> | null = await ctx.db.get(ballot.debate_id);
+    if (!debate || !debate.judges.includes(sessionResult.user.id)) {
+      throw new Error("Not authorized to flag this ballot");
+    }
+
+    const currentNotes: string = ballot.notes || "";
+    const flaggedNotes: string = currentNotes + `\n[JUDGE FLAG: ${args.reason} - Flagged by Judge ${sessionResult.user.id}]`;
+
+    await ctx.db.patch(args.ballot_id, {
+      notes: flaggedNotes,
+    });
+
+    await ctx.runMutation(internal.functions.audit.createAuditLog, {
+      user_id: sessionResult.user.id,
+      action: "ballot_submitted",
+      resource_type: "judging_scores",
+      resource_id: args.ballot_id,
+      description: `Judge flagged ballot for review: ${args.reason}`,
+    });
+
+    return { success: true };
   },
 });

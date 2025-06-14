@@ -47,11 +47,19 @@ import {
   Brain,
   Shield,
   Target,
-  Loader2
+  Loader2,
+  Flag,
+  CheckSquare,
+  Search,
+  Plus,
+  Minus,
+  ArrowRight,
+  AlertCircle,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Id } from "@/convex/_generated/dataModel";
-import { useGeminiValidation } from "@/hooks/useGeminiValidation";
+import { useGemini } from "@/hooks/useGemini";
 
 interface TournamentBallotsProps {
   tournament: any;
@@ -69,14 +77,41 @@ const SCORING_CATEGORIES = [
   { key: "rebuttal_response", label: "Rebuttal & Response", icon: Shield, description: "Handling of opposing arguments", color: "text-red-600" },
 ];
 
-const SPEAKER_POSITIONS = [
-  { id: "PM", label: "Prime Minister", team: "prop" },
-  { id: "DPM", label: "Deputy Prime Minister", team: "prop" },
-  { id: "MG", label: "Member of Government", team: "prop" },
-  { id: "LO", label: "Leader of Opposition", team: "opp" },
-  { id: "DLO", label: "Deputy Leader of Opposition", team: "opp" },
-  { id: "MO", label: "Member of Opposition", team: "opp" },
-];
+const getPositionsForFormat = (format: string, teamSize: number) => {
+  switch (format) {
+    case "WorldSchools":
+      return Array.from({ length: teamSize }, (_, i) => ({
+        id: `speaker_${i + 1}`,
+        label: `Speaker ${i + 1}`,
+        team: i < teamSize / 2 ? "prop" : "opp"
+      }));
+    case "BritishParliamentary":
+      return [
+        { id: "PM", label: "Prime Minister", team: "prop" },
+        { id: "DPM", label: "Deputy Prime Minister", team: "prop" },
+        { id: "MG", label: "Member of Government", team: "prop" },
+        { id: "LO", label: "Leader of Opposition", team: "opp" },
+        { id: "DLO", label: "Deputy Leader of Opposition", team: "opp" },
+        { id: "MO", label: "Member of Opposition", team: "opp" },
+      ];
+    case "PublicForum":
+      return [
+        { id: "speaker_1", label: "Speaker 1", team: "prop" },
+        { id: "speaker_2", label: "Speaker 2", team: "opp" },
+      ];
+    case "LincolnDouglas":
+      return [
+        { id: "affirmative", label: "Affirmative", team: "prop" },
+        { id: "negative", label: "Negative", team: "opp" },
+      ];
+    default:
+      return Array.from({ length: teamSize }, (_, i) => ({
+        id: `speaker_${i + 1}`,
+        label: `Speaker ${i + 1}`,
+        team: i < teamSize / 2 ? "prop" : "opp"
+      }));
+  }
+};
 
 function BallotSkeleton() {
   return (
@@ -213,20 +248,52 @@ function DebateTimer({ debate }: any) {
   );
 }
 
-function ArgumentFlow({ debate, onAddArgument }: any) {
+function ArgumentFlow({ debate, onAddArgument, onUpdateArgumentFlow }: any) {
   const [newArgument, setNewArgument] = useState("");
   const [argumentType, setArgumentType] = useState<"main" | "rebuttal" | "poi">("main");
+  const [selectedArgument, setSelectedArgument] = useState<string | null>(null);
+  const [argumentStrength, setArgumentStrength] = useState(5);
+
+  const argumentFlow = debate.argument_flow || [];
 
   const handleAddArgument = () => {
     if (!newArgument.trim()) return;
 
-    onAddArgument({
+    const newArg = {
       type: argumentType,
       content: newArgument,
+      speaker: debate.current_speaker,
+      team: argumentType === "poi" ? debate.opposition_team_id : debate.proposition_team_id,
       timestamp: Date.now(),
-    });
+      strength: argumentStrength,
+      rebutted_by: [],
+    };
 
+    onAddArgument(newArg);
     setNewArgument("");
+    setArgumentStrength(5);
+  };
+
+  const handleArgumentConnection = (parentId: string, childId: string) => {
+    const updatedFlow = argumentFlow.map((arg: any, index: number) => {
+      if (index === parseInt(parentId)) {
+        return {
+          ...arg,
+          rebutted_by: [...(arg.rebutted_by || []), childId]
+        };
+      }
+      return arg;
+    });
+    onUpdateArgumentFlow(updatedFlow);
+  };
+
+  const getArgumentColor = (type: string) => {
+    switch (type) {
+      case "main": return "border-blue-500 bg-blue-50";
+      case "rebuttal": return "border-red-500 bg-red-50";
+      case "poi": return "border-yellow-500 bg-yellow-50";
+      default: return "border-gray-500 bg-gray-50";
+    }
   };
 
   return (
@@ -237,26 +304,76 @@ function ArgumentFlow({ debate, onAddArgument }: any) {
           Argument Flow
         </h4>
 
-        <ScrollArea className="h-40">
-          <div className="space-y-2">
-            {debate.argument_flow?.map((arg: any, index: number) => (
-              <div key={index} className="p-2 border rounded text-sm">
-                <Badge variant="outline" className="mb-1">
-                  {arg.type}
-                </Badge>
-                <p>{arg.content}</p>
-                <div className="text-xs text-muted-foreground mt-1">
-                  {new Date(arg.timestamp).toLocaleTimeString()}
+        <ScrollArea className="h-64">
+          <div className="space-y-3">
+            {argumentFlow.map((arg: any, index: number) => (
+              <div key={index} className={`p-3 border rounded-lg ${getArgumentColor(arg.type)}`}>
+                <div className="flex justify-between items-start mb-2">
+                  <Badge variant="outline" className="mb-1">
+                    {arg.type}
+                  </Badge>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs">Strength:</span>
+                    <div className="flex">
+                      {Array.from({ length: 5 }, (_, i) => (
+                        <div
+                          key={i}
+                          className={`w-2 h-2 rounded-full mx-px ${
+                            i < (arg.strength || 3) ? 'bg-blue-500' : 'bg-gray-300'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-sm mb-2">{arg.content}</p>
+
+                <div className="flex justify-between items-center text-xs text-muted-foreground">
+                  <span>Speaker {arg.speaker}</span>
+                  <span>{new Date(arg.timestamp).toLocaleTimeString()}</span>
+                </div>
+
+                {arg.rebutted_by && arg.rebutted_by.length > 0 && (
+                  <div className="mt-2 pt-2 border-t">
+                    <span className="text-xs text-muted-foreground">Rebutted by:</span>
+                    <div className="flex gap-1 mt-1">
+                      {arg.rebutted_by.map((rebuttal: string, idx: number) => (
+                        <Badge key={idx} variant="secondary" className="text-xs">
+                          Arg {rebuttal}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex gap-1 mt-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      if (selectedArgument && selectedArgument !== index.toString()) {
+                        handleArgumentConnection(selectedArgument, index.toString());
+                        setSelectedArgument(null);
+                      } else {
+                        setSelectedArgument(index.toString());
+                      }
+                    }}
+                    className={`h-6 text-xs ${selectedArgument === index.toString() ? 'bg-blue-100' : ''}`}
+                  >
+                    <ArrowRight className="h-3 w-3 mr-1" />
+                    {selectedArgument === index.toString() ? 'Selected' : 'Link'}
+                  </Button>
                 </div>
               </div>
             ))}
           </div>
         </ScrollArea>
 
-        <div className="space-y-2">
+        <div className="space-y-3 pt-3 border-t">
           <div className="flex gap-2">
             <Select value={argumentType} onValueChange={(value: any) => setArgumentType(value)}>
-              <SelectTrigger className="w-32">
+              <SelectTrigger className="w-24">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -265,17 +382,284 @@ function ArgumentFlow({ debate, onAddArgument }: any) {
                 <SelectItem value="poi">POI</SelectItem>
               </SelectContent>
             </Select>
-            <Input
-              placeholder="Add argument..."
-              value={newArgument}
-              onChange={(e) => setNewArgument(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAddArgument()}
+
+            <div className="flex-1">
+              <Input
+                placeholder="Add argument..."
+                value={newArgument}
+                onChange={(e) => setNewArgument(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddArgument()}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Label className="text-xs">Strength:</Label>
+            <div className="flex items-center gap-1">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setArgumentStrength(Math.max(1, argumentStrength - 1))}
+                className="h-6 w-6 p-0"
+              >
+                <Minus className="h-3 w-3" />
+              </Button>
+
+              <div className="flex mx-2">
+                {Array.from({ length: 5 }, (_, i) => (
+                  <div
+                    key={i}
+                    className={`w-3 h-3 rounded-full mx-px cursor-pointer ${
+                      i < argumentStrength ? 'bg-blue-500' : 'bg-gray-300'
+                    }`}
+                    onClick={() => setArgumentStrength(i + 1)}
+                  />
+                ))}
+              </div>
+
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setArgumentStrength(Math.min(5, argumentStrength + 1))}
+                className="h-6 w-6 p-0"
+              >
+                <Plus className="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+
+          <Button onClick={handleAddArgument} size="sm" className="w-full">
+            Add Argument
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function FactCheckingInterface({ debate, onAddFactCheck, userId }: any) {
+  const { factCheckClaim, isFactChecking } = useGemini();
+  const [selectedText, setSelectedText] = useState("");
+  const [factCheckResult, setFactCheckResult] = useState<any>(null);
+  const [manualResult, setManualResult] = useState<"true" | "false" | "partially_true" | "inconclusive">("inconclusive");
+  const [manualExplanation, setManualExplanation] = useState("");
+
+  const existingFactChecks = debate.fact_checks || [];
+
+  const handleAIFactCheck = async () => {
+    if (!selectedText.trim()) return;
+
+    const result = await factCheckClaim(selectedText);
+    setFactCheckResult(result);
+  };
+
+  const handleManualFactCheck = () => {
+    if (!selectedText.trim() || !manualExplanation.trim()) return;
+
+    const factCheck = {
+      claim: selectedText,
+      result: manualResult,
+      explanation: manualExplanation,
+      sources: [],
+      checked_by: userId,
+      timestamp: Date.now(),
+    };
+
+    onAddFactCheck(factCheck);
+    setSelectedText("");
+    setManualExplanation("");
+    setFactCheckResult(null);
+  };
+
+  const handleAcceptAIResult = () => {
+    if (!factCheckResult) return;
+
+    const factCheck = {
+      claim: selectedText,
+      result: factCheckResult.result,
+      explanation: factCheckResult.explanation,
+      sources: factCheckResult.sources || [],
+      checked_by: userId,
+      timestamp: Date.now(),
+    };
+
+    onAddFactCheck(factCheck);
+    setSelectedText("");
+    setFactCheckResult(null);
+  };
+
+  const getResultColor = (result: string) => {
+    switch (result) {
+      case "true": return "text-green-600 bg-green-50 border-green-200";
+      case "false": return "text-red-600 bg-red-50 border-red-200";
+      case "partially_true": return "text-yellow-600 bg-yellow-50 border-yellow-200";
+      case "inconclusive": return "text-gray-600 bg-gray-50 border-gray-200";
+      default: return "text-gray-600 bg-gray-50 border-gray-200";
+    }
+  };
+
+  return (
+    <Card className="p-4">
+      <div className="space-y-4">
+        <h4 className="font-medium flex items-center gap-2">
+          <Search className="h-4 w-4" />
+          Fact Checking
+        </h4>
+
+        <div className="space-y-3">
+          <div>
+            <Label className="text-sm">Claim to check:</Label>
+            <Textarea
+              placeholder="Enter or paste claim to fact-check..."
+              value={selectedText}
+              onChange={(e) => setSelectedText(e.target.value)}
+              rows={2}
             />
-            <Button onClick={handleAddArgument} size="sm">
-              Add
+          </div>
+
+          <div className="flex gap-2">
+            <Button
+              onClick={handleAIFactCheck}
+              disabled={!selectedText.trim() || isFactChecking}
+              size="sm"
+              variant="outline"
+            >
+              {isFactChecking ? (
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                  Checking...
+                </>
+              ) : (
+                <>
+                  <Brain className="h-3 w-3 mr-1" />
+                  AI Check
+                </>
+              )}
+            </Button>
+
+            <Button
+              onClick={() => setFactCheckResult({ isManual: true })}
+              disabled={!selectedText.trim()}
+              size="sm"
+              variant="outline"
+            >
+              <CheckSquare className="h-3 w-3 mr-1" />
+              Manual Check
             </Button>
           </div>
+
+          {factCheckResult && (
+            <div className="space-y-3 p-3 border rounded-lg">
+              {factCheckResult.isManual ? (
+                <div className="space-y-3">
+                  <h5 className="font-medium">Manual Fact Check</h5>
+
+                  <div>
+                    <Label className="text-sm">Result:</Label>
+                    <Select value={manualResult} onValueChange={(value: any) => setManualResult(value)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="true">True</SelectItem>
+                        <SelectItem value="false">False</SelectItem>
+                        <SelectItem value="partially_true">Partially True</SelectItem>
+                        <SelectItem value="inconclusive">Inconclusive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label className="text-sm">Explanation:</Label>
+                    <Textarea
+                      placeholder="Explain your fact check..."
+                      value={manualExplanation}
+                      onChange={(e) => setManualExplanation(e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button onClick={handleManualFactCheck} size="sm">
+                      Save Fact Check
+                    </Button>
+                    <Button
+                      onClick={() => setFactCheckResult(null)}
+                      size="sm"
+                      variant="ghost"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <h5 className="font-medium">AI Fact Check Result</h5>
+
+                  <div className={`p-2 rounded border ${getResultColor(factCheckResult.result)}`}>
+                    <div className="font-medium capitalize">{factCheckResult.result.replace('_', ' ')}</div>
+                    <div className="text-sm mt-1">
+                      Confidence: {(factCheckResult.confidence * 100).toFixed(0)}%
+                    </div>
+                  </div>
+
+                  {factCheckResult.explanation && (
+                    <div>
+                      <Label className="text-sm">Explanation:</Label>
+                      <p className="text-sm p-2 bg-muted rounded">{factCheckResult.explanation}</p>
+                    </div>
+                  )}
+
+                  {factCheckResult.sources && factCheckResult.sources.length > 0 && (
+                    <div>
+                      <Label className="text-sm">Sources:</Label>
+                      <ul className="text-sm list-disc list-inside p-2 bg-muted rounded">
+                        {factCheckResult.sources.map((source: string, idx: number) => (
+                          <li key={idx}>{source}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <Button onClick={handleAcceptAIResult} size="sm">
+                      Accept & Save
+                    </Button>
+                    <Button
+                      onClick={() => setFactCheckResult({ isManual: true })}
+                      size="sm"
+                      variant="outline"
+                    >
+                      Edit Manually
+                    </Button>
+                    <Button
+                      onClick={() => setFactCheckResult(null)}
+                      size="sm"
+                      variant="ghost"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
+
+        {existingFactChecks.length > 0 && (
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Previous Fact Checks:</Label>
+            <ScrollArea className="h-32">
+              {existingFactChecks.map((check: any, idx: number) => (
+                <div key={idx} className={`p-2 mb-2 rounded border text-sm ${getResultColor(check.result)}`}>
+                  <div className="font-medium">&#34;{check.claim}&#34;</div>
+                  <div className="capitalize">{check.result.replace('_', ' ')}</div>
+                  {check.explanation && <div className="text-xs mt-1">{check.explanation}</div>}
+                </div>
+              ))}
+            </ScrollArea>
+          </div>
+        )}
       </div>
     </Card>
   );
@@ -353,8 +737,12 @@ function CollaborativeNotes({ debate, userId, onUpdateNotes }: any) {
   );
 }
 
-function SpeakerPositionManager({ speakers, positions, onUpdatePositions }: any) {
+function SpeakerPositionManager({ speakers, positions, onUpdatePositions, tournament }: any) {
   const [speakerPositions, setSpeakerPositions] = useState<Record<string, string>>(positions || {});
+
+  const availablePositions = useMemo(() => {
+    return getPositionsForFormat(tournament.format || "WorldSchools", tournament.team_size || 6);
+  }, [tournament.format, tournament.team_size]);
 
   const handlePositionChange = (speakerId: string, newPosition: string) => {
     const newPositions = { ...speakerPositions };
@@ -374,14 +762,14 @@ function SpeakerPositionManager({ speakers, positions, onUpdatePositions }: any)
 
   const movePosition = (speakerId: string, direction: "up" | "down") => {
     const currentPosition = speakerPositions[speakerId];
-    const currentIndex = SPEAKER_POSITIONS.findIndex(p => p.id === currentPosition);
+    const currentIndex = availablePositions.findIndex(p => p.id === currentPosition);
 
     if (currentIndex === -1) return;
 
     const newIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
-    if (newIndex < 0 || newIndex >= SPEAKER_POSITIONS.length) return;
+    if (newIndex < 0 || newIndex >= availablePositions.length) return;
 
-    const newPosition = SPEAKER_POSITIONS[newIndex];
+    const newPosition = availablePositions[newIndex];
     handlePositionChange(speakerId, newPosition.id);
   };
 
@@ -389,6 +777,9 @@ function SpeakerPositionManager({ speakers, positions, onUpdatePositions }: any)
     <Card className="p-4">
       <div className="space-y-4">
         <h4 className="font-medium">Speaker Positions</h4>
+        <div className="text-xs text-muted-foreground">
+          Format: {tournament.format || "WorldSchools"} • Team Size: {tournament.team_size || 6}
+        </div>
 
         <div className="space-y-2">
           {speakers.map((speaker: any) => (
@@ -396,7 +787,7 @@ function SpeakerPositionManager({ speakers, positions, onUpdatePositions }: any)
               <div className="flex-1 min-w-0">
                 <p className="font-medium truncate">{speaker.name}</p>
                 <p className="text-sm text-muted-foreground">
-                  {SPEAKER_POSITIONS.find(p => p.id === speakerPositions[speaker.id])?.label || "Unassigned"}
+                  {availablePositions.find(p => p.id === speakerPositions[speaker.id])?.label || "Unassigned"}
                 </p>
               </div>
 
@@ -405,7 +796,7 @@ function SpeakerPositionManager({ speakers, positions, onUpdatePositions }: any)
                   variant="ghost"
                   size="sm"
                   onClick={() => movePosition(speaker.id, "up")}
-                  disabled={speakerPositions[speaker.id] === SPEAKER_POSITIONS[0]?.id}
+                  disabled={speakerPositions[speaker.id] === availablePositions[0]?.id}
                 >
                   <ArrowUp className="h-3 w-3" />
                 </Button>
@@ -413,7 +804,7 @@ function SpeakerPositionManager({ speakers, positions, onUpdatePositions }: any)
                   variant="ghost"
                   size="sm"
                   onClick={() => movePosition(speaker.id, "down")}
-                  disabled={speakerPositions[speaker.id] === SPEAKER_POSITIONS[SPEAKER_POSITIONS.length - 1]?.id}
+                  disabled={speakerPositions[speaker.id] === availablePositions[availablePositions.length - 1]?.id}
                 >
                   <ArrowDown className="h-3 w-3" />
                 </Button>
@@ -427,7 +818,7 @@ function SpeakerPositionManager({ speakers, positions, onUpdatePositions }: any)
                   <SelectValue placeholder="Select position" />
                 </SelectTrigger>
                 <SelectContent>
-                  {SPEAKER_POSITIONS.map((position) => (
+                  {availablePositions.map((position) => (
                     <SelectItem key={position.id} value={position.id}>
                       {position.label}
                     </SelectItem>
@@ -442,8 +833,8 @@ function SpeakerPositionManager({ speakers, positions, onUpdatePositions }: any)
   );
 }
 
-function JudgingInterface({ debate, ballot, userId, onSubmitBallot }: any) {
-  const { validateFeedback, isValidating } = useGeminiValidation();
+function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament }: any) {
+  const { validateFeedback, checkBias, isValidating, isBiasChecking } = useGemini();
   const [scores, setScores] = useState<Record<string, Record<string, number>>>({});
   const [teamWinner, setTeamWinner] = useState<string>("");
   const [winningPosition, setWinningPosition] = useState<"proposition" | "opposition" | "">("");
@@ -452,7 +843,10 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot }: any) {
   const [speakerPositions, setSpeakerPositions] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationResult, setValidationResult] = useState<any>(null);
+  const [biasCheckResults, setBiasCheckResults] = useState<Record<string, any>>({});
   const [isMobile, setIsMobile] = useState(false);
+  const [argumentFlow, setArgumentFlow] = useState<any[]>(debate.argument_flow || []);
+  const [factChecks, setFactChecks] = useState<any[]>(debate.fact_checks || []);
 
   const isHeadJudge = debate.head_judge_id === debate.my_submission?.judge_id;
   const canEdit = !ballot?.feedback_submitted;
@@ -466,7 +860,6 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot }: any) {
 
   useEffect(() => {
     if (ballot) {
-
       const loadedScores: Record<string, Record<string, number>> = {};
       ballot.speaker_scores?.forEach((score: any) => {
         loadedScores[score.speaker_id] = {
@@ -509,11 +902,34 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot }: any) {
     }));
   };
 
+  const handleBiasCheck = async (speakerId: string) => {
+    const comment = speakerComments[speakerId];
+    if (!comment?.trim()) return;
+
+    const result = await checkBias(comment, 'comment');
+    setBiasCheckResults(prev => ({
+      ...prev,
+      [speakerId]: result
+    }));
+  };
+
   const handleValidation = async () => {
     const allComments = Object.values(speakerComments).join(" ");
     const result = await validateFeedback(allComments, speakerComments, notes);
     setValidationResult(result);
     return result;
+  };
+
+  const handleAddArgument = (argument: any) => {
+    setArgumentFlow(prev => [...prev, argument]);
+  };
+
+  const handleUpdateArgumentFlow = (newFlow: any[]) => {
+    setArgumentFlow(newFlow);
+  };
+
+  const handleAddFactCheck = (factCheck: any) => {
+    setFactChecks(prev => [...prev, factCheck]);
   };
 
   const handleSubmit = async (isFinal: boolean = false) => {
@@ -536,6 +952,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot }: any) {
       const speakerScores = Object.entries(scores).map(([speakerId, categoryScores]) => {
         const finalScore = calculateFinalScore(categoryScores);
         const position = speakerPositions[speakerId] || "Speaker";
+        const biasResult = biasCheckResults[speakerId];
 
         return {
           speaker_id: speakerId as Id<"users">,
@@ -550,8 +967,8 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot }: any) {
           fairness: 0,
           knowledge: 0,
           helpfulness: 0,
-          bias_detected: false,
-          bias_explanation: "",
+          bias_detected: biasResult?.hasBias || false,
+          bias_explanation: biasResult?.suggestions?.join("; ") || "",
         };
       });
 
@@ -562,6 +979,9 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot }: any) {
         speaker_scores: speakerScores,
         notes,
         is_final_submission: isFinal,
+
+        fact_checks: factChecks.length > 0 ? factChecks : undefined,
+        argument_flow: argumentFlow.length > 0 ? argumentFlow : undefined,
       });
 
       toast.success(isFinal ? "Ballot submitted successfully!" : "Ballot draft saved!");
@@ -603,17 +1023,18 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot }: any) {
 
           <ScrollArea className="flex-1 px-4">
             <div className="space-y-6 pb-4">
-              
+
               <Tabs defaultValue="scoring" className="w-full">
-                <TabsList className="grid w-full grid-cols-4">
+                <TabsList className="grid w-full grid-cols-5">
                   <TabsTrigger value="scoring">Scoring</TabsTrigger>
                   <TabsTrigger value="winner">Winner</TabsTrigger>
                   <TabsTrigger value="tools">Tools</TabsTrigger>
+                  <TabsTrigger value="arguments">Arguments</TabsTrigger>
                   <TabsTrigger value="notes">Notes</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="scoring" className="space-y-4 mt-4">
-                  
+
                   <div className="grid grid-cols-2 gap-2">
                     <div className="p-3 border rounded-lg">
                       <h4 className="font-medium text-green-700 text-sm mb-1">Proposition</h4>
@@ -625,18 +1046,19 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot }: any) {
                     </div>
                   </div>
 
-                  
+
                   {allSpeakers.map((speakerId) => {
                     const speakerScores = scores[speakerId] || {};
                     const finalScore = calculateFinalScore(speakerScores);
                     const team = debate.proposition_team?.members.includes(speakerId)
                       ? debate.proposition_team
                       : debate.opposition_team;
+                    const biasResult = biasCheckResults[speakerId];
 
                     return (
                       <Card key={speakerId} className="p-3">
                         <div className="space-y-3">
-                          
+
                           <div className="flex justify-between items-center">
                             <div>
                               <h4 className="font-medium">Speaker {speakerId}</h4>
@@ -648,7 +1070,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot }: any) {
                             </div>
                           </div>
 
-                          
+
                           <div className="grid grid-cols-2 gap-3">
                             {SCORING_CATEGORIES.map((category) => {
                               const CategoryIcon = category.icon;
@@ -675,9 +1097,26 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot }: any) {
                             })}
                           </div>
 
-                          
+
                           <div className="space-y-2">
-                            <Label className="text-xs">Feedback</Label>
+                            <div className="flex items-center justify-between">
+                              <Label className="text-xs">Feedback</Label>
+                              <div className="flex gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleBiasCheck(speakerId)}
+                                  disabled={!speakerComments[speakerId]?.trim() || isBiasChecking}
+                                  className="h-6 px-2"
+                                >
+                                  {isBiasChecking ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <Shield className="h-3 w-3" />
+                                  )}
+                                </Button>
+                              </div>
+                            </div>
                             <Textarea
                               placeholder="Quick feedback..."
                               value={speakerComments[speakerId] || ""}
@@ -686,6 +1125,14 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot }: any) {
                               rows={2}
                               className="text-sm"
                             />
+                            {biasResult && biasResult.hasBias && (
+                              <Alert variant="destructive" className="p-2">
+                                <AlertCircle className="h-3 w-3" />
+                                <AlertDescription className="text-xs">
+                                  Potential bias detected. {biasResult.suggestions?.[0]}
+                                </AlertDescription>
+                              </Alert>
+                            )}
                           </div>
                         </div>
                       </Card>
@@ -736,6 +1183,22 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot }: any) {
                       speakers={allSpeakers.map(id => ({ id, name: `Speaker ${id}` }))}
                       positions={speakerPositions}
                       onUpdatePositions={setSpeakerPositions}
+                      tournament={tournament}
+                    />
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="arguments" className="space-y-4 mt-4">
+                  <div className="grid gap-4">
+                    <ArgumentFlow
+                      debate={{ ...debate, argument_flow: argumentFlow }}
+                      onAddArgument={handleAddArgument}
+                      onUpdateArgumentFlow={handleUpdateArgumentFlow}
+                    />
+                    <FactCheckingInterface
+                      debate={{ ...debate, fact_checks: factChecks }}
+                      onAddFactCheck={handleAddFactCheck}
+                      userId={userId}
                     />
                   </div>
                 </TabsContent>
@@ -762,7 +1225,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot }: any) {
                 </TabsContent>
               </Tabs>
 
-              
+
               {validationResult && !validationResult.isAppropriate && (
                 <Alert variant="destructive">
                   <AlertTriangle className="h-4 w-4" />
@@ -772,7 +1235,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot }: any) {
                 </Alert>
               )}
 
-              
+
               {canEdit && (
                 <div className="flex flex-col gap-2 pt-4">
                   <Button
@@ -832,9 +1295,9 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot }: any) {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
+
             <div className="lg:col-span-2 space-y-6">
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="p-4 border rounded-lg">
                   <h4 className="font-medium text-green-700 mb-2">Proposition</h4>
@@ -848,7 +1311,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot }: any) {
                 </div>
               </div>
 
-              
+
               {canEdit && (
                 <div className="space-y-4">
                   <Label className="text-base font-medium">Winning Team</Label>
@@ -883,7 +1346,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot }: any) {
                 </div>
               )}
 
-              
+
               <div className="space-y-6">
                 <Label className="text-base font-medium">Speaker Scores</Label>
 
@@ -893,6 +1356,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot }: any) {
                   const team = debate.proposition_team?.members.includes(speakerId)
                     ? debate.proposition_team
                     : debate.opposition_team;
+                  const biasResult = biasCheckResults[speakerId];
 
                   return (
                     <Card key={speakerId} className="p-6">
@@ -902,7 +1366,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot }: any) {
                             <h4 className="font-medium">Speaker {speakerId}</h4>
                             <p className="text-sm text-muted-foreground">{team?.name}</p>
                             <p className="text-xs text-muted-foreground">
-                              Position: {SPEAKER_POSITIONS.find(p => p.id === speakerPositions[speakerId])?.label || "Unassigned"}
+                              Position: {speakerPositions[speakerId] || "Unassigned"}
                             </p>
                           </div>
                           <div className="text-right">
@@ -912,7 +1376,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot }: any) {
                           </div>
                         </div>
 
-                        
+
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                           {SCORING_CATEGORIES.map((category) => {
                             const CategoryIcon = category.icon;
@@ -944,9 +1408,26 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot }: any) {
                           })}
                         </div>
 
-                        
+
                         <div className="space-y-2">
-                          <Label className="text-sm">Comments & Feedback</Label>
+                          <div className="flex items-center justify-between">
+                            <Label className="text-sm">Comments & Feedback</Label>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleBiasCheck(speakerId)}
+                                disabled={!speakerComments[speakerId]?.trim() || isBiasChecking}
+                                title="Check for bias"
+                              >
+                                {isBiasChecking ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Shield className="h-3 w-3" />
+                                )}
+                              </Button>
+                            </div>
+                          </div>
                           <Textarea
                             placeholder="Provide constructive feedback..."
                             value={speakerComments[speakerId] || ""}
@@ -954,6 +1435,23 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot }: any) {
                             disabled={!canEdit}
                             rows={3}
                           />
+                          {biasResult && biasResult.hasBias && (
+                            <Alert variant="destructive">
+                              <AlertCircle className="h-4 w-4" />
+                              <AlertDescription>
+                                <div className="space-y-1">
+                                  <p>Potential bias detected</p>
+                                  {biasResult.suggestions && (
+                                    <ul className="text-sm list-disc list-inside">
+                                      {biasResult.suggestions.map((suggestion: string, idx: number) => (
+                                        <li key={idx}>{suggestion}</li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </div>
+                              </AlertDescription>
+                            </Alert>
+                          )}
                         </div>
                       </div>
                     </Card>
@@ -961,7 +1459,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot }: any) {
                 })}
               </div>
 
-              
+
               <div className="space-y-2">
                 <Label className="text-base font-medium">Judge Notes</Label>
                 <Textarea
@@ -974,20 +1472,38 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot }: any) {
               </div>
             </div>
 
-            
+
             <div className="space-y-4">
               <DebateTimer debate={debate} onTimeUpdate={() => {}} />
-              <ArgumentFlow debate={debate} onAddArgument={() => {}} />
-              <CollaborativeNotes debate={debate} userId={userId} onUpdateNotes={() => {}} />
+
+              <ArgumentFlow
+                debate={{ ...debate, argument_flow: argumentFlow }}
+                onAddArgument={handleAddArgument}
+                onUpdateArgumentFlow={handleUpdateArgumentFlow}
+              />
+
+              <FactCheckingInterface
+                debate={{ ...debate, fact_checks: factChecks }}
+                onAddFactCheck={handleAddFactCheck}
+                userId={userId}
+              />
+
+              <CollaborativeNotes
+                debate={debate}
+                userId={userId}
+                onUpdateNotes={() => {}}
+              />
+
               <SpeakerPositionManager
                 speakers={allSpeakers.map(id => ({ id, name: `Speaker ${id}` }))}
                 positions={speakerPositions}
                 onUpdatePositions={setSpeakerPositions}
+                tournament={tournament}
               />
             </div>
           </div>
 
-          
+
           {validationResult && (
             <div className="mt-6">
               {validationResult.isAppropriate ? (
@@ -1025,7 +1541,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot }: any) {
             </div>
           )}
 
-          
+
           {canEdit && (
             <div className="flex gap-2 pt-6 border-t">
               <Button
@@ -1074,7 +1590,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot }: any) {
   );
 }
 
-function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot }: any) {
+function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot, onFlagBallot, onUnflagBallot }: any) {
   const StatusIcon = getDebateStatusIcon(debate.status);
 
   const canEdit = userRole === "admin" ||
@@ -1082,9 +1598,16 @@ function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot }: a
 
   const canSeeDetails = debate.can_see_full_details || userRole === "admin" || userRole === "volunteer";
 
+  const canFlag = userRole === "admin" ||
+    (userRole === "volunteer" && debate.judges?.some((j: any) => j._id === userId));
+
   const submissionProgress = debate.judges?.length > 0
     ? (debate.final_submissions_count || 0) / debate.judges.length * 100
     : 0;
+
+  const hasFlaggedBallots = debate.has_flagged_ballots ||
+    debate.judges?.some((j: any) => j.is_flagged);
+
 
   return (
     <Card className="hover:shadow-md transition-all duration-200">
@@ -1096,12 +1619,42 @@ function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot }: a
               <StatusIcon className="h-3 w-3 mr-1" />
               {debate.status}
             </Badge>
+            {hasFlaggedBallots && (
+              <Badge variant="destructive" className="gap-1">
+                <Flag className="h-3 w-3" />
+                Flagged
+              </Badge>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {debate.recording && (
               <Button variant="ghost" size="sm" title="Download Recording">
                 <Download className="h-4 w-4" />
               </Button>
+            )}
+            {canFlag && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onFlagBallot(debate)}
+                  title="Flag Ballot"
+                  className={hasFlaggedBallots ? "text-red-600" : ""}
+                >
+                  <Flag className="h-4 w-4" />
+                </Button>
+                {userRole === "admin" && hasFlaggedBallots && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onUnflagBallot(debate)}
+                    title="Unflag Ballot"
+                    className="text-green-600"
+                  >
+                    <CheckCircle className="h-4 w-4" />
+                  </Button>
+                )}
+              </>
             )}
             {canEdit && (
               <Button variant="ghost" size="sm" onClick={() => onEditBallot(debate)} title="Edit Ballot">
@@ -1118,7 +1671,7 @@ function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot }: a
       </CardHeader>
 
       <CardContent className="space-y-4">
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="text-green-700 border-green-700">Prop</Badge>
@@ -1153,7 +1706,7 @@ function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot }: a
 
         <Separator />
 
-        
+
         <div>
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium">
@@ -1171,10 +1724,11 @@ function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot }: a
               <Badge
                 key={judge._id}
                 variant={judge.is_head_judge ? "default" : "outline"}
-                className="gap-1"
+                className={`gap-1 ${judge.is_flagged ? 'border-red-500 text-red-600' : ''}`}
               >
                 {judge.name || `Judge ${judge._id}`}
                 {judge.is_head_judge && <Crown className="h-3 w-3" />}
+                {judge.is_flagged && <Flag className="h-3 w-3" />}
                 {userRole === "admin" && (
                   <div className="ml-1">
                     {judge.is_final ? (
@@ -1191,13 +1745,13 @@ function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot }: a
           </div>
         </div>
 
-        
+
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <span>Round {debate.round?.round_number}</span>
           <span>{debate.round?.type}</span>
         </div>
 
-        
+
         {userRole === "admin" && debate.judges?.length > 0 && (
           <div className="space-y-1">
             <div className="flex justify-between text-xs">
@@ -1208,7 +1762,7 @@ function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot }: a
           </div>
         )}
 
-        
+
         {debate.winning_team_id && canSeeDetails && (
           <div className="pt-2 border-t">
             <div className="flex items-center justify-between text-sm">
@@ -1228,6 +1782,26 @@ function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot }: a
                   {debate.winning_position}
                 </Badge>
               </div>
+            </div>
+          </div>
+        )}
+
+
+        {(debate.fact_checks?.length > 0 || debate.argument_flow?.length > 0) && canSeeDetails && (
+          <div className="pt-2 border-t">
+            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+              {debate.fact_checks?.length > 0 && (
+                <span className="flex items-center gap-1">
+                  <Search className="h-3 w-3" />
+                  {debate.fact_checks.length} fact checks
+                </span>
+              )}
+              {debate.argument_flow?.length > 0 && (
+                <span className="flex items-center gap-1">
+                  <BarChart3 className="h-3 w-3" />
+                  {debate.argument_flow.length} arguments
+                </span>
+              )}
             </div>
           </div>
         )}
@@ -1255,7 +1829,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
         </DialogHeader>
 
         <div className="space-y-6">
-          
+
           {ballotDetails.length > 1 && (
             <div className="flex items-center gap-2">
               <Label>View Judge:</Label>
@@ -1276,7 +1850,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
             </div>
           )}
 
-          
+
           <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
             <div className="text-center">
               <h3 className="font-semibold text-green-700">{debate?.proposition_team?.name}</h3>
@@ -1300,7 +1874,116 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
             </div>
           </div>
 
-          
+
+          {debate?.fact_checks?.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Search className="h-5 w-5" />
+                  Fact Checks ({debate.fact_checks.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {debate.fact_checks.map((check: any, idx: number) => (
+                    <div key={idx} className={`p-3 rounded border ${
+                      check.result === 'true' ? 'bg-green-50 border-green-200' :
+                        check.result === 'false' ? 'bg-red-50 border-red-200' :
+                          check.result === 'partially_true' ? 'bg-yellow-50 border-yellow-200' :
+                            'bg-gray-50 border-gray-200'
+                    }`}>
+                      <div className="flex justify-between items-start mb-2">
+                        <Badge variant="outline" className="capitalize">
+                          {check.result.replace('_', ' ')}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(check.timestamp).toLocaleString()}
+                        </span>
+                      </div>
+                      <p className="text-sm font-medium mb-1">&#34;{check.claim}&#34;</p>
+                      {check.explanation && (
+                        <p className="text-sm text-muted-foreground">{check.explanation}</p>
+                      )}
+                      {check.sources?.length > 0 && (
+                        <div className="mt-2">
+                          <p className="text-xs font-medium">Sources:</p>
+                          <ul className="text-xs list-disc list-inside">
+                            {check.sources.map((source: string, i: number) => (
+                              <li key={i}>{source}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+
+          {debate?.argument_flow?.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5" />
+                  Argument Flow ({debate.argument_flow.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {debate.argument_flow.map((arg: any, idx: number) => (
+                    <div key={idx} className={`p-3 rounded border ${
+                      arg.type === 'main' ? 'bg-blue-50 border-blue-200' :
+                        arg.type === 'rebuttal' ? 'bg-red-50 border-red-200' :
+                          'bg-yellow-50 border-yellow-200'
+                    }`}>
+                      <div className="flex justify-between items-start mb-2">
+                        <Badge variant="outline" className="capitalize">
+                          {arg.type}
+                        </Badge>
+                        <div className="flex items-center gap-2">
+                          {arg.strength && (
+                            <div className="flex">
+                              {Array.from({ length: 5 }, (_, i) => (
+                                <div
+                                  key={i}
+                                  className={`w-2 h-2 rounded-full mx-px ${
+                                    i < arg.strength ? 'bg-blue-500' : 'bg-gray-300'
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                          )}
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(arg.timestamp).toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                      <p className="text-sm">{arg.content}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Speaker {arg.speaker}
+                      </p>
+                      {arg.rebutted_by?.length > 0 && (
+                        <div className="mt-2 pt-2 border-t">
+                          <span className="text-xs text-muted-foreground">Rebutted by:</span>
+                          <div className="flex gap-1 mt-1">
+                            {arg.rebutted_by.map((rebuttal: string, i: number) => (
+                              <Badge key={i} variant="secondary" className="text-xs">
+                                Arg {rebuttal}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+
           {filteredBallots.map((ballot: any, index: number) => (
             <Card key={ballot.judge_id || index}>
               <CardHeader>
@@ -1318,10 +2001,16 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
                       Submitted
                     </Badge>
                   )}
+                  {ballot.notes?.includes("[FLAG:") && (
+                    <Badge variant="destructive">
+                      <Flag className="h-3 w-3 mr-1" />
+                      Flagged
+                    </Badge>
+                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                
+
                 <div className="p-3 bg-muted rounded-lg">
                   <div className="flex items-center justify-between">
                     <span className="font-medium">Decision:</span>
@@ -1343,7 +2032,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
                   </div>
                 </div>
 
-                
+
                 <div>
                   <h4 className="font-medium mb-3">Speaker Scores</h4>
                   <div className="space-y-3">
@@ -1360,7 +2049,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
                           </div>
                         </div>
 
-                        
+
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
                           {SCORING_CATEGORIES.map((category) => {
                             const CategoryIcon = category.icon;
@@ -1378,11 +2067,26 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
                           })}
                         </div>
 
-                        
+
                         {score.comments && (
                           <div className="pt-3 border-t">
                             <Label className="text-xs font-medium">Judge Feedback:</Label>
                             <p className="text-sm mt-1 p-2 bg-muted rounded">{score.comments}</p>
+                          </div>
+                        )}
+
+
+                        {score.bias_detected && (
+                          <div className="pt-3 border-t">
+                            <Alert variant="destructive">
+                              <AlertCircle className="h-4 w-4" />
+                              <AlertDescription>
+                                <p className="font-medium">Bias Detected</p>
+                                {score.bias_explanation && (
+                                  <p className="text-sm mt-1">{score.bias_explanation}</p>
+                                )}
+                              </AlertDescription>
+                            </Alert>
                           </div>
                         )}
                       </div>
@@ -1390,7 +2094,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
                   </div>
                 </div>
 
-                
+
                 {ballot.notes && (
                   <div className="pt-3 border-t">
                     <Label className="text-sm font-medium">Judge Notes:</Label>
@@ -1398,7 +2102,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
                   </div>
                 )}
 
-                
+
                 <div className="text-xs text-muted-foreground pt-2 border-t">
                   Submitted: {new Date(ballot.submitted_at).toLocaleString()}
                 </div>
@@ -1418,6 +2122,74 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
   );
 }
 
+function FlagBallotDialog({ debate, isOpen, onClose, onFlag }: any) {
+  const [reason, setReason] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleFlag = async () => {
+    if (!reason.trim()) return;
+
+    setIsSubmitting(true);
+    try {
+      await onFlag(debate, reason);
+      setReason("");
+      onClose();
+    } catch (error) {
+      console.error("Failed to flag ballot:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Flag className="h-5 w-5" />
+            Flag Ballot - {debate?.room_name}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div>
+            <Label>Reason for flagging:</Label>
+            <Textarea
+              placeholder="Describe the issue with this ballot..."
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={3}
+            />
+          </div>
+
+          <div className="flex gap-2 pt-4">
+            <Button
+              onClick={handleFlag}
+              disabled={!reason.trim() || isSubmitting}
+              variant="destructive"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Flagging...
+                </>
+              ) : (
+                <>
+                  <Flag className="h-4 w-4 mr-2" />
+                  Flag Ballot
+                </>
+              )}
+            </Button>
+            <Button onClick={onClose} variant="outline">
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function TournamentBallots({
                                             tournament,
                                             userRole,
@@ -1430,6 +2202,8 @@ export default function TournamentBallots({
   const [showJudgingInterface, setShowJudgingInterface] = useState(false);
   const [judgingDebate, setJudgingDebate] = useState<any>(null);
   const [showDetailsDialog, setShowDetailsDialog] = useState(false);
+  const [showFlagDialog, setShowFlagDialog] = useState(false);
+  const [flaggingDebate, setFlaggingDebate] = useState<any>(null);
 
   let queryFn: any;
   let queryArgs: any;
@@ -1460,10 +2234,11 @@ export default function TournamentBallots({
 
   const ballotsQuery = useQuery(queryFn, queryArgs);
 
-
   const submitBallot = useMutation(api.functions.volunteers.ballots.submitBallot);
   const updateBallot = useMutation(api.functions.admin.ballots.updateBallot);
-  const flagBallot = useMutation(api.functions.admin.ballots.flagBallotForReview);
+  const flagBallotAdmin = useMutation(api.functions.admin.ballots.flagBallotForReview);
+  const flagBallotVolunteer = useMutation(api.functions.volunteers.ballots.flagBallot);
+  const unflagBallot = useMutation(api.functions.admin.ballots.unflagBallot);
 
   const ballots = useMemo(() => ballotsQuery || [], [ballotsQuery]);
   const isLoading = ballotsQuery === undefined;
@@ -1498,14 +2273,72 @@ export default function TournamentBallots({
   };
 
   const handleEditBallot = async (debate: any) => {
-    if (userRole === "volunteer") {
+    setJudgingDebate(debate);
+    setShowJudgingInterface(true);
+  };
 
-      setJudgingDebate(debate);
-      setShowJudgingInterface(true);
-    } else if (userRole === "admin") {
+  const handleFlagBallot = (debate: any) => {
+    setFlaggingDebate(debate);
+    setShowFlagDialog(true);
+  };
 
-      setJudgingDebate(debate);
-      setShowJudgingInterface(true);
+  const handleSubmitFlag = async (debate: any, reason: string) => {
+    try {
+      if (userRole === "admin") {
+
+
+        const submissions = debate.judges?.filter((j: any) => j.has_submitted);
+        if (!submissions || submissions.length === 0) {
+          toast.error("No submitted ballots found to flag");
+          return;
+        }
+
+        await flagBallotAdmin({
+          token,
+          ballot_id: submissions[0].ballot_id || debate._id,
+          reason,
+        });
+      } else if (userRole === "volunteer") {
+
+        const mySubmission = debate.my_submission;
+        if (!mySubmission) {
+          toast.error("No ballot found to flag");
+          return;
+        }
+
+        await flagBallotVolunteer({
+          token,
+          ballot_id: mySubmission._id,
+          reason,
+        });
+      }
+      toast.success("Ballot flagged successfully");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to flag ballot");
+    }
+  };
+
+  const handleUnflagBallot = async (debate: any) => {
+    try {
+      if (userRole !== "admin") {
+        toast.error("Only admins can unflag ballots");
+        return;
+      }
+
+      const flaggedJudges = debate.judges?.filter((j: any) => j.is_flagged);
+      if (!flaggedJudges || flaggedJudges.length === 0) {
+        toast.error("No flagged ballots found");
+        return;
+      }
+
+      await unflagBallot({
+        token,
+        ballot_id: flaggedJudges[0].ballot_id || debate._id,
+      });
+
+      toast.success("Ballot unflagged successfully");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to unflag ballot");
     }
   };
 
@@ -1514,7 +2347,6 @@ export default function TournamentBallots({
       if (userRole === "volunteer") {
         await submitBallot(ballotData);
       } else if (userRole === "admin") {
-
         await updateBallot({
           token,
           ballot_id: ballotData.ballot_id,
@@ -1528,26 +2360,14 @@ export default function TournamentBallots({
     }
   };
 
-  const handleFlagBallot = async (ballotId: string, reason: string) => {
-    try {
-      await flagBallot({
-        token,
-        ballot_id: ballotId as Id<"judging_scores">,
-        reason,
-      });
-      toast.success("Ballot flagged for review");
-    } catch (error: any) {
-      toast.error(error.message || "Failed to flag ballot");
-    }
-  };
-
   const getStats = () => {
     const total = filteredBallots.length;
     const completed = filteredBallots.filter((b: any) => b.status === "completed").length;
     const inProgress = filteredBallots.filter((b: any) => b.status === "inProgress").length;
     const pending = filteredBallots.filter((b: any) => b.status === "pending").length;
+    const flagged = filteredBallots.filter((b: any) => b.has_flagged_ballots).length;
 
-    return { total, completed, inProgress, pending };
+    return { total, completed, inProgress, pending, flagged };
   };
 
   const stats = getStats();
@@ -1580,9 +2400,17 @@ export default function TournamentBallots({
               <span>{filteredBallots.length} debates</span>
               {userRole === "volunteer" && <span>Your judging assignments</span>}
               {userRole === "admin" && (
-                <span>
-                  {stats.completed} completed • {stats.inProgress} in progress • {stats.pending} pending
-                </span>
+                <>
+                  <span>
+                    {stats.completed} completed • {stats.inProgress} in progress • {stats.pending} pending
+                  </span>
+                  {stats.flagged > 0 && (
+                    <span className="text-red-300 flex items-center gap-1">
+                      <Flag className="h-3 w-3" />
+                      {stats.flagged} flagged
+                    </span>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -1614,6 +2442,21 @@ export default function TournamentBallots({
                 <SelectItem value="noShow">No Show</SelectItem>
               </SelectContent>
             </Select>
+
+            {userRole === "admin" && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 bg-background"
+                onClick={() => {
+
+                  window.location.reload();
+                }}
+              >
+                <RefreshCw className="h-3 w-3 mr-1" />
+                Refresh
+              </Button>
+            )}
           </div>
         </div>
 
@@ -1642,6 +2485,8 @@ export default function TournamentBallots({
                   userId={userId}
                   onViewDetails={handleViewDetails}
                   onEditBallot={handleEditBallot}
+                  onFlagBallot={handleFlagBallot}
+                  onUnflagBallot={handleUnflagBallot}
                 />
               ))}
             </div>
@@ -1649,12 +2494,18 @@ export default function TournamentBallots({
         </div>
       </Card>
 
-      
+      {/* Enhanced Judging Interface Dialog */}
       {showJudgingInterface && judgingDebate && (
         <Dialog open={showJudgingInterface} onOpenChange={setShowJudgingInterface}>
           <DialogContent className="max-w-7xl max-h-[95vh] overflow-hidden">
             <DialogHeader>
-              <DialogTitle>Judging Interface</DialogTitle>
+              <DialogTitle className="flex items-center gap-2">
+                <Edit3 className="h-5 w-5" />
+                Judging Interface
+                <Badge variant="outline" className="ml-2">
+                  {tournament.format || "WorldSchools"} Format
+                </Badge>
+              </DialogTitle>
             </DialogHeader>
             <div className="overflow-y-auto max-h-[85vh]">
               <JudgingInterface
@@ -1664,19 +2515,29 @@ export default function TournamentBallots({
                 token={token}
                 onSubmitBallot={handleSubmitBallot}
                 userId={userId}
+                tournament={tournament}
               />
             </div>
           </DialogContent>
         </Dialog>
       )}
 
-      
+      {/* Ballot Details Dialog */}
       <BallotDetailsDialog
         debate={selectedDebate}
         isOpen={showDetailsDialog}
         onClose={() => setShowDetailsDialog(false)}
         userRole={userRole}
         token={token}
+      />
+
+      {/* Flag Ballot Dialog */}
+      <FlagBallotDialog
+        debate={flaggingDebate}
+        isOpen={showFlagDialog}
+        onClose={() => setShowFlagDialog(false)}
+        onFlag={handleSubmitFlag}
+        userRole={userRole}
       />
     </div>
   );
