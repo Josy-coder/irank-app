@@ -156,44 +156,44 @@ function ChartCard({
 function AccessInfoBanner({ accessInfo }: { accessInfo: any }) {
   return (
     <Alert className="mb-6">
-      <div className="flex items-center justify-start gap-2">
-      <Eye className="h-4 w-4" />
-      <AlertDescription className="flex items-center justify-between w-full">
-        <div className="flex items-center justify-between w-full">
-        <div className="flex items-center gap-4">
-          <span>This is a shared analytics report</span>
-          {accessInfo.views_remaining && (
-            <>
-            <Badge variant="default">
+      <div className="flex items-center justify-between md:justify-start gap-2">
+        <Eye className="h-4 w-4 hidden md:block" />
+        <AlertDescription className="flex flex-col md:flex-row items-center justify-between w-full">
+          <div className="flex flex-col md:flex-row items-center justify-between w-full">
+            <div className="flex flex-col md:flex-row items-center gap-4">
+              <span>This is a shared analytics report</span>
+              {accessInfo.views_remaining && (
+                <>
+                  <Badge variant="default">
             <span className="text-xs text-muted-foreground">
               {accessInfo.views_remaining} views remaining
             </span>
-            </Badge>
-            </>
-          )}
-          {accessInfo.expires_at && (
-            <>
-            <Badge variant="outline">
+                  </Badge>
+                </>
+              )}
+              {accessInfo.expires_at && (
+                <>
+                  <Badge variant="outline">
             <span className="text-xs text-muted-foreground">
               Expires: {new Date(accessInfo.expires_at).toLocaleDateString()}
             </span>
-            </Badge>
-            </>
-          )}
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            navigator.clipboard.writeText(window.location.href)
-            toast.success("Report link copied to clipboard!")
-          }}
-        >
-          <Share2 className="h-4 w-4 mr-2" />
-          Share
-        </Button>
-        </div>
-      </AlertDescription>
+                  </Badge>
+                </>
+              )}
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                navigator.clipboard.writeText(window.location.href)
+                toast.success("Report link copied to clipboard!")
+              }}
+            >
+              <Share2 className="h-4 w-4 mr-2" />
+              Share
+            </Button>
+          </div>
+        </AlertDescription>
       </div>
     </Alert>
   )
@@ -304,9 +304,9 @@ function PublicReports() {
     <div className="min-h-screen bg-background">
       <div className="border-b bg-card">
         <div className="container mx-auto px-6 py-8">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col md:flex-row items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-primary">{reportData.title}</h1>
+              <h1 className="text-2xl font-bold text-primary">{reportData.title}</h1>
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="secondary" className="gap-1">
@@ -328,11 +328,11 @@ function PublicReports() {
         {(sections.length === 0 || sections.includes('overview')) && overview && (
           <div className="space-y-6">
             <div>
-              <h2 className="text-2xl font-bold mb-2">Overview</h2>
+              <h2 className="text-xl font-bold mb-2">Overview</h2>
               <Separator />
             </div>
 
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 custom:grid-cols-2 lg:grid-cols-4 gap-4">
               <StatCard
                 title="Total Tournaments"
                 value={overview.total_tournaments?.toLocaleString() || "0"}
@@ -396,7 +396,7 @@ function PublicReports() {
         {(sections.length === 0 || sections.includes('tournaments')) && tournaments && (
           <div className="space-y-6">
             <div>
-              <h2 className="text-2xl font-bold mb-2">Tournament Analytics</h2>
+              <h2 className="text-xl font-bold mb-2">Tournament Analytics</h2>
               <Separator />
             </div>
 
@@ -567,7 +567,7 @@ function PublicReports() {
         {(sections.length === 0 || sections.includes('users')) && users && (
           <div className="space-y-6">
             <div>
-              <h2 className="text-2xl font-bold mb-2">User Analytics</h2>
+              <h2 className="text-xl font-bold mb-2">User Analytics</h2>
               <Separator />
             </div>
 
@@ -719,7 +719,7 @@ function PublicReports() {
         {(sections.length === 0 || sections.includes('financial')) && financial && (
           <div className="space-y-6">
             <div>
-              <h2 className="text-2xl font-bold mb-2">Financial Analytics</h2>
+              <h2 className="text-xl font-bold mb-2">Financial Analytics</h2>
               <Separator />
             </div>
 
@@ -845,7 +845,7 @@ function PublicReports() {
         {(sections.length === 0 || sections.includes('performance')) && performance && (
           <div className="space-y-6">
             <div>
-              <h2 className="text-2xl font-bold mb-2">Performance Analytics</h2>
+              <h2 className="text-xl font-bold mb-2">Performance Analytics</h2>
               <Separator />
             </div>
 

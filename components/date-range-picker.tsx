@@ -146,7 +146,7 @@ export default function DateRangePicker({
             variant="outline"
             disabled={disabled}
             className={cn(
-              "w-full justify-start text-left font-normal min-w-[300px]",
+              "w-full justify-start text-left font-normal min-w-48",
               !date && "text-muted-foreground",
               error && "border-destructive"
             )}

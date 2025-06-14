@@ -59,6 +59,10 @@ import {
 import * as XLSX from 'xlsx'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
+import { useDebounce } from "@/hooks/use-debounce"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Doc } from "@/convex/_generated/dataModel";
 
 interface DateTimeRange {
   from?: Date
@@ -423,6 +427,9 @@ export default function AdminAnalyticsPage() {
   const [selectedCurrency, setSelectedCurrency] = useState<"RWF" | "USD">("RWF")
   const [activeTab, setActiveTab] = useState("overview")
   const [showShareDialog, setShowShareDialog] = useState(false)
+  const [openCommand, setOpenCommand] = useState(false);
+  const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 300);
 
   const currentFilters = useMemo(() => ({
     league_id: selectedLeague !== "all" ? selectedLeague as any : undefined,
@@ -509,6 +516,15 @@ export default function AdminAnalyticsPage() {
       filters: currentFilters,
     } : "skip"
   )
+
+  const getLeagues = useQuery(api.functions.leagues.getLeagues, {
+    search: debouncedSearch,
+    page: 1,
+    limit: 20,
+  });
+
+  const leagues: Doc<"leagues">[] = getLeagues?.leagues || [];
+
 
   const tournamentTrendsConfig = {
     total: { label: "Total", color: "hsl(var(--chart-1))" },
@@ -835,7 +851,7 @@ export default function AdminAnalyticsPage() {
               dateRange={dateRange}
               onDateRangeChange={setDateRange}
               placeholder="Select date range"
-              className="w-auto bg-background rounded-md"
+              className="bg-background rounded-md"
             />
           </div>
 
@@ -1028,14 +1044,63 @@ export default function AdminAnalyticsPage() {
 
             <TabsContent value="tournaments" className="space-y-6">
               <div className="flex items-center gap-4 mb-6">
-                <Select value={selectedLeague} onValueChange={setSelectedLeague}>
-                  <SelectTrigger className="w-48">
-                    <SelectValue placeholder="All Leagues" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Leagues</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Popover open={openCommand} onOpenChange={setOpenCommand}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="text-sm"
+                      onClick={() => setOpenCommand(true)}
+                    >
+                      <span className="truncate max-w-48">
+                      {selectedLeague === "all"
+                        ? "All Leagues"
+                        : leagues?.find(l => l._id === selectedLeague)?.name || "All Leagues"}
+                      </span>
+                      <ChevronDown
+                        className={cn(
+                          "h-4 w-4 transition-transform duration-200",
+                          openCommand && "rotate-180"
+                        )}
+                      />
+                    </Button>
+                  </PopoverTrigger>
+
+                  <PopoverContent className="w-48 p-0">
+                    <Command>
+                      <CommandInput
+                        placeholder="Search leagues..."
+                        value={search}
+                        onValueChange={setSearch}
+                      />
+                      <CommandList>
+                        <CommandEmpty>No leagues found.</CommandEmpty>
+
+                        <CommandItem
+                          key="all"
+                          onSelect={() => {
+                            setSelectedLeague("all");
+                            setOpenCommand(false);
+                          }}
+                        >
+                          All Leagues
+                        </CommandItem>
+
+                        {leagues?.map(league => (
+                          <CommandItem
+                            key={league._id}
+                            onSelect={() => {
+                              setSelectedLeague(league._id);
+                              setOpenCommand(false);
+                            }}
+                          >
+                            <span className="truncate max-w-48 block">{league.name}</span>
+                          </CommandItem>
+                        ))}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
