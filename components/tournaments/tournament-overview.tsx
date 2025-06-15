@@ -118,6 +118,9 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [editingCard, setEditingCard] = useState<string | null>(null)
 
+  const isAdmin = userRole === "admin"
+  const hasToken = Boolean(token)
+
   const [basicEditForm, setBasicEditForm] = useState({
     name: "",
     coordinator_id: "",
@@ -162,38 +165,43 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
   const [motionInput, setMotionInput] = useState("")
 
   const getUrl = useMutation(api.files.getUrl)
-  const updateTournament = useMutation(api.functions.admin.tournaments.updateTournament)
+
+  const updateTournament = useMutation(api.functions.admin.tournaments.updateTournament);
+
   const rounds = useQuery(
     api.functions.admin.tournaments.getTournamentRounds,
     tournament?._id ? { tournament_id: tournament._id } : "skip"
   )
 
-  const leaguesData = useQuery(api.functions.leagues.getLeagues, {
-    search: leagueSearch,
-    limit: 20
-  })
+  const leaguesData = useQuery(
+    api.functions.leagues.getLeagues,
+    isAdmin && leagueSearch !== undefined ? {
+      search: leagueSearch,
+      limit: 20
+    } : "skip"
+  )
 
-  const coordinatorsData = useQuery(api.functions.admin.users.getUsers, {
-    admin_token: token as string,
-    search: coordinatorSearch,
-    role: "all",
-    status: "active",
-    verified: "verified",
-    page: 1,
-    limit: 30
-  })
+  const coordinatorsData = useQuery(
+    api.functions.admin.users.getUsers,
+    isAdmin && hasToken && coordinatorSearch !== undefined ? {
+      admin_token: token as string,
+      search: coordinatorSearch,
+      role: "all",
+      status: "active",
+      verified: "verified",
+      page: 1,
+      limit: 30
+    } : "skip"
+  )
 
   const leagues = leaguesData?.leagues || []
   const coordinators = coordinatorsData?.users || []
-
 
   useEffect(() => {
     if (tournament.image) {
       getUrl({ storageId: tournament.image }).then(setImageUrl).catch(console.error)
     }
   }, [tournament.image, getUrl])
-
-  const isAdmin = userRole === "admin"
 
   if (!rounds) {
     return (
@@ -210,9 +218,9 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
   const prelimRounds = rounds.filter(round => round.type === "preliminary")
   const elimRounds = rounds.filter(round => round.type === "elimination" || round.type === "final")
 
-  const hasInProgressOrCompletedRounds = rounds.some(round => round.status === "completed" || round.status === "inProgress")
-  const hasInProgressOrCompletedPrelims = prelimRounds.some(round => round.status === "completed" || round.status === "inProgress")
-  const hasInProgressOrCompletedElims = elimRounds.some(round => round.status === "completed" || round.status === "inProgress")
+  const hasInProgressOrCompletedRounds = isAdmin ? rounds.some(round => round.status === "completed" || round.status === "inProgress") : false
+  const hasInProgressOrCompletedPrelims = isAdmin ? prelimRounds.some(round => round.status === "completed" || round.status === "inProgress") : false
+  const hasInProgressOrCompletedElims = isAdmin ? elimRounds.some(round => round.status === "completed" || round.status === "inProgress") : false
   const isPublished = tournament.status === "published"
 
   const canEditBasicInfo = isAdmin
@@ -221,6 +229,7 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
   const canEditMotions = isAdmin
 
   const initializeBasicEditForm = () => {
+    if (!isAdmin) return
     setBasicEditForm({
       name: tournament.name,
       coordinator_id: tournament.coordinator?._id || "",
@@ -230,6 +239,7 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
   }
 
   const initializeStructureEditForm = () => {
+    if (!isAdmin) return
     setStructureEditForm({
       format: tournament.format,
       team_size: tournament.team_size,
@@ -242,6 +252,7 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
   }
 
   const initializeScheduleEditForm = () => {
+    if (!isAdmin) return
     setScheduleEditForm({
       dateRange: {
         from: new Date(tournament.start_date),
@@ -255,12 +266,14 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
   }
 
   const initializeSpeakingEditForm = () => {
+    if (!isAdmin) return
     setSpeakingEditForm({
       speaking_times: { ...tournament.speaking_times }
     })
   }
 
   const initializeMotionsEditForm = () => {
+    if (!isAdmin) return
     const motionsObj: Record<string, { motion: string; round: number; releaseTime: number }> = {}
     rounds.forEach(round => {
       const key = `${round.type}_${round.round_number}`
@@ -274,7 +287,7 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
   }
 
   const handleStatusChange = async () => {
-    if (!pendingStatusChange || !token) return
+    if (!isAdmin || !updateTournament || !pendingStatusChange || !token) return
 
     try {
       await updateTournament({
@@ -309,9 +322,8 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
     }
   }
 
-
   const handleSaveBasicInfo = async () => {
-    if (!token) {
+    if (!isAdmin || !updateTournament || !token) {
       toast.error("Authentication required")
       return
     }
@@ -353,7 +365,7 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
   }
 
   const handleSaveStructure = async () => {
-    if (!token) {
+    if (!isAdmin || !updateTournament || !token) {
       toast.error("Authentication required")
       return
     }
@@ -392,7 +404,7 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
   }
 
   const handleSaveSchedule = async () => {
-    if (!token) {
+    if (!isAdmin || !updateTournament || !token) {
       toast.error("Authentication required")
       return
     }
@@ -437,7 +449,7 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
   }
 
   const handleSaveSpeakingTimes = async () => {
-    if (!token) {
+    if (!isAdmin || !updateTournament || !token) {
       toast.error("Authentication required")
       return
     }
@@ -476,7 +488,7 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
   }
 
   const handleSaveMotions = async () => {
-    if (!token) {
+    if (!isAdmin || !updateTournament || !token) {
       toast.error("Authentication required")
       return
     }
@@ -515,19 +527,23 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
   }
 
   const handleImageUpload = (storageId: Id<"_storage">) => {
+    if (!isAdmin) return
     setBasicEditForm(prev => ({ ...prev, image: storageId }))
     setShowImageDialog(false)
   }
 
   const handleRemoveImage = () => {
+    if (!isAdmin) return
     setBasicEditForm(prev => ({ ...prev, image: undefined }))
   }
 
   const handleDateRangeChange = (range: DateRange | DateTimeRange | undefined) => {
+    if (!isAdmin) return
     setScheduleEditForm(prev => ({ ...prev, dateRange: range }))
   }
 
   const handleSpeakingTimeChange = (speaker: string, minutes: number) => {
+    if (!isAdmin) return
     setSpeakingEditForm(prev => ({
       ...prev,
       speaking_times: {
@@ -538,6 +554,7 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
   }
 
   const handleMotionChange = (key: string, value: string) => {
+    if (!isAdmin) return
     setMotionsEditForm(prev => ({
       ...prev,
       motions: {
@@ -551,7 +568,7 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
   }
 
   const handleMotionsFromText = () => {
-    if (!motionInput.trim()) return
+    if (!isAdmin || !motionInput.trim()) return
 
     const lines = motionInput.split('\n').filter(line => line.trim())
     const newMotions = { ...motionsEditForm.motions }
@@ -588,6 +605,7 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
   }
 
   const canEditRoundMotion = (roundType: string, roundNumber: number) => {
+    if (!isAdmin) return false
     const round = rounds.find(r => r.type === roundType && r.round_number === roundNumber)
     return round && round.status === "pending"
   }
@@ -671,6 +689,8 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
+
+                
                 {canEditBasicInfo && (
                   <Button
                     variant="outline"
@@ -687,11 +707,11 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
                     {editingCard === 'basic' ? <X className="h-4 w-4" /> : <Edit className="h-4 w-4" />}
                   </Button>
                 )}
-
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              {editingCard === 'basic' ? (
+              
+              {editingCard === 'basic' && isAdmin ? (
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="edit-name">Tournament Name</Label>
@@ -701,7 +721,6 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
                       onChange={(e) => setBasicEditForm(prev => ({ ...prev, name: e.target.value }))}
                     />
                   </div>
-
 
                   <div className="space-y-2">
                     <Label>Tournament Image</Label>
@@ -865,9 +884,9 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
                   </div>
                 </div>
               ) : (
+
                 <div className="space-y-3">
                   <div className="grid grid-cols-1 custom:grid-cols-2 gap-2">
-
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-primary/10 rounded-lg">
                         <Trophy className="h-4 w-4 text-primary" />
@@ -921,7 +940,8 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
 
                   <div className="pt-4 border-t">
                     <div className="flex items-center gap-2">
-                      {userRole === "admin" && (
+                      
+                      {isAdmin && (
                         <Badge
                           variant="secondary"
                           className={`${
@@ -958,6 +978,7 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
                 <CardTitle>Tournament Structure</CardTitle>
                 <CardDescription>Format and configuration details</CardDescription>
               </div>
+              
               {canEditStructure && (
                 <Button
                   variant="outline"
@@ -976,7 +997,8 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
               )}
             </CardHeader>
             <CardContent className="space-y-4">
-              {editingCard === 'structure' ? (
+              
+              {editingCard === 'structure' && isAdmin ? (
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -1113,6 +1135,7 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
                   </div>
                 </div>
               ) : (
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">Team Size</Label>
@@ -1149,8 +1172,8 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
               )}
             </CardContent>
           </Card>
-
         </div>
+
         <div className="grid grid-cols-1 custom:grid-cols-2 gap-2">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
@@ -1158,6 +1181,7 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
                 <CardTitle>Schedule & Location</CardTitle>
                 <CardDescription>When and where the tournament takes place</CardDescription>
               </div>
+              
               {canEditStructure && (
                 <Button
                   variant="outline"
@@ -1176,7 +1200,8 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
               )}
             </CardHeader>
             <CardContent className="space-y-4">
-              {editingCard === 'schedule' ? (
+              
+              {editingCard === 'schedule' && isAdmin ? (
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label>Tournament Dates & Times</Label>
@@ -1233,6 +1258,7 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
                   </div>
                 </div>
               ) : (
+
                 <div className="space-y-3">
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-primary/10 rounded-lg">
@@ -1270,12 +1296,14 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
               )}
             </CardContent>
           </Card>
+
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle>Speaking Times</CardTitle>
                 <CardDescription>Time limits for each speaker (minutes)</CardDescription>
               </div>
+              
               {canEditSpeakingTimes && (
                 <Button
                   variant="outline"
@@ -1294,7 +1322,8 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
               )}
             </CardHeader>
             <CardContent>
-              {editingCard === 'speaking' ? (
+              
+              {editingCard === 'speaking' && isAdmin ? (
                 <div className="space-y-4">
                   <div className="grid grid-cols-3 gap-4">
                     {Array.from({ length: tournament.team_size }, (_, i) => i + 1).map((speakerNum) => (
@@ -1335,13 +1364,14 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
                   </div>
                 </div>
               ) : (
+
                 <div className="grid grid-cols-3 gap-2">
                   {Object.entries(tournament.speaking_times as Record<string, number> || {}).map(([speaker, time]) => (
                     <div key={speaker} className="flex items-center gap-2 p-2 bg-muted rounded">
                       <Clock className="h-3 w-3 text-muted-foreground" />
                       <span className="text-xs">
-                      {speaker.replace('speaker', 'Speaker ')}: {time} min
-                    </span>
+                        {speaker.replace('speaker', 'Speaker ')}: {time} min
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -1349,6 +1379,8 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
             </CardContent>
           </Card>
         </div>
+
+        
         {rounds && rounds.length > 0 && (
           <div className="grid grid-cols-1 custom:grid-cols-2 gap-2">
             <Card>
@@ -1359,6 +1391,7 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
                     {prelimRounds.length} preliminary rounds
                   </CardDescription>
                 </div>
+                
                 {canEditMotions && (
                   <Button
                     variant="outline"
@@ -1377,7 +1410,8 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
                 )}
               </CardHeader>
               <CardContent>
-                {editingCard === 'motions-prelim' ? (
+                
+                {editingCard === 'motions-prelim' && isAdmin ? (
                   <div className="space-y-4">
                     <Dialog open={showMotionsDialog} onOpenChange={setShowMotionsDialog}>
                       <DialogTrigger asChild>
@@ -1500,6 +1534,7 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
                     </div>
                   </div>
                 ) : (
+
                   <div className="space-y-3">
                     {prelimRounds.map((round) => {
                       const isImpromptu = round.is_impromptu
@@ -1543,6 +1578,7 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
                     {elimRounds.length} elimination rounds
                   </CardDescription>
                 </div>
+                
                 {canEditMotions && (
                   <Button
                     variant="outline"
@@ -1561,7 +1597,8 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
                 )}
               </CardHeader>
               <CardContent>
-                {editingCard === 'motions-elim' ? (
+                
+                {editingCard === 'motions-elim' && isAdmin ? (
                   <div className="space-y-4">
                     <div className="space-y-3">
                       {elimRounds.map((round) => {
@@ -1611,6 +1648,7 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
                     </div>
                   </div>
                 ) : (
+
                   <div className="space-y-3">
                     {elimRounds.map((round) => (
                       <div key={round._id} className="p-3 border rounded-lg">
@@ -1639,36 +1677,39 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
         )}
       </Card>
 
-      <AlertDialog open={showStatusDialog} onOpenChange={setShowStatusDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {pendingStatusChange?.action === "publish" && "Publish Tournament"}
-              {pendingStatusChange?.action === "cancel" && "Cancel Tournament"}
-              {pendingStatusChange?.action === "reactivate" && "Reactivate Tournament"}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {pendingStatusChange?.action === "publish" &&
-                "Are you sure you want to publish this tournament? Once published, teams can register and some settings will be locked."
-              }
-              {pendingStatusChange?.action === "cancel" &&
-                "Are you sure you want to cancel this tournament? This will prevent new registrations and may affect existing teams."
-              }
-              {pendingStatusChange?.action === "reactivate" &&
-                "Are you sure you want to reactivate this tournament? This will change its status back to draft."
-              }
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleStatusChange}>
-              {pendingStatusChange?.action === "publish" && "Publish"}
-              {pendingStatusChange?.action === "cancel" && "Cancel Tournament"}
-              {pendingStatusChange?.action === "reactivate" && "Reactivate"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      
+      {isAdmin && (
+        <AlertDialog open={showStatusDialog} onOpenChange={setShowStatusDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {pendingStatusChange?.action === "publish" && "Publish Tournament"}
+                {pendingStatusChange?.action === "cancel" && "Cancel Tournament"}
+                {pendingStatusChange?.action === "reactivate" && "Reactivate Tournament"}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {pendingStatusChange?.action === "publish" &&
+                  "Are you sure you want to publish this tournament? Once published, teams can register and some settings will be locked."
+                }
+                {pendingStatusChange?.action === "cancel" &&
+                  "Are you sure you want to cancel this tournament? This will prevent new registrations and may affect existing teams."
+                }
+                {pendingStatusChange?.action === "reactivate" &&
+                  "Are you sure you want to reactivate this tournament? This will change its status back to draft."
+                }
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleStatusChange}>
+                {pendingStatusChange?.action === "publish" && "Publish"}
+                {pendingStatusChange?.action === "cancel" && "Cancel Tournament"}
+                {pendingStatusChange?.action === "reactivate" && "Reactivate"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </div>
   )
 }

@@ -131,22 +131,48 @@ export default function TournamentPairings({
 
   const draftSaveTimeoutRef = useRef<NodeJS.Timeout>();
 
-  const pairingData = useQuery(api.functions.pairings.getTournamentPairingData, {
-    token,
-    tournament_id: tournament._id,
-    round_number: currentRound,
-  });
+  const isAdmin = userRole === 'admin';
+  const hasToken = Boolean(token);
 
-  const existingPairings = useQuery(api.functions.pairings.getTournamentPairings, {
-    token,
-    tournament_id: tournament._id,
-    round_number: currentRound,
-  });
+  const canViewPairings = hasToken;
+  const canGeneratePairings = isAdmin;
+  const canEditPairings = isAdmin;
+  const canSavePairings = isAdmin;
+  const canWithdrawTeams = isAdmin;
+  const canEditRoomNames = isAdmin;
+  const canEditJudges = isAdmin;
+  const canViewConflicts = isAdmin;
+  const canViewQualityScores = isAdmin;
+  const canViewStats = isAdmin;
+  const canViewHistory = isAdmin;
+  const canUseKeyboardShortcuts = isAdmin;
+  const canAccessSettings = isAdmin;
 
-  const pairingStats = useQuery(api.functions.pairings.getPairingStats, {
-    token,
-    tournament_id: tournament._id,
-  });
+  const pairingData = useQuery(
+    api.functions.pairings.getTournamentPairingData,
+    canGeneratePairings ? {
+      token,
+      tournament_id: tournament._id,
+      round_number: currentRound,
+    } : "skip"
+  );
+
+  const existingPairings = useQuery(
+    api.functions.pairings.getTournamentPairings,
+    canViewPairings ? {
+      token,
+      tournament_id: tournament._id,
+      round_number: currentRound,
+    } : "skip"
+  );
+
+  const pairingStats = useQuery(
+    api.functions.pairings.getPairingStats,
+    canViewStats ? {
+      token,
+      tournament_id: tournament._id,
+    } : "skip"
+  );
 
   const savePairingsMutation = useMutation(api.functions.pairings.savePairings);
   const updatePairingMutation = useMutation(api.functions.pairings.updatePairing);
@@ -158,7 +184,8 @@ export default function TournamentPairings({
   }, [existingPairings]);
 
   const saveDraft = useCallback((newPairings: PairingDraft[], immediate = false) => {
-    if (!autoSaveDrafts && !immediate) return;
+
+    if (!canEditPairings || (!autoSaveDrafts && !immediate)) return;
 
     const draft = {
       pairings: newPairings,
@@ -183,7 +210,7 @@ export default function TournamentPairings({
     } else {
       draftSaveTimeoutRef.current = setTimeout(saveAction, 1000);
     }
-  }, [autoSaveDrafts, currentRound, tournament._id, pairingMethod, moveHistory]);
+  }, [canEditPairings, autoSaveDrafts, currentRound, tournament._id, pairingMethod, moveHistory]);
 
   useEffect(() => {
     const hasSavedPairings = currentDebates.length > 0;
@@ -194,7 +221,8 @@ export default function TournamentPairings({
       setUndoStack([]);
       setRedoStack([]);
       setMoveHistory([]);
-    } else {
+    } else if (canEditPairings) {
+
       const savedDraft = localStorage.getItem(`pairings_draft_${tournament._id}_${currentRound}`);
       if (savedDraft) {
         try {
@@ -209,7 +237,7 @@ export default function TournamentPairings({
         }
       }
     }
-  }, [tournament._id, currentRound, currentDebates]);
+  }, [tournament._id, currentRound, currentDebates, canEditPairings]);
 
   const stats = useMemo(() => {
     const pairings = isDraft ? draftPairings : currentDebates;
@@ -228,7 +256,11 @@ export default function TournamentPairings({
   }, [isDraft, draftPairings, currentDebates]);
 
   const generatePairings = useCallback(async () => {
-    if (!pairingData || !pairingData.teams || !pairingData.judges) {
+    if (!canGeneratePairings || !pairingData || !pairingData.teams || !pairingData.judges) {
+      if (!canGeneratePairings) {
+        toast.error("You don't have permission to generate pairings");
+        return;
+      }
       toast.error("Tournament data not loaded");
       return;
     }
@@ -337,9 +369,14 @@ export default function TournamentPairings({
       setIsGenerating(false);
       setGenerationProgress(0);
     }
-  },[pairingData, draftPairings, currentRound, pairingMethod, tournament, stats]);
+  },[canGeneratePairings, pairingData, draftPairings, currentRound, pairingMethod, tournament, stats]);
 
   const savePairings = useCallback(async () => {
+    if (!canSavePairings || !savePairingsMutation) {
+      toast.error("You don't have permission to save pairings");
+      return;
+    }
+
     if (stats.errors > 0) {
       const confirmed = window.confirm(
         `There are ${stats.errors} errors in the pairings. ` +
@@ -370,9 +407,14 @@ export default function TournamentPairings({
         description: error.message || "Please try again",
       });
     }
-  }, [stats.errors, savePairingsMutation, token, tournament._id, currentRound, draftPairings]);
+  }, [canSavePairings, savePairingsMutation, stats.errors, token, tournament._id, currentRound, draftPairings]);
 
   const handleTeamWithdrawal = async (teamId: Id<"teams">, teamName: string) => {
+    if (!canWithdrawTeams || !handleTeamWithdrawalMutation) {
+      toast.error("You don't have permission to withdraw teams");
+      return;
+    }
+
     const reason = window.prompt(`Why is ${teamName} withdrawing?`);
     if (reason === null) return;
 
@@ -396,7 +438,7 @@ export default function TournamentPairings({
   };
 
   const handleDragStart = (team: Team, debateIndex: number, position: string) => {
-    if (userRole !== 'admin' || !isDraft) return;
+    if (!canEditPairings || !isDraft) return;
 
     setDraggedTeam({ team, fromDebateIndex: debateIndex, fromPosition: position });
     document.body.style.cursor = 'grabbing';
@@ -410,7 +452,7 @@ export default function TournamentPairings({
 
   const handleDragOver = (e: React.DragEvent, debateIndex: number, position: string) => {
     e.preventDefault();
-    if (draggedTeam) {
+    if (draggedTeam && canEditPairings) {
       setDropZoneActive(`${debateIndex}-${position}`);
     }
   };
@@ -422,7 +464,7 @@ export default function TournamentPairings({
   const handleDrop = async (e: React.DragEvent, toDebateIndex: number, toPosition: string) => {
     e.preventDefault();
 
-    if (!draggedTeam || !isDraft) return;
+    if (!draggedTeam || !isDraft || !canEditPairings) return;
 
     setIsRecalculating(true);
 
@@ -489,7 +531,7 @@ export default function TournamentPairings({
   };
 
   const swapSides = async (debateIndex: number) => {
-    if (!isDraft) return;
+    if (!isDraft || !canEditPairings) return;
 
     setIsRecalculating(true);
 
@@ -537,7 +579,7 @@ export default function TournamentPairings({
   };
 
   const updateRoomName = (debateIndex: number, newName: string) => {
-    if (!isDraft) return;
+    if (!isDraft || !canEditRoomNames) return;
 
     const newPairings = [...draftPairings];
     const oldName = newPairings[debateIndex].room_name;
@@ -558,7 +600,7 @@ export default function TournamentPairings({
   };
 
   const updateDebateJudges = async (debateIndex: number, newJudges: Id<"users">[], newHeadJudge?: Id<"users">) => {
-    if (!isDraft) return;
+    if (!isDraft || !canEditJudges) return;
 
     setIsRecalculating(true);
 
@@ -607,6 +649,11 @@ export default function TournamentPairings({
   };
 
   const updateSavedPairing = async (debateId: Id<"debates">, updates: any) => {
+    if (!canEditPairings || !updatePairingMutation) {
+      toast.error("You don't have permission to update pairings");
+      return;
+    }
+
     try {
       await updatePairingMutation({
         token,
@@ -625,34 +672,34 @@ export default function TournamentPairings({
   };
 
   const undo = useCallback(() => {
-    if (undoStack.length > 0) {
-      const previous = undoStack[undoStack.length - 1];
-      setRedoStack(prev => [...prev, draftPairings]);
-      setUndoStack(prev => prev.slice(0, -1));
-      setDraftPairings(previous);
-      saveDraft(previous, true);
+    if (!canEditPairings || undoStack.length === 0) return;
 
-      toast.success("Undone", {
-        description: "Previous state restored",
-        duration: 1500,
-      });
-    }
-  }, [undoStack, draftPairings, saveDraft]);
+    const previous = undoStack[undoStack.length - 1];
+    setRedoStack(prev => [...prev, draftPairings]);
+    setUndoStack(prev => prev.slice(0, -1));
+    setDraftPairings(previous);
+    saveDraft(previous, true);
+
+    toast.success("Undone", {
+      description: "Previous state restored",
+      duration: 1500,
+    });
+  }, [canEditPairings, undoStack, draftPairings, saveDraft]);
 
   const redo = useCallback(() => {
-    if (redoStack.length > 0) {
-      const next = redoStack[redoStack.length - 1];
-      setUndoStack(prev => [...prev, draftPairings]);
-      setRedoStack(prev => prev.slice(0, -1));
-      setDraftPairings(next);
-      saveDraft(next, true);
+    if (!canEditPairings || redoStack.length === 0) return;
 
-      toast.success("Redone", {
-        description: "Next state restored",
-        duration: 1500,
-      });
-    }
-  }, [redoStack, draftPairings, saveDraft]);
+    const next = redoStack[redoStack.length - 1];
+    setUndoStack(prev => [...prev, draftPairings]);
+    setRedoStack(prev => prev.slice(0, -1));
+    setDraftPairings(next);
+    saveDraft(next, true);
+
+    toast.success("Redone", {
+      description: "Next state restored",
+      duration: 1500,
+    });
+  }, [canEditPairings, redoStack, draftPairings, saveDraft]);
 
   const getTeamById = (teamId?: string): Team | undefined => {
     if (!teamId || !pairingData) return undefined;
@@ -665,9 +712,9 @@ export default function TournamentPairings({
   };
 
   React.useEffect(() => {
-    const handleKeyboard = (e: KeyboardEvent) => {
-      if (userRole !== 'admin' || !isDraft) return;
+    if (!canUseKeyboardShortcuts || !isDraft) return;
 
+    const handleKeyboard = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey) {
         switch (e.key) {
           case 'z':
@@ -692,10 +739,10 @@ export default function TournamentPairings({
 
     window.addEventListener('keydown', handleKeyboard);
     return () => window.removeEventListener('keydown', handleKeyboard);
-  }, [userRole, isDraft, undo, redo, savePairings, generatePairings]);
+  }, [canUseKeyboardShortcuts, isDraft, undo, redo, savePairings, generatePairings]);
 
   const ConflictBadge = ({ conflicts }: { conflicts: any[] }) => {
-    if (conflicts.length === 0) return null;
+    if (!canViewConflicts || conflicts.length === 0) return null;
 
     const hasErrors = conflicts.some(c => c.severity === 'error');
 
@@ -708,6 +755,8 @@ export default function TournamentPairings({
   };
 
   const QualityBadge = ({ score }: { score: number }) => {
+    if (!canViewQualityScores) return null;
+
     const getVariant = () => {
       if (score >= 90) return "default";
       if (score >= 70) return "secondary";
@@ -741,7 +790,7 @@ export default function TournamentPairings({
 
     return (
       <div
-        draggable={userRole === 'admin' && team && isDraft}
+        draggable={canEditPairings && team && isDraft}
         onDragStart={() => team && handleDragStart(team, debateIndex, position === 'proposition' ? 'prop' : 'opp')}
         onDragEnd={handleDragEnd}
         onDragOver={(e) => handleDragOver(e, debateIndex, position === 'proposition' ? 'prop' : 'opp')}
@@ -749,7 +798,7 @@ export default function TournamentPairings({
         onDrop={(e) => handleDrop(e, debateIndex, position === 'proposition' ? 'prop' : 'opp')}
         className={`p-3 border rounded-lg transition-all duration-200 ${
           team
-            ? `bg-background border-border hover:border-primary ${isDraft && userRole === 'admin' ? 'cursor-move' : ''}`
+            ? `bg-background border-border hover:border-primary ${isDraft && canEditPairings ? 'cursor-move' : ''}`
             : 'bg-muted border-dashed border-muted-foreground/25'
         } ${
           isDropTarget
@@ -774,7 +823,7 @@ export default function TournamentPairings({
                 )}
               </div>
 
-              {userRole === 'admin' && team.status === 'active' && (
+              {canWithdrawTeams && team.status === 'active' && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -801,7 +850,7 @@ export default function TournamentPairings({
             {isDropTarget ? (
               <div className="text-primary font-medium">Drop team here</div>
             ) : (
-              'Drop team here'
+              canEditPairings ? 'Drop team here' : 'No team assigned'
             )}
           </div>
         )}
@@ -820,6 +869,8 @@ export default function TournamentPairings({
     const [selectedJudges, setSelectedJudges] = useState<Id<"users">[]>(debate.judges || []);
     const [selectedHeadJudge, setSelectedHeadJudge] = useState<Id<"users"> | undefined>(debate.head_judge_id);
     const [open, setOpen] = useState(false);
+
+    if (!canEditJudges) return null;
 
     const handleJudgeToggle = (judgeId: Id<"users">, checked: boolean) => {
       if (checked) {
@@ -1099,7 +1150,7 @@ export default function TournamentPairings({
     })) :
     currentDebates;
 
-  if (!pairingData) {
+  if (!canViewPairings) {
     return <LoadingSkeleton />;
   }
 
@@ -1113,13 +1164,13 @@ export default function TournamentPairings({
             </h2>
             <div className="flex items-center gap-4 text-xs text-gray-300">
               <span>Round {currentRound} • {displayPairings.length} pairings</span>
-              {isDraft && (
+              {isDraft && canEditPairings && (
                 <Badge variant="secondary" className="text-primary border-primary">
                   <Edit3 className="h-3 w-3 mr-1" />
                   Draft
                 </Badge>
               )}
-              {lastSavedTimestamp && (
+              {lastSavedTimestamp && canEditPairings && (
                 <span className="text-xs">
                   Last saved: {new Date(lastSavedTimestamp).toLocaleTimeString()}
                 </span>
@@ -1127,7 +1178,8 @@ export default function TournamentPairings({
             </div>
           </div>
 
-          {userRole === 'admin' && (
+          
+          {canEditPairings && (
             <div className="flex items-center gap-3 flex-wrap">
               <Select value={currentRound.toString()} onValueChange={(value) => setCurrentRound(Number(value))}>
                 <SelectTrigger className="w-24 h-8 bg-background">
@@ -1154,24 +1206,26 @@ export default function TournamentPairings({
                 </SelectContent>
               </Select>
 
-              <Button
-                onClick={generatePairings}
-                disabled={isGenerating}
-              >
-                {isGenerating ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span className="hidden custom:block"> {generationProgress}% </span>
-                  </>
-                ) : (
-                  <>
-                    <Shuffle className="h-4 w-4" />
-                    <span className="hidden custom:block"> Generate </span>
-                  </>
-                )}
-              </Button>
+              {canGeneratePairings && (
+                <Button
+                  onClick={generatePairings}
+                  disabled={isGenerating}
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="hidden custom:block"> {generationProgress}% </span>
+                    </>
+                  ) : (
+                    <>
+                      <Shuffle className="h-4 w-4" />
+                      <span className="hidden custom:block"> Generate </span>
+                    </>
+                  )}
+                </Button>
+              )}
 
-              {isDraft && (
+              {isDraft && canSavePairings && (
                 <Button onClick={savePairings} variant="default" disabled={isRecalculating}>
                   {isRecalculating ? (
                     <>
@@ -1187,48 +1241,51 @@ export default function TournamentPairings({
                 </Button>
               )}
 
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <Settings className="h-4 w-4" />
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Pairing Settings</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="auto-save">Auto-save drafts</Label>
-                      <Switch
-                        id="auto-save"
-                        checked={autoSaveDrafts}
-                        onCheckedChange={setAutoSaveDrafts}
-                      />
+              {canAccessSettings && (
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <Settings className="h-4 w-4" />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Pairing Settings</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="auto-save">Auto-save drafts</Label>
+                        <Switch
+                          id="auto-save"
+                          checked={autoSaveDrafts}
+                          onCheckedChange={setAutoSaveDrafts}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="show-conflicts">Show conflicts</Label>
+                        <Switch
+                          id="show-conflicts"
+                          checked={showConflicts}
+                          onCheckedChange={setShowConflicts}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="show-quality">Show quality scores</Label>
+                        <Switch
+                          id="show-quality"
+                          checked={showQualityScores}
+                          onCheckedChange={setShowQualityScores}
+                        />
+                      </div>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="show-conflicts">Show conflicts</Label>
-                      <Switch
-                        id="show-conflicts"
-                        checked={showConflicts}
-                        onCheckedChange={setShowConflicts}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="show-quality">Show quality scores</Label>
-                      <Switch
-                        id="show-quality"
-                        checked={showQualityScores}
-                        onCheckedChange={setShowQualityScores}
-                      />
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
+                  </DialogContent>
+                </Dialog>
+              )}
             </div>
           )}
         </div>
 
+        
         {displayPairings.length > 0 && (
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 p-4">
             <Card>
@@ -1251,39 +1308,47 @@ export default function TournamentPairings({
               </CardContent>
             </Card>
 
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5 text-yellow-500" />
-                  <span className="text-sm font-medium">Conflicts</span>
-                </div>
-                <div className="text-2xl font-bold mt-1">{stats.conflicts}</div>
-              </CardContent>
-            </Card>
+            
+            {canViewConflicts && (
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5 text-yellow-500" />
+                    <span className="text-sm font-medium">Conflicts</span>
+                  </div>
+                  <div className="text-2xl font-bold mt-1">{stats.conflicts}</div>
+                </CardContent>
+              </Card>
+            )}
 
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="h-5 w-5 text-red-500" />
-                  <span className="text-sm font-medium">Errors</span>
-                </div>
-                <div className="text-2xl font-bold mt-1">{stats.errors}</div>
-              </CardContent>
-            </Card>
+            {canViewConflicts && (
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="h-5 w-5 text-red-500" />
+                    <span className="text-sm font-medium">Errors</span>
+                  </div>
+                  <div className="text-2xl font-bold mt-1">{stats.errors}</div>
+                </CardContent>
+              </Card>
+            )}
 
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2">
-                  <Target className="h-5 w-5 text-purple-500" />
-                  <span className="text-sm font-medium">Avg Quality</span>
-                </div>
-                <div className="text-2xl font-bold mt-1">{stats.avgQuality.toFixed(1)}</div>
-              </CardContent>
-            </Card>
+            {canViewQualityScores && (
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2">
+                    <Target className="h-5 w-5 text-purple-500" />
+                    <span className="text-sm font-medium">Avg Quality</span>
+                  </div>
+                  <div className="text-2xl font-bold mt-1">{stats.avgQuality.toFixed(1)}</div>
+                </CardContent>
+              </Card>
+            )}
           </div>
         )}
 
-        {userRole === 'admin' && isDraft && displayPairings.length > 0 && (
+        
+        {canEditPairings && isDraft && displayPairings.length > 0 && (
           <Card className="mx-4 mb-4">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
@@ -1308,7 +1373,7 @@ export default function TournamentPairings({
                     Redo
                   </Button>
 
-                  {moveHistory.length > 0 && (
+                  {canViewHistory && moveHistory.length > 0 && (
                     <Dialog>
                       <DialogTrigger asChild>
                         <Button variant="outline" size="sm">
@@ -1339,7 +1404,7 @@ export default function TournamentPairings({
                 </div>
 
                 <div className="flex items-center gap-3">
-                  {pairingStats && (
+                  {canViewStats && pairingStats && (
                     <Dialog>
                       <DialogTrigger asChild>
                         <Button variant="outline" size="sm">
@@ -1430,6 +1495,7 @@ export default function TournamentPairings({
           </div>
         )}
 
+        
         <div className="grid gap-4 lg:grid-cols-2 p-4">
           {displayPairings.map((debate: any, index: number) => (
             <Card
@@ -1457,11 +1523,11 @@ export default function TournamentPairings({
                     ) : (
                       <CardTitle
                         className={`cursor-pointer hover:text-primary ${
-                          userRole === 'admin' && isDraft ? 'hover:underline' : ''
+                          canEditRoomNames && isDraft ? 'hover:underline' : ''
                         }`}
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (userRole === 'admin' && isDraft) {
+                          if (canEditRoomNames && isDraft) {
                             setEditingRoom(debate._id);
                           }
                         }}
@@ -1479,13 +1545,13 @@ export default function TournamentPairings({
                   </div>
 
                   <div className="flex items-center gap-2">
-                    {userRole === 'admin' && showConflicts && <ConflictBadge conflicts={debate.pairing_conflicts || debate.conflicts || []} />}
+                    <ConflictBadge conflicts={debate.pairing_conflicts || debate.conflicts || []} />
 
-                    {userRole === 'admin' && showQualityScores && debate.quality_score !== undefined && (
+                    {debate.quality_score !== undefined && (
                       <QualityBadge score={debate.quality_score} />
                     )}
 
-                    {userRole === 'admin' && !debate.is_public_speaking && isDraft && (
+                    {canEditPairings && !debate.is_public_speaking && isDraft && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -1554,7 +1620,7 @@ export default function TournamentPairings({
                         <span className="text-sm font-medium">
                           Judges ({debate.judge_details?.length || 0})
                         </span>
-                        {userRole === 'admin' && (
+                        {canEditJudges && (
                           <>
                             {isDraft ? (
                               <JudgeSelectionDialog
@@ -1624,7 +1690,8 @@ export default function TournamentPairings({
                   </>
                 )}
 
-                {userRole === 'admin' && showConflicts && (debate.pairing_conflicts || debate.conflicts) &&
+                
+                {canViewConflicts && (debate.pairing_conflicts || debate.conflicts) &&
                   (debate.pairing_conflicts || debate.conflicts).length > 0 && (
                     <>
                       <Separator />
@@ -1659,7 +1726,7 @@ export default function TournamentPairings({
                             {debate.is_public_speaking ? 'Public Speaking' : 'Debate'}
                           </span>
                         </div>
-                        {debate.quality_score !== undefined && (
+                        {canViewQualityScores && debate.quality_score !== undefined && (
                           <div>
                             <span className="text-muted-foreground">Quality Score:</span>
                             <span className="ml-2">{debate.quality_score.toFixed(1)}/100</span>
@@ -1680,22 +1747,23 @@ export default function TournamentPairings({
                             {debate.proposition_team && (
                               <div>
                                 <div className="font-medium text-green-700">{debate.proposition_team.name}</div>
-                                {userRole === 'admin' && (
+                                
+                                {canViewConflicts && (
                                   <div className="text-muted-foreground">
-                                  Payment: {debate.proposition_team.payment_status}
-                                </div>
+                                    Payment: {debate.proposition_team.payment_status}
+                                  </div>
                                 )}
                               </div>
                             )}
                             {debate.opposition_team && (
                               <div>
                                 <div className="font-medium text-red-700">{debate.opposition_team.name}</div>
-                                {userRole === 'admin' && (
+                                
+                                {canViewConflicts && (
                                   <div className="text-muted-foreground">
-                                  Payment: {debate.opposition_team.payment_status}
+                                    Payment: {debate.opposition_team.payment_status}
                                   </div>
                                 )}
-
                               </div>
                             )}
                           </div>
@@ -1709,16 +1777,20 @@ export default function TournamentPairings({
           ))}
         </div>
 
+        
         {displayPairings.length === 0 && (
           <Card className="m-4">
             <CardContent className="text-center py-12">
               <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
               <h3 className=" font-medium mb-2">No Pairings Yet</h3>
               <p className="text-muted-foreground text-sm mb-4">
-                Generate pairings for Round {currentRound} to get started.
-                {currentRound <= 5 ? ' Using fold system.' : ' Using Swiss system.'}
+                {canGeneratePairings
+                  ? `Generate pairings for Round ${currentRound} to get started.
+                     ${currentRound <= 5 ? ' Using fold system.' : ' Using Swiss system.'}`
+                  : `Pairings for Round ${currentRound} have not been generated yet.`
+                }
               </p>
-              {userRole === 'admin' && (
+              {canGeneratePairings && (
                 <div className="space-y-2">
                   <Button onClick={generatePairings} disabled={isGenerating}>
                     {isGenerating ? (
@@ -1751,7 +1823,8 @@ export default function TournamentPairings({
           </Card>
         )}
 
-        {isGenerating && (
+        
+        {isGenerating && canGeneratePairings && (
           <div className="fixed inset-0 bg-background/50 backdrop-blur-sm z-50 flex items-center justify-center">
             <Card className="w-96">
               <CardContent className="p-6">
@@ -1776,7 +1849,8 @@ export default function TournamentPairings({
           </div>
         )}
 
-        {userRole === 'admin' && isDraft && displayPairings.length > 0 && (
+        
+        {canUseKeyboardShortcuts && isDraft && displayPairings.length > 0 && (
           <div className="fixed bottom-4 right-4 z-40">
             <Dialog>
               <DialogTrigger asChild>
@@ -1824,7 +1898,8 @@ export default function TournamentPairings({
           </div>
         )}
 
-        {autoSaveDrafts && isDraft && lastSavedTimestamp && (
+        
+        {autoSaveDrafts && isDraft && lastSavedTimestamp && canEditPairings && (
           <div className="fixed bottom-4 left-4 z-40">
             <div className="bg-muted/80 text-muted-foreground px-3 py-1 rounded-full text-xs flex items-center gap-2">
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>

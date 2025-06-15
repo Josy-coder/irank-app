@@ -133,32 +133,72 @@ export default function TournamentRankings({
   const [exportFormat, setExportFormat] = useState<'csv' | 'pdf'>('csv');
   const [isRecalculating, setIsRecalculating] = useState(false);
 
-  const schoolRankingsResponse = useQuery(api.functions.rankings.getSchoolRankings, {
-    token,
-    tournament_id: tournament._id,
-    include_elimination: includeElimination,
-  });
+  const isAdmin = userRole === 'admin';
+  const hasToken = Boolean(token);
 
-  const studentRankingsResponse = useQuery(api.functions.rankings.getStudentRankings, {
-    token,
-    tournament_id: tournament._id,
-    include_elimination: includeElimination,
-  });
+  const canViewRankings = hasToken;
+  const canRecalculateRankings = isAdmin;
+  const canManageReleaseSettings = isAdmin;
+  const canToggleElimination = isAdmin;
+  const canExportRankings = isAdmin;
+  const canViewBrackets = isAdmin;
+  const canViewAdvancedStats = isAdmin;
+  const canViewDataQuality = isAdmin;
 
-  const volunteerRankingsResponse = useQuery(api.functions.rankings.getVolunteerRankings, {
-    token,
-    tournament_id: tournament._id,
-  });
+  const schoolRankingsResponse = useQuery(
+    api.functions.rankings.getSchoolRankings,
+    canViewRankings ? {
+      token,
+      tournament_id: tournament._id,
+      include_elimination: includeElimination,
+    } : "skip"
+  );
 
-  const rankingStatsResponse = useQuery(api.functions.rankings.getRankingStatistics, {
-    token,
-    tournament_id: tournament._id,
-  });
+  const studentRankingsResponse = useQuery(
+    api.functions.rankings.getStudentRankings,
+    canViewRankings ? {
+      token,
+      tournament_id: tournament._id,
+      include_elimination: includeElimination,
+    } : "skip"
+  );
 
-  const eliminationBracketsResponse = useQuery(api.functions.rankings.generateEliminationBrackets, {
-    token,
-    tournament_id: tournament._id,
-  });
+  const volunteerRankingsResponse = useQuery(
+    api.functions.rankings.getVolunteerRankings,
+    canViewRankings ? {
+      token,
+      tournament_id: tournament._id,
+    } : "skip"
+  );
+
+  const rankingStatsResponse = useQuery(
+    api.functions.rankings.getRankingStatistics,
+    canViewAdvancedStats ? {
+      token,
+      tournament_id: tournament._id,
+    } : "skip"
+  );
+
+  const eliminationBracketsResponse = useQuery(
+    api.functions.rankings.generateEliminationBrackets,
+    canViewBrackets ? {
+      token,
+      tournament_id: tournament._id,
+    } : "skip"
+  );
+
+  const exportRankingsDataResponse = useQuery(
+    api.functions.rankings.exportRankingsData,
+    canExportRankings && schoolRankingsResponse && studentRankingsResponse && volunteerRankingsResponse ? {
+      token,
+      tournament_id: tournament._id,
+      ranking_type: activeTab,
+      include_elimination: includeElimination,
+    } : "skip"
+  );
+
+  const updateRankingReleaseMutation = useMutation(api.functions.rankings.updateRankingRelease);
+  const recalculateRankingsMutation = useMutation(api.functions.rankings.recalculateRankings);
 
   const schoolRankings = useMemo(() =>
       schoolRankingsResponse?.success ? schoolRankingsResponse.data : [],
@@ -184,19 +224,6 @@ export default function TournamentRankings({
   const eliminationBrackets = eliminationBracketsResponse?.success ? eliminationBracketsResponse.data : null;
   const bracketsError = eliminationBracketsResponse?.success === false ? eliminationBracketsResponse.error : null;
 
-  const updateRankingReleaseMutation = useMutation(api.functions.rankings.updateRankingRelease);
-  const recalculateRankingsMutation = useMutation(api.functions.rankings.recalculateRankings);
-
-  const exportRankingsDataResponse = useQuery(
-    api.functions.rankings.exportRankingsData,
-    schoolError || studentError || volunteerError ? "skip" : {
-      token,
-      tournament_id: tournament._id,
-      ranking_type: activeTab,
-      include_elimination: includeElimination,
-    }
-  );
-
   const exportRankingsData = exportRankingsDataResponse?.success ? exportRankingsDataResponse.data : null;
 
   const [releaseSettings, setReleaseSettings] = useState({
@@ -214,10 +241,10 @@ export default function TournamentRankings({
   });
 
   useEffect(() => {
-    if (tournament.ranking_released) {
+    if (tournament.ranking_released && canManageReleaseSettings) {
       setReleaseSettings(tournament.ranking_released);
     }
-  }, [tournament]);
+  }, [tournament, canManageReleaseSettings]);
 
   const filteredAndSortedRankings = useMemo(() => {
     let rankings: any[] = [];
@@ -295,6 +322,11 @@ export default function TournamentRankings({
   }, [schoolRankings, studentRankings, volunteerRankings]);
 
   const updateReleaseSettings = async (newSettings: typeof releaseSettings) => {
+    if (!canManageReleaseSettings || !updateRankingReleaseMutation) {
+      toast.error("You don't have permission to update ranking settings");
+      return;
+    }
+
     try {
       await updateRankingReleaseMutation({
         token,
@@ -309,6 +341,11 @@ export default function TournamentRankings({
   };
 
   const recalculateRankings = async () => {
+    if (!canRecalculateRankings || !recalculateRankingsMutation) {
+      toast.error("You don't have permission to recalculate rankings");
+      return;
+    }
+
     setIsRecalculating(true);
     try {
       const result = await recalculateRankingsMutation({
@@ -324,6 +361,11 @@ export default function TournamentRankings({
   };
 
   const exportRankings = () => {
+    if (!canExportRankings) {
+      toast.error("You don't have permission to export rankings");
+      return;
+    }
+
     if (!exportRankingsData) {
       toast.error("No data to export");
       return;
@@ -413,7 +455,7 @@ export default function TournamentRankings({
         <p className="text-muted-foreground text-xs max-w-md mx-auto">
           {response.error}
         </p>
-        {userRole === 'admin' && response.type === 'data_insufficient' && (
+        {canRecalculateRankings && response.type === 'data_insufficient' && (
           <div className="mt-4">
             <Alert className="text-left max-w-md mx-auto">
               <AlertTriangle className="h-4 w-4" />
@@ -681,62 +723,68 @@ export default function TournamentRankings({
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
-            {userRole === 'admin' && (
-              <>
-                <Button
-                  variant="outline"
-                  onClick={recalculateRankings}
-                  size="sm"
-                  disabled={isRecalculating}
-                >
-                  {isRecalculating ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span className="hidden custom:block">Recalculating....</span>
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="h-4 w-4" />
-                      <span className="hidden custom:block">Recalculate</span>
-                    </>
-                  )}
-                </Button>
-
-                <div className="flex items-center space-x-1">
-                  <Switch
-                    id="include-elims"
-                    checked={includeElimination}
-                    onCheckedChange={setIncludeElimination}
-                  />
-                  <Label htmlFor="include-elims" className="text-xs text-white">
-                    Include Eliminations
-                  </Label>
-                </div>
-              </>
+            
+            {canRecalculateRankings && (
+              <Button
+                variant="outline"
+                onClick={recalculateRankings}
+                size="sm"
+                disabled={isRecalculating}
+              >
+                {isRecalculating ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="hidden custom:block">Recalculating....</span>
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4" />
+                    <span className="hidden custom:block">Recalculate</span>
+                  </>
+                )}
+              </Button>
             )}
 
-            <Select value={exportFormat} onValueChange={(value: 'csv' | 'pdf') => setExportFormat(value)}>
-              <SelectTrigger className="w-18 h-8 bg-background">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="csv">CSV</SelectItem>
-                <SelectItem value="pdf">PDF</SelectItem>
-              </SelectContent>
-            </Select>
+            {canToggleElimination && (
+              <div className="flex items-center space-x-1">
+                <Switch
+                  id="include-elims"
+                  checked={includeElimination}
+                  onCheckedChange={setIncludeElimination}
+                />
+                <Label htmlFor="include-elims" className="text-xs text-white">
+                  Include Eliminations
+                </Label>
+              </div>
+            )}
 
-            <Button
-              onClick={exportRankings}
-              disabled={!currentRankings || currentRankings.length === 0}
-              size="sm"
-            >
-              <Download className="h-4 w-4" />
-              <span className="hidden custom:block">Export</span>
-            </Button>
+            {canExportRankings && (
+              <>
+                <Select value={exportFormat} onValueChange={(value: 'csv' | 'pdf') => setExportFormat(value)}>
+                  <SelectTrigger className="w-18 h-8 bg-background">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="csv">CSV</SelectItem>
+                    <SelectItem value="pdf">PDF</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Button
+                  onClick={exportRankings}
+                  disabled={!currentRankings || currentRankings.length === 0}
+                  size="sm"
+                >
+                  <Download className="h-4 w-4" />
+                  <span className="hidden custom:block">Export</span>
+                </Button>
+              </>
+            )}
           </div>
         </div>
         <div className="p-4 space-y-2">
-          {userRole === 'admin' && (
+          
+          {canManageReleaseSettings && (
             <Alert>
               <Settings className="h-4 w-4" />
               <AlertTitle>Ranking Visibility Controls</AlertTitle>
@@ -801,6 +849,7 @@ export default function TournamentRankings({
             </Alert>
           )}
 
+          
           {!statsError && rankingStats && (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <Card>
@@ -845,6 +894,7 @@ export default function TournamentRankings({
             </div>
           )}
 
+          
           <Card>
             <CardContent className="p-4">
               <div className="flex flex-col lg:flex-row gap-4">
@@ -900,6 +950,7 @@ export default function TournamentRankings({
             </CardContent>
           </Card>
 
+          
           <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)}>
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="schools" className="flex items-center gap-2">
@@ -1062,7 +1113,8 @@ export default function TournamentRankings({
             </TabsContent>
           </Tabs>
 
-          {!statsError && rankingStats && (
+          
+          {canViewAdvancedStats && !statsError && rankingStats && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -1134,7 +1186,8 @@ export default function TournamentRankings({
             </Card>
           )}
 
-          {userRole === 'admin' && !bracketsError && eliminationBrackets && eliminationBrackets.brackets && (
+          
+          {canViewBrackets && !bracketsError && eliminationBrackets && eliminationBrackets.brackets && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -1176,16 +1229,16 @@ export default function TournamentRankings({
                             <Badge variant="outline">#{bracket.top_seed.rank}</Badge>
                             <span className="font-medium">{bracket.top_seed.team_name}</span>
                             <span className="text-sm text-muted-foreground">
-                          ({bracket.top_seed.wins}W, {bracket.top_seed.total_points}pts)
-                        </span>
+                              ({bracket.top_seed.wins}W, {bracket.top_seed.total_points}pts)
+                            </span>
                           </div>
 
                           <div className="text-muted-foreground font-medium">VS</div>
 
                           <div className="flex items-center gap-3">
-                        <span className="text-sm text-muted-foreground">
-                          ({bracket.bottom_seed.wins}W, {bracket.bottom_seed.total_points}pts)
-                        </span>
+                            <span className="text-sm text-muted-foreground">
+                              ({bracket.bottom_seed.wins}W, {bracket.bottom_seed.total_points}pts)
+                            </span>
                             <span className="font-medium">{bracket.bottom_seed.team_name}</span>
                             <Badge variant="outline">#{bracket.bottom_seed.rank}</Badge>
                           </div>
@@ -1208,8 +1261,8 @@ export default function TournamentRankings({
                                   {team.wins}W, {team.total_points}pts
                                   {team.points_behind > 0 && (
                                     <span className="ml-2 text-red-600">
-                                (-{team.points_behind} pts)
-                              </span>
+                                      (-{team.points_behind} pts)
+                                    </span>
                                   )}
                                 </div>
                               </div>
@@ -1223,7 +1276,8 @@ export default function TournamentRankings({
             </Card>
           )}
 
-          {userRole === 'admin' && bracketsError && (
+          
+          {canViewBrackets && bracketsError && (
             <Card>
               <CardContent className="text-center py-8">
                 <Trophy className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
@@ -1238,7 +1292,8 @@ export default function TournamentRankings({
             </Card>
           )}
 
-          {!statsError && rankingStats?.data_quality && (
+          
+          {canViewDataQuality && !statsError && rankingStats?.data_quality && (
             <Alert>
               <Info className="h-4 w-4" />
               <AlertTitle>Data Quality</AlertTitle>
@@ -1251,8 +1306,8 @@ export default function TournamentRankings({
                       <AlertCircle className="h-4 w-4 text-orange-500" />
                     )}
                     <span className="text-sm">
-                  Team Results: {rankingStats.data_quality.missing_team_results === 0 ? 'Complete' : `${rankingStats.data_quality.missing_team_results} missing`}
-                </span>
+                      Team Results: {rankingStats.data_quality.missing_team_results === 0 ? 'Complete' : `${rankingStats.data_quality.missing_team_results} missing`}
+                    </span>
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -1262,8 +1317,8 @@ export default function TournamentRankings({
                       <AlertCircle className="h-4 w-4 text-orange-500" />
                     )}
                     <span className="text-sm">
-                  Speaker Results: {rankingStats.data_quality.missing_speaker_results === 0 ? 'Complete' : `${rankingStats.data_quality.missing_speaker_results} missing`}
-                </span>
+                      Speaker Results: {rankingStats.data_quality.missing_speaker_results === 0 ? 'Complete' : `${rankingStats.data_quality.missing_speaker_results} missing`}
+                    </span>
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -1273,8 +1328,8 @@ export default function TournamentRankings({
                       <AlertCircle className="h-4 w-4 text-orange-500" />
                     )}
                     <span className="text-sm">
-                  Scored Debates: {rankingStats.data_quality.scored_debates_percentage.toFixed(1)}%
-                </span>
+                      Scored Debates: {rankingStats.data_quality.scored_debates_percentage.toFixed(1)}%
+                    </span>
                   </div>
                 </div>
               </AlertDescription>

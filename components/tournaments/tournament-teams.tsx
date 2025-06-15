@@ -211,19 +211,26 @@ export function TournamentTeams({
   const isAdmin = userRole === "admin";
   const isSchoolAdmin = userRole === "school_admin";
   const isStudent = userRole === "student";
+  const hasToken = Boolean(token);
+
   const canCreateTeams = isAdmin ||
     (isSchoolAdmin && tournament.league?.type !== "Dreams Mode") ||
     (isStudent && tournament.league?.type === "Dreams Mode");
 
+  const canUseFilters = isAdmin;
+  const canUseBulkActions = isAdmin;
+  const canAccessWaiverCodes = isAdmin && tournament.league?.type !== "Dreams Mode";
+  const canJoinTeams = isStudent && tournament.league?.type === "Dreams Mode";
+
   const teamsData = useQuery(
     api.functions.teams.getTournamentTeams,
-    token ? {
-      token,
+    hasToken ? {
+      token: token as string,
       tournament_id: tournament._id,
-      search: debouncedSearch,
-      status: statusFilter.length === 1 ? statusFilter[0] as any : undefined,
-      payment_status: paymentFilter.length === 1 ? paymentFilter[0] as any : undefined,
-      school_id: schoolFilter.length === 1 ? schoolFilter[0] as Id<"schools"> : undefined,
+      search: canUseFilters ? debouncedSearch : "",
+      status: canUseFilters && statusFilter.length === 1 ? statusFilter[0] as any : undefined,
+      payment_status: canUseFilters && paymentFilter.length === 1 ? paymentFilter[0] as any : undefined,
+      school_id: canUseFilters && schoolFilter.length === 1 ? schoolFilter[0] as Id<"schools"> : undefined,
       page,
       limit: 20,
     } : "skip"
@@ -231,8 +238,8 @@ export function TournamentTeams({
 
   const tournamentSchools = useQuery(
     api.functions.tournaments.getTournamentSchools,
-    token ? {
-      token,
+    hasToken && canUseFilters ? {
+      token: token as string,
       tournament_id: tournament._id,
     } : "skip"
   );
@@ -242,11 +249,13 @@ export function TournamentTeams({
   const leaveTeam = useMutation(api.functions.teams.leaveTeam);
 
   useEffect(() => {
-    setPage(1);
-  }, [debouncedSearch, statusFilter, paymentFilter, schoolFilter]);
+    if (canUseFilters) {
+      setPage(1);
+    }
+  }, [debouncedSearch, statusFilter, paymentFilter, schoolFilter, canUseFilters]);
 
   const schoolOptions: { value: string; label: string; icon?: React.ReactNode }[] = useMemo(() => {
-    if (!tournamentSchools) return [];
+    if (!tournamentSchools || !canUseFilters) return [];
 
     return tournamentSchools
       .filter((school): school is { id: Id<"schools">; name: string; type: "Private" | "Public" | "Government Aided" | "International"; location: string } => school != null)
@@ -255,22 +264,27 @@ export function TournamentTeams({
         value: school.id,
         icon: React.createElement(School, { className: "h-4 w-4" }),
       }));
-  }, [tournamentSchools]);
-
+  }, [tournamentSchools, canUseFilters]);
 
   const handleSearchChange = (value: string) => {
-    setSearchTerm(value);
+    if (canUseFilters) {
+      setSearchTerm(value);
+    }
   };
 
   const handleReset = () => {
-    setSearchTerm("");
-    setStatusFilter([]);
-    setPaymentFilter([]);
-    setSchoolFilter([]);
-    setPage(1);
+    if (canUseFilters) {
+      setSearchTerm("");
+      setStatusFilter([]);
+      setPaymentFilter([]);
+      setSchoolFilter([]);
+      setPage(1);
+    }
   };
 
   const handleSelectTeam = (teamId: string, checked: boolean) => {
+    if (!canUseBulkActions) return;
+
     const newSelected = new Set(selectedTeams);
     if (checked) {
       newSelected.add(teamId);
@@ -281,6 +295,8 @@ export function TournamentTeams({
   };
 
   const handleSelectAll = (checked: boolean) => {
+    if (!canUseBulkActions) return;
+
     if (checked && teamsData?.teams) {
       setSelectedTeams(new Set(teamsData.teams.map(team => team._id)));
     } else {
@@ -331,7 +347,7 @@ export function TournamentTeams({
   };
 
   const handleBulkAction = async () => {
-    if (selectedTeams.size === 0 || !bulkAction || !token) return;
+    if (!canUseBulkActions || !bulkUpdateTeams || selectedTeams.size === 0 || !bulkAction || !token) return;
 
     try {
       const result = await bulkUpdateTeams({
@@ -367,7 +383,6 @@ export function TournamentTeams({
     if (isAdmin) return true;
     if (isSchoolAdmin && team.school?._id === schoolId) return true;
     return !!(isStudent && tournament.league?.type === "Dreams Mode" && team.members.some((m: any) => m._id === userId));
-
   };
 
   const canDeleteTeam = (team: any) => {
@@ -378,12 +393,19 @@ export function TournamentTeams({
     return isStudent && team.members.some((m: any) => m._id === userId);
   };
 
+  const canShareTeam = (team: any) => {
+    return tournament.league?.type === "Dreams Mode" && team.invitation_code && (
+      isAdmin ||
+      (isStudent && team.members.some((m: any) => m._id === userId))
+    );
+  };
+
   const isLoading = teamsData === undefined;
   const teams = teamsData?.teams || [];
   const totalCount = teamsData?.totalCount || 0;
   const hasMore = teamsData?.hasMore || false;
 
-  const filters = [
+  const filters = canUseFilters ? [
     <MultiSelectFilter
       key="status"
       title="Status"
@@ -411,10 +433,11 @@ export function TournamentTeams({
       selected={schoolFilter}
       onSelectionChange={setSchoolFilter}
     />
-  ];
+  ] : [];
 
   const actions = [
-    ...(isAdmin && tournament.league?.type !== "Dreams Mode" ? [{
+
+    ...(canAccessWaiverCodes ? [{
       key: "waiver",
       component: (
         <Button
@@ -428,7 +451,8 @@ export function TournamentTeams({
         </Button>
       )
     }] : []),
-    {
+
+    ...(canJoinTeams ? [{
       key: "join",
       component: (
         <Button
@@ -436,30 +460,29 @@ export function TournamentTeams({
           size="sm"
           className="h-8 border-white/20"
           onClick={() => setShowJoinDialog(true)}
-          disabled={!isStudent || tournament.league?.type !== "Dreams Mode"}
         >
           <QrCode className="h-4 w-4" />
           <span className="hidden md:block">Join Team</span>
         </Button>
       )
-    },
-    {
+    }] : []),
+
+    ...(canCreateTeams ? [{
       key: "create",
       component: (
         <Button
           size="sm"
           className="h-8 hover:bg-white hover:text-foreground"
           onClick={() => setShowCreateDialog(true)}
-          disabled={!canCreateTeams}
         >
           <UserPlus className="h-4 w-4" />
           <span className="hidden md:block">Create Team</span>
         </Button>
       )
-    }
+    }] : [])
   ].map(action => action.component);
 
-  const bulkActions = isAdmin ? [
+  const bulkActions = canUseBulkActions ? [
     {
       label: "Activate Teams",
       icon: <CheckCircle className="h-4 w-4" />,
@@ -514,7 +537,7 @@ export function TournamentTeams({
 
   const toolbar = (
     <DataToolbar
-      searchTerm={searchTerm}
+      searchTerm={canUseFilters ? searchTerm : ""}
       onSearchChange={handleSearchChange}
       onReset={handleReset}
       filters={filters}
@@ -523,6 +546,7 @@ export function TournamentTeams({
       selectedCount={selectedTeams.size}
       bulkActions={bulkActions}
       searchPlaceholder="Search teams..."
+      hideSearch={!canUseFilters}
     />
   );
 
@@ -537,7 +561,8 @@ export function TournamentTeams({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    {isAdmin && (
+                    
+                    {canUseBulkActions && (
                       <TableHead className="w-12">
                         <Checkbox
                           checked={selectedTeams.size === teams.length && teams.length > 0}
@@ -548,6 +573,7 @@ export function TournamentTeams({
                     <TableHead>Team</TableHead>
                     <TableHead>Members</TableHead>
                     <TableHead>Status</TableHead>
+                    
                     {tournament.league?.type !== "Dreams Mode" && (
                       <TableHead>Payment</TableHead>
                     )}
@@ -558,7 +584,7 @@ export function TournamentTeams({
                 <TableBody>
                   {teams.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={tournament.league?.type === "Dreams Mode" ? 5 : 6} className="text-center py-12">
+                      <TableCell colSpan={tournament.league?.type === "Dreams Mode" ? (canUseBulkActions ? 5 : 4) : (canUseBulkActions ? 6 : 5)} className="text-center py-12">
                         <div className="flex flex-col items-center justify-center">
                           <Users className="h-12 w-12 text-muted-foreground mb-4" />
                           <h3 className="font-medium mb-2">No teams found</h3>
@@ -580,7 +606,8 @@ export function TournamentTeams({
 
                       return (
                         <TableRow key={team._id}>
-                          {isAdmin && (
+                          
+                          {canUseBulkActions && (
                             <TableCell>
                               <Checkbox
                                 checked={selectedTeams.has(team._id)}
@@ -633,6 +660,7 @@ export function TournamentTeams({
                               {team.status.charAt(0).toUpperCase() + team.status.slice(1)}
                             </Badge>
                           </TableCell>
+                          
                           {tournament.league?.type !== "Dreams Mode" && (
                             <TableCell>
                               <Badge variant="secondary" className={getPaymentStatusColor(team.payment_status)}>
@@ -648,6 +676,7 @@ export function TournamentTeams({
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-1">
+                              
                               {canEditTeam(team) && (
                                 <Button
                                   variant="ghost"
@@ -659,7 +688,8 @@ export function TournamentTeams({
                                 </Button>
                               )}
 
-                              {tournament.league?.type === "Dreams Mode" && team.invitation_code && (
+                              
+                              {canShareTeam(team) && (
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -670,6 +700,7 @@ export function TournamentTeams({
                                 </Button>
                               )}
 
+                              
                               {canLeaveTeam(team) && (
                                 <Button
                                   variant="ghost"
@@ -681,6 +712,7 @@ export function TournamentTeams({
                                 </Button>
                               )}
 
+                              
                               {canDeleteTeam(team) && (
                                 <Button
                                   variant="ghost"
@@ -704,6 +736,7 @@ export function TournamentTeams({
               </Table>
             </div>
 
+            
             {(hasMore || page > 1) && (
               <div className="flex items-center justify-center gap-4 space-x-4 mt-6 p-4">
                 <Button
@@ -741,6 +774,7 @@ export function TournamentTeams({
         )}
       </div>
 
+      
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -761,62 +795,77 @@ export function TournamentTeams({
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={showBulkDialog} onOpenChange={setShowBulkDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Bulk Action</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to {bulkAction} {selectedTeams.size} selected team{selectedTeams.size > 1 ? 's' : ''}?
-              This action will be applied to all selected teams.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleBulkAction}>
-              {bulkAction === "delete" ? "Delete Teams" : `${bulkAction.charAt(0).toUpperCase() + bulkAction.slice(1).replace('_', ' ')} Teams`}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      
+      {canUseBulkActions && (
+        <AlertDialog open={showBulkDialog} onOpenChange={setShowBulkDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Bulk Action</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to {bulkAction} {selectedTeams.size} selected team{selectedTeams.size > 1 ? 's' : ''}?
+                This action will be applied to all selected teams.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleBulkAction}>
+                {bulkAction === "delete" ? "Delete Teams" : `${bulkAction.charAt(0).toUpperCase() + bulkAction.slice(1).replace('_', ' ')} Teams`}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
 
-      <TeamManagementDialog
-        open={showCreateDialog || showEditDialog}
-        onOpenChange={(open) => {
-          if (!open) {
-            setShowCreateDialog(false);
-            setShowEditDialog(false);
-            setTeamToEdit(null);
-          }
-        }}
-        tournament={tournament}
-        team={teamToEdit}
-        mode={showCreateDialog ? "create" : "edit"}
-        userRole={userRole}
-        token={token}
-        userId={userId}
-        schoolId={schoolId}
-      />
+      
+      {(canCreateTeams || teamToEdit) && (
+        <TeamManagementDialog
+          open={showCreateDialog || showEditDialog}
+          onOpenChange={(open) => {
+            if (!open) {
+              setShowCreateDialog(false);
+              setShowEditDialog(false);
+              setTeamToEdit(null);
+            }
+          }}
+          tournament={tournament}
+          team={teamToEdit}
+          mode={showCreateDialog ? "create" : "edit"}
+          userRole={userRole}
+          token={token}
+          userId={userId}
+          schoolId={schoolId}
+        />
+      )}
 
-      <JoinTeamDialog
-        open={showJoinDialog}
-        onOpenChange={setShowJoinDialog}
-        tournament={tournament}
-        token={token}
-      />
+      
+      {canJoinTeams && (
+        <JoinTeamDialog
+          open={showJoinDialog}
+          onOpenChange={setShowJoinDialog}
+          tournament={tournament}
+          token={token}
+        />
+      )}
 
-      <ShareTeamDialog
-        open={showShareDialog}
-        onOpenChange={setShowShareDialog}
-        team={teamToShare}
-        tournament={tournament}
-      />
+      
+      {teamToShare && canShareTeam(teamToShare) && (
+        <ShareTeamDialog
+          open={showShareDialog}
+          onOpenChange={setShowShareDialog}
+          team={teamToShare}
+          tournament={tournament}
+        />
+      )}
 
-      <WaiverCodeDialog
-        open={showWaiverDialog}
-        onOpenChange={setShowWaiverDialog}
-        tournament={tournament}
-        token={token}
-      />
+      
+      {canAccessWaiverCodes && (
+        <WaiverCodeDialog
+          open={showWaiverDialog}
+          onOpenChange={setShowWaiverDialog}
+          tournament={tournament}
+          token={token}
+        />
+      )}
     </CardLayoutWithToolbar>
   );
 }

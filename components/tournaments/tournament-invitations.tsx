@@ -596,13 +596,13 @@ export function TournamentInvitations({
                         </TableCell>
                         <TableCell>
                           <div className="grid grid-cols-1 gap-2">
-                            <Badge variant="secondary" className={getStatusColor(invitation.status)}>
-                              <StatusIcon className="w-3 h-3 mr-1" />
+                            <Badge variant="secondary" className={`max-w-20 ${getStatusColor(invitation.status)}`}>
+                              <StatusIcon className="w-3 h-3" />
                               {invitation.status.charAt(0).toUpperCase() + invitation.status.slice(1)}
                             </Badge>
                             {isExpired && (
-                              <Badge variant="outline" className="bg-orange-50 text-orange-600 border-orange-200">
-                                <AlertTriangle className="w-3 h-3 mr-1" />
+                              <Badge variant="outline" className="bg-orange-50 max-w-16 text-orange-600 border-orange-200">
+                                <AlertTriangle className="w-3 h-3" />
                                 Expired
                               </Badge>
                             )}
@@ -833,7 +833,7 @@ export function TournamentInvitations({
   }
 
   const availableTypeOptions = getAvailableTypes()
-  const filters = [
+  const filters = isAdmin ? [
     <MultiSelectFilter
       key="status"
       title="Status"
@@ -851,7 +851,7 @@ export function TournamentInvitations({
       selected={typeFilter}
       onSelectionChange={setTypeFilter}
     />
-  ]
+  ] : [];
 
   const actions = []
   if (canSendInvitations && activeTab === "potential") {
@@ -901,6 +901,7 @@ export function TournamentInvitations({
       selectedCount={selectedItems.size}
       bulkActions={bulkActions}
       searchPlaceholder={activeTab === "invitations" ? "Search invitations..." : "Search users..."}
+      hideSearch={!isAdmin}
     />
   )
 
