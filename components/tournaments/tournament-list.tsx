@@ -548,7 +548,7 @@ export function TournamentList({ userRole, token, selectedLeagueId, className }:
                               size="sm"
                               onClick={() => handleViewTournament(tournament.slug)}
                             >
-                              <Eye className="h-4 w-4 mr-1" />
+                              <Eye className="h-4 w-4" />
                               View
                             </Button>
                           </div>

@@ -380,12 +380,12 @@ function formatDateByPeriod(timestamp: number, period: string): string {
 
   switch (period) {
     case "three_months":
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      return date.toLocaleDateString('en-US', { month: 'short' });
     case "six_months":
       return date.toLocaleDateString('en-US', { month: 'short' });
     case "one_year":
       return date.toLocaleDateString('en-US', { month: 'short' });
     default:
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      return date.toLocaleDateString('en-US', { month: 'short' });
   }
 }

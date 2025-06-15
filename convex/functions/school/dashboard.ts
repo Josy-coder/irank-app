@@ -272,7 +272,7 @@ export const getSchoolPerformanceTrend = query({
 
       switch (args.period) {
         case "three_months":
-          dataPoints = generateWeeklyEmptyData(startDate, now);
+          dataPoints = generateMonthlyEmptyData(startDate, now);
           break;
         case "six_months":
           dataPoints = generateMonthlyEmptyData(startDate, now);

@@ -62,6 +62,13 @@ const studentSchema = baseUserSchema.extend({
   security_answer: z.string().min(2, { message: "Security answer is required" }),
 })
 
+const schoolStudentSchema = baseUserSchema.extend({
+  role: z.literal("student"),
+  grade: z.string().min(1, { message: "Grade/Class is required" }),
+  security_question: z.string().min(5, { message: "Security question is required" }),
+  security_answer: z.string().min(2, { message: "Security answer is required" }),
+})
+
 const schoolAdminSchema = baseUserSchema.extend({
   role: z.literal("school_admin"),
   position: z.string().min(2, { message: "Position is required" }),
@@ -95,9 +102,10 @@ interface AddUserDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onUserAdded?: () => void
+  userType?: "admin" | "school"
 }
 
-export function AddUserDialog({ open, onOpenChange, onUserAdded }: AddUserDialogProps) {
+export function AddUserDialog({ open, onOpenChange, onUserAdded, userType = "admin" }: AddUserDialogProps) {
   const [loading, setLoading] = useState(false)
   const [selectedRole, setSelectedRole] = useState<"student" | "school_admin" | "volunteer" | "admin">("student")
   const [generatedPassword, setGeneratedPassword] = useState<string>("")
@@ -108,9 +116,17 @@ export function AddUserDialog({ open, onOpenChange, onUserAdded }: AddUserDialog
   const [showPassword, setShowPassword] = useState(false)
 
   const { token } = useAuth()
-  const createUser = useMutation(api.functions.admin.users.createUser)
+  const createUser = useMutation(
+    userType === "admin"
+      ? api.functions.admin.users.createUser
+      : api.functions.school.students.createStudent
+  )
 
   const getSchema = () => {
+    if (userType === "school") {
+      return schoolStudentSchema
+    }
+
     switch (selectedRole) {
       case "student": return studentSchema
       case "school_admin": return schoolAdminSchema
@@ -128,12 +144,12 @@ export function AddUserDialog({ open, onOpenChange, onUserAdded }: AddUserDialog
       phone: "",
       gender: undefined,
       role: selectedRole,
-      // Student fields
+
       school_id: "",
       grade: "",
       security_question: "",
       security_answer: "",
-      // School admin fields
+
       position: "",
       schoolName: "",
       schoolType: undefined,
@@ -146,7 +162,7 @@ export function AddUserDialog({ open, onOpenChange, onUserAdded }: AddUserDialog
       contactName: "",
       contactEmail: "",
       contactPhone: "",
-      // Volunteer fields
+
       date_of_birth: "",
       national_id: "",
       high_school_attended: "",
@@ -165,6 +181,7 @@ export function AddUserDialog({ open, onOpenChange, onUserAdded }: AddUserDialog
   ]
 
   const handleRoleChange = (role: string) => {
+    if (userType === "school") return
     setSelectedRole(role as any)
     form.setValue("role", role)
     form.clearErrors()
@@ -175,18 +192,21 @@ export function AddUserDialog({ open, onOpenChange, onUserAdded }: AddUserDialog
 
     try {
       let payload: any = {
-        admin_token: token!,
+        [userType === "admin" ? "admin_token" : "school_admin_token"]: token!,
         name: values.name,
         email: values.email,
         phone: values.phone,
-        role: values.role,
         gender: values.gender,
       }
 
-      if (values.role === "student") {
+      if (userType === "admin") {
+        payload.role = values.role
+      }
+
+      if (values.role === "student" || userType === "school") {
         payload = {
           ...payload,
-          school_id: values.school_id as Id<"schools">,
+          ...(userType === "admin" && { school_id: values.school_id as Id<"schools"> }),
           grade: values.grade,
           security_question: values.security_question,
           security_answer: values.security_answer,
@@ -224,14 +244,14 @@ export function AddUserDialog({ open, onOpenChange, onUserAdded }: AddUserDialog
         setGeneratedPassword(result.tempPassword)
         setResetLink(result.resetLink)
         setShowResults(true)
-        toast.success("User created successfully!")
+        toast.success(`${userType === "school" ? "Student" : "User"} created successfully!`)
 
         if (onUserAdded) {
           onUserAdded()
         }
       }
     } catch (error: any) {
-      toast.error(error.message?.split("Uncaught Error:")[1]?.split(/\.|Called by client/)[0]?.trim() || "Failed to create user")
+      toast.error(error.message?.split("Uncaught Error:")[1]?.split(/\.|Called by client/)[0]?.trim() || `Failed to create ${userType === "school" ? "student" : "user"}`)
     } finally {
       setLoading(false)
     }
@@ -268,9 +288,9 @@ export function AddUserDialog({ open, onOpenChange, onUserAdded }: AddUserDialog
       <Dialog open={open} onOpenChange={handleClose}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>User Created Successfully</DialogTitle>
+            <DialogTitle>{userType === "school" ? "Student" : "User"} Created Successfully</DialogTitle>
             <DialogDescription>
-              Share these credentials with the user. They will need to use the reset link to set their password.
+              Share these credentials with the {userType === "school" ? "student" : "user"}. They will need to use the reset link to set their password.
             </DialogDescription>
           </DialogHeader>
 
@@ -326,7 +346,7 @@ export function AddUserDialog({ open, onOpenChange, onUserAdded }: AddUserDialog
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                This link will expire in 24 hours. The user should use this to set their new password.
+                This link will expire in 24 hours. The {userType === "school" ? "student" : "user"} should use this to set their new password.
               </p>
             </div>
           </div>
@@ -343,23 +363,405 @@ export function AddUserDialog({ open, onOpenChange, onUserAdded }: AddUserDialog
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Add New User</DialogTitle>
+          <DialogTitle>Add New {userType === "school" ? "Student" : "User"}</DialogTitle>
           <DialogDescription>
-            Create a new user account. A temporary password will be generated and they&#39;ll receive a reset link.
+            Create a new {userType === "school" ? "student" : "user"} account. A temporary password will be generated and they&#39;ll receive a reset link.
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={selectedRole} onValueChange={handleRoleChange} className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="student">Student</TabsTrigger>
-            <TabsTrigger value="school_admin">School Admin</TabsTrigger>
-            <TabsTrigger value="volunteer">Volunteer</TabsTrigger>
-            <TabsTrigger value="admin">Admin</TabsTrigger>
-          </TabsList>
+        {userType === "admin" ? (
+          <Tabs value={selectedRole} onValueChange={handleRoleChange} className="w-full">
+            <TabsList className="grid w-full grid-cols-4">
+              <TabsTrigger value="student">Student</TabsTrigger>
+              <TabsTrigger value="school_admin">School Admin</TabsTrigger>
+              <TabsTrigger value="volunteer">Volunteer</TabsTrigger>
+              <TabsTrigger value="admin">Admin</TabsTrigger>
+            </TabsList>
+
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4 mt-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Full Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="John Doe" {...field} disabled={loading} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email Address</FormLabel>
+                        <FormControl>
+                          <Input type="email" placeholder="john@example.com" {...field} disabled={loading} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="phone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Phone Number</FormLabel>
+                        <FormControl>
+                          <Input placeholder="+250 7XXXXXXXX" {...field} disabled={loading} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="gender"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Gender (Optional)</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={loading}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select gender" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="male">Male</SelectItem>
+                            <SelectItem value="female">Female</SelectItem>
+                            <SelectItem value="non_binary">Non-binary</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <TabsContent value="student" className="space-y-4 mt-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="grade"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Grade/Class</FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g. Grade 10, S4" {...field} disabled={loading} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="school_id"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>School</FormLabel>
+                          <FormControl>
+                            <SchoolSelector
+                              value={field.value}
+                              onValueChange={field.onChange}
+                              placeholder="Search for school..."
+                              disabled={loading}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="security_question"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Security Question</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value} disabled={loading}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select a security question" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {securityQuestions.map((question, index) => (
+                                <SelectItem key={index} value={question}>
+                                  {question}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="security_answer"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Security Answer</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Enter answer" {...field} disabled={loading} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="school_admin" className="space-y-4 mt-4">
+                  <FormField
+                    control={form.control}
+                    name="position"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Position at School</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g. Principal, Debate Coach" {...field} disabled={loading} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="space-y-4">
+                    <h4 className="font-medium">School Information</h4>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="schoolName"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>School Name</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Enter school name" {...field} disabled={loading} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="schoolType"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>School Type</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value} disabled={loading}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select school type" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="Private">Private</SelectItem>
+                                <SelectItem value="Public">Public</SelectItem>
+                                <SelectItem value="Government Aided">Government Aided</SelectItem>
+                                <SelectItem value="International">International</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">School Location</Label>
+                      <LocationSelector
+                        country={form.watch("country")}
+                        province={form.watch("province")}
+                        district={form.watch("district")}
+                        sector={form.watch("sector")}
+                        cell={form.watch("cell")}
+                        village={form.watch("village")}
+                        onCountryChange={(country) => {
+                          form.setValue("country", country)
+                          form.setValue("province", "")
+                          form.setValue("district", "")
+                          form.setValue("sector", "")
+                          form.setValue("cell", "")
+                          form.setValue("village", "")
+                        }}
+                        onProvinceChange={(province) => {
+                          form.setValue("province", province)
+                          form.setValue("district", "")
+                          form.setValue("sector", "")
+                          form.setValue("cell", "")
+                          form.setValue("village", "")
+                        }}
+                        onDistrictChange={(district) => {
+                          form.setValue("district", district)
+                          form.setValue("sector", "")
+                          form.setValue("cell", "")
+                          form.setValue("village", "")
+                        }}
+                        onSectorChange={(sector) => {
+                          form.setValue("sector", sector || "")
+                          form.setValue("cell", "")
+                          form.setValue("village", "")
+                        }}
+                        onCellChange={(cell) => {
+                          form.setValue("cell", cell || "")
+                          form.setValue("village", "")
+                        }}
+                        onVillageChange={(village) => {
+                          form.setValue("village", village || "")
+                        }}
+                        countryError={form.formState.errors.country?.message as string | undefined}
+                        provinceError={form.formState.errors.province?.message as string | undefined}
+                        districtError={form.formState.errors.district?.message as string | undefined}
+                        cellError={form.formState.errors.cell?.message as string | undefined}
+                        villageError={form.formState.errors.village?.message as string | undefined}
+                        includeRwandaDetails={form.watch("country") === "RW"}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="contactName"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Contact Person Name</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Contact person's full name" {...field} disabled={loading} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="contactEmail"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Contact Email</FormLabel>
+                            <FormControl>
+                              <Input type="email" placeholder="contact@school.com" {...field} disabled={loading} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="contactPhone"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Contact Phone (Optional)</FormLabel>
+                            <FormControl>
+                              <Input placeholder="+250 7XXXXXXXX" {...field} disabled={loading} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="volunteer" className="space-y-4 mt-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="date_of_birth"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Date of Birth</FormLabel>
+                          <FormControl>
+                            <DatePicker
+                              date={field.value ? new Date(field.value) : undefined}
+                              onDateChange={(date) => field.onChange(date?.toISOString().split("T")[0])}
+                              disabled={loading}
+                              maxDate={subYears(new Date(), 16)}
+                              error={form.formState.errors.date_of_birth?.message as string | undefined}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="national_id"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>National ID/Passport</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Enter ID number" {...field} disabled={loading} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="high_school_attended"
+                      render={({ field }) => (
+                        <FormItem className="md:col-span-2">
+                          <FormLabel>High School Attended</FormLabel>
+                          <FormControl>
+                            <VolunteerSchoolSelector
+                              value={field.value}
+                              onValueChange={field.onChange}
+                              placeholder="Enter your high school name..."
+                              disabled={loading}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="admin" className="mt-4">
+                  <p className="text-sm text-muted-foreground">
+                    No additional fields required for admin users.
+                  </p>
+                </TabsContent>
+
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={handleClose} disabled={loading}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={loading}>
+                    {loading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Creating User...
+                      </>
+                    ) : (
+                      "Create User"
+                    )}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </Tabs>
+        ) : (
 
           <Form {...form}>
             <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4 mt-4">
-              {/* Common fields for all roles */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
@@ -425,304 +827,60 @@ export function AddUserDialog({ open, onOpenChange, onUserAdded }: AddUserDialog
                     </FormItem>
                   )}
                 />
-              </div>
 
-              {/* Role-specific fields */}
-              <TabsContent value="student" className="space-y-4 mt-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="grade"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Grade/Class</FormLabel>
-                        <FormControl>
-                          <Input placeholder="e.g. Grade 10, S4" {...field} disabled={loading} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="school_id"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>School</FormLabel>
-                        <FormControl>
-                          <SchoolSelector
-                            value={field.value}
-                            onValueChange={field.onChange}
-                            placeholder="Search for school..."
-                            disabled={loading}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="security_question"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Security Question</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value} disabled={loading}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select a security question" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {securityQuestions.map((question, index) => (
-                              <SelectItem key={index} value={question}>
-                                {question}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="security_answer"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Security Answer</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Enter answer" {...field} disabled={loading} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              </TabsContent>
-
-              <TabsContent value="school_admin" className="space-y-4 mt-4">
                 <FormField
                   control={form.control}
-                  name="position"
+                  name="grade"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Position at School</FormLabel>
+                      <FormLabel>Grade/Class</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g. Principal, Debate Coach" {...field} disabled={loading} />
+                        <Input placeholder="e.g. Grade 10, S4" {...field} disabled={loading} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
 
-                <div className="space-y-4">
-                  <h4 className="font-medium">School Information</h4>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="schoolName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>School Name</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Enter school name" {...field} disabled={loading} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="schoolType"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>School Type</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value} disabled={loading}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select school type" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="Private">Private</SelectItem>
-                              <SelectItem value="Public">Public</SelectItem>
-                              <SelectItem value="Government Aided">Government Aided</SelectItem>
-                              <SelectItem value="International">International</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">School Location</Label>
-                    <LocationSelector
-                      country={form.watch("country")}
-                      province={form.watch("province")}
-                      district={form.watch("district")}
-                      sector={form.watch("sector")}
-                      cell={form.watch("cell")}
-                      village={form.watch("village")}
-                      onCountryChange={(country) => {
-                        form.setValue("country", country)
-                        form.setValue("province", "")
-                        form.setValue("district", "")
-                        form.setValue("sector", "")
-                        form.setValue("cell", "")
-                        form.setValue("village", "")
-                      }}
-                      onProvinceChange={(province) => {
-                        form.setValue("province", province)
-                        form.setValue("district", "")
-                        form.setValue("sector", "")
-                        form.setValue("cell", "")
-                        form.setValue("village", "")
-                      }}
-                      onDistrictChange={(district) => {
-                        form.setValue("district", district)
-                        form.setValue("sector", "")
-                        form.setValue("cell", "")
-                        form.setValue("village", "")
-                      }}
-                      onSectorChange={(sector) => {
-                        form.setValue("sector", sector || "")
-                        form.setValue("cell", "")
-                        form.setValue("village", "")
-                      }}
-                      onCellChange={(cell) => {
-                        form.setValue("cell", cell || "")
-                        form.setValue("village", "")
-                      }}
-                      onVillageChange={(village) => {
-                        form.setValue("village", village || "")
-                      }}
-                      countryError={form.formState.errors.country?.message as string | undefined}
-                      provinceError={form.formState.errors.province?.message as string | undefined}
-                      districtError={form.formState.errors.district?.message as string | undefined}
-                      cellError={form.formState.errors.cell?.message as string | undefined}
-                      villageError={form.formState.errors.village?.message as string | undefined}
-                      includeRwandaDetails={form.watch("country") === "RW"}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="contactName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Contact Person Name</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Contact person's full name" {...field} disabled={loading} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="contactEmail"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Contact Email</FormLabel>
-                          <FormControl>
-                            <Input type="email" placeholder="contact@school.com" {...field} disabled={loading} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="contactPhone"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Contact Phone (Optional)</FormLabel>
-                          <FormControl>
-                            <Input placeholder="+250 7XXXXXXXX" {...field} disabled={loading} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="volunteer" className="space-y-4 mt-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="date_of_birth"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Date of Birth</FormLabel>
+                <FormField
+                  control={form.control}
+                  name="security_question"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Security Question</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value} disabled={loading}>
                         <FormControl>
-                          <DatePicker
-                            date={field.value ? new Date(field.value) : undefined}
-                            onDateChange={(date) => field.onChange(date?.toISOString().split("T")[0])}
-                            disabled={loading}
-                            maxDate={subYears(new Date(), 16)}
-                            error={form.formState.errors.date_of_birth?.message as string | undefined}
-                          />
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a security question" />
+                          </SelectTrigger>
                         </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                        <SelectContent>
+                          {securityQuestions.map((question, index) => (
+                            <SelectItem key={index} value={question}>
+                              {question}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-
-                  <FormField
-                    control={form.control}
-                    name="national_id"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>National ID/Passport</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Enter ID number" {...field} disabled={loading} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="high_school_attended"
-                    render={({ field }) => (
-                      <FormItem className="md:col-span-2">
-                        <FormLabel>High School Attended</FormLabel>
-                        <FormControl>
-                          <VolunteerSchoolSelector
-                            value={field.value}
-                            onValueChange={field.onChange}
-                            placeholder="Enter your high school name..."
-                            disabled={loading}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                </div>
-              </TabsContent>
-
-              <TabsContent value="admin" className="mt-4">
-                <p className="text-sm text-muted-foreground">
-                  No additional fields required for admin users.
-                </p>
-              </TabsContent>
+                <FormField
+                  control={form.control}
+                  name="security_answer"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Security Answer</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Enter answer" {...field} disabled={loading} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={handleClose} disabled={loading}>
@@ -732,16 +890,16 @@ export function AddUserDialog({ open, onOpenChange, onUserAdded }: AddUserDialog
                   {loading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Creating User...
+                      Creating Student...
                     </>
                   ) : (
-                    "Create User"
+                    "Create Student"
                   )}
                 </Button>
               </DialogFooter>
             </form>
           </Form>
-        </Tabs>
+        )}
       </DialogContent>
     </Dialog>
   )

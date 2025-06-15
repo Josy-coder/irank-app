@@ -36,6 +36,7 @@ interface ImportUsersDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onUsersImported?: () => void
+  userType?: "admin" | "school"
 }
 
 interface ImportResult {
@@ -47,11 +48,12 @@ interface ImportResult {
   userData: {
     name: string
     email: string
-    role: string
+    role?: string
+    grade?: string
   }
 }
 
-export function ImportUsersDialog({ open, onOpenChange, onUsersImported }: ImportUsersDialogProps) {
+export function ImportUsersDialog({ open, onOpenChange, onUsersImported, userType = "admin" }: ImportUsersDialogProps) {
   const [loading, setLoading] = useState(false)
   const [importResults, setImportResults] = useState<ImportResult[]>([])
   const [showResults, setShowResults] = useState(false)
@@ -62,13 +64,22 @@ export function ImportUsersDialog({ open, onOpenChange, onUsersImported }: Impor
   const [showPasswords, setShowPasswords] = useState<Set<number>>(new Set())
 
   const { token } = useAuth()
-  const bulkCreateUsers = useMutation(api.functions.admin.users.bulkCreateUsers)
+  const bulkCreateUsers = useMutation(
+    userType === "admin"
+      ? api.functions.admin.users.bulkCreateUsers
+      : api.functions.school.students.bulkCreateStudents
+  )
 
-  const csvTemplate = `name,email,phone,role,gender,grade,school_name,position,security_question,security_answer,date_of_birth,national_id,high_school_attended
+  const csvTemplate = userType === "admin" ?
+    `name,email,phone,role,gender,grade,school_name,position,security_question,security_answer,date_of_birth,national_id,high_school_attended
 John Doe,john@example.com,+250781234567,student,male,Grade 10,Kigali Primary School,,What is your favorite color?,Blue,,,
 Jane Smith,jane@example.com,+250781234568,school_admin,female,,,Rwanda Secondary School,Principal,,,,,
 Bob Wilson,bob@example.com,+250781234569,volunteer,male,,,,,,,1985-05-20,PASS789123,High School ABC
-Alice Johnson,alice@example.com,+250781234570,admin,female,,,,,,,,`
+Alice Johnson,alice@example.com,+250781234570,admin,female,,,,,,,,` :
+    `name,email,phone,gender,grade,security_question,security_answer
+John Doe,john@example.com,+250781234567,male,Grade 10,What is your favorite color?,Blue
+Jane Smith,jane@example.com,+250781234568,female,Grade 11,What is your mother's maiden name?,Johnson
+Bob Wilson,bob@example.com,+250781234569,male,Grade 12,What is your favorite book?,To Kill a Mockingbird`
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -96,7 +107,7 @@ Alice Johnson,alice@example.com,+250781234570,admin,female,,,,,,,,`
       })
 
       return user
-    }).filter(user => user.name && user.email && user.role)
+    }).filter(user => user.name && user.email && (userType === "admin" ? user.role : true))
   }
 
   const handleImport = async () => {
@@ -110,7 +121,7 @@ Alice Johnson,alice@example.com,+250781234570,admin,female,,,,,,,,`
       const users = parseCSV(csvText)
 
       if (users.length === 0) {
-        toast.error("No valid users found in the CSV file")
+        toast.error(`No valid ${userType === "school" ? "students" : "users"} found in the CSV file`)
         setLoading(false)
         return
       }
@@ -123,10 +134,15 @@ Alice Johnson,alice@example.com,+250781234570,admin,female,,,,,,,,`
 
         for (const userData of batch) {
           try {
-            const result = await bulkCreateUsers({
-              admin_token: token,
-              users: [userData]
-            })
+            const result = userType === "admin"
+              ? await bulkCreateUsers({
+                admin_token: token,
+                users: [userData]
+              })
+              : await bulkCreateUsers({
+                school_admin_token: token,
+                students: [userData]
+              })
 
             if (result.results && result.results.length > 0) {
               const userResult = result.results[0]
@@ -139,7 +155,8 @@ Alice Johnson,alice@example.com,+250781234570,admin,female,,,,,,,,`
                 userData: {
                   name: userData.name,
                   email: userData.email,
-                  role: userData.role
+                  role: userData.role,
+                  grade: userData.grade
                 }
               })
             }
@@ -150,7 +167,8 @@ Alice Johnson,alice@example.com,+250781234570,admin,female,,,,,,,,`
               userData: {
                 name: userData.name,
                 email: userData.email,
-                role: userData.role
+                role: userData.role,
+                grade: userData.grade
               }
             })
           }
@@ -168,10 +186,10 @@ Alice Johnson,alice@example.com,+250781234570,admin,female,,,,,,,,`
       const failureCount = results.filter(r => !r.success).length
 
       if (successCount > 0) {
-        toast.success(`${successCount} users imported successfully`)
+        toast.success(`${successCount} ${userType === "school" ? "students" : "users"} imported successfully`)
       }
       if (failureCount > 0) {
-        toast.error(`${failureCount} users failed to import`)
+        toast.error(`${failureCount} ${userType === "school" ? "students" : "users"} failed to import`)
       }
 
       if (onUsersImported && successCount > 0) {
@@ -179,7 +197,7 @@ Alice Johnson,alice@example.com,+250781234570,admin,female,,,,,,,,`
       }
 
     } catch (error: any) {
-      toast.error(error.message?.split("Uncaught Error:")[1]?.split(/\.|Called by client/)[0]?.trim() || "Failed to import users")
+      toast.error(error.message?.split("Uncaught Error:")[1]?.split(/\.|Called by client/)[0]?.trim() || `Failed to import ${userType === "school" ? "students" : "users"}`)
     } finally {
       setLoading(false)
     }
@@ -190,7 +208,7 @@ Alice Johnson,alice@example.com,+250781234570,admin,female,,,,,,,,`
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = 'users_import_template.csv'
+    a.download = `${userType === "school" ? "students" : "users"}_import_template.csv`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -250,12 +268,13 @@ Alice Johnson,alice@example.com,+250781234570,admin,female,,,,,,,,`
 
   const exportResults = () => {
     const csvContent = [
-      "Name,Email,Role,Status,Temporary Password,Reset Link",
+      `Name,Email,${userType === "admin" ? "Role" : "Grade"},Status,Temporary Password,Reset Link`,
       ...importResults.map(result => {
         const status = result.success ? "Success" : "Failed"
         const password = result.tempPassword || "N/A"
         const link = result.resetLink || "N/A"
-        return `"${result.userData.name}","${result.userData.email}","${result.userData.role}","${status}","${password}","${link}"`
+        const roleOrGrade = userType === "admin" ? (result.userData.role || "N/A") : (result.userData.grade || "N/A")
+        return `"${result.userData.name}","${result.userData.email}","${roleOrGrade}","${status}","${password}","${link}"`
       })
     ].join('\n')
 
@@ -292,7 +311,7 @@ Alice Johnson,alice@example.com,+250781234570,admin,female,,,,,,,,`
           <DialogHeader>
             <DialogTitle>Import Results</DialogTitle>
             <DialogDescription>
-              {successfulResults.length} users imported successfully, {failedResults.length} failed.
+              {successfulResults.length} {userType === "school" ? "students" : "users"} imported successfully, {failedResults.length} failed.
             </DialogDescription>
           </DialogHeader>
 
@@ -335,7 +354,7 @@ Alice Johnson,alice@example.com,+250781234570,admin,female,,,,,,,,`
                         <div>
                           <h4 className="font-medium">{result.userData.name}</h4>
                           <p className="text-sm text-muted-foreground">
-                            {result.userData.email} • {result.userData.role}
+                            {result.userData.email} • {userType === "admin" ? result.userData.role : result.userData.grade}
                           </p>
                         </div>
                         <Badge className="bg-green-100 text-green-700">
@@ -418,7 +437,7 @@ Alice Johnson,alice@example.com,+250781234570,admin,female,,,,,,,,`
                         <div>
                           <h4 className="font-medium">{result.userData.name}</h4>
                           <p className="text-sm text-muted-foreground">
-                            {result.userData.email} • {result.userData.role}
+                            {result.userData.email} • {userType === "admin" ? result.userData.role : result.userData.grade}
                           </p>
                         </div>
                         <Badge variant="destructive">
@@ -451,9 +470,9 @@ Alice Johnson,alice@example.com,+250781234570,admin,female,,,,,,,,`
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Import Users</DialogTitle>
+          <DialogTitle>Import {userType === "school" ? "Students" : "Users"}</DialogTitle>
           <DialogDescription>
-            Upload a CSV file to import multiple users at once. Download the template to see the required format.
+            Upload a CSV file to import multiple {userType === "school" ? "students" : "users"} at once. Download the template to see the required format.
           </DialogDescription>
         </DialogHeader>
 
@@ -494,7 +513,7 @@ Alice Johnson,alice@example.com,+250781234570,admin,female,,,,,,,,`
             {loading && (
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span>Importing users...</span>
+                  <span>Importing {userType === "school" ? "students" : "users"}...</span>
                   <span>{Math.round(progress)}%</span>
                 </div>
                 <Progress value={progress} className="w-full" />
@@ -504,16 +523,27 @@ Alice Johnson,alice@example.com,+250781234570,admin,female,,,,,,,,`
 
           <div className="space-y-3">
             <h4 className="font-medium">Import Guidelines</h4>
-            <ul className="text-sm text-muted-foreground space-y-1">
-              <li>• Each user type requires different fields (see template)</li>
-              <li>• <strong>Students need:</strong> school_name (exact match), grade, security_question, security_answer</li>
-              <li>• <strong>School admins need:</strong> position and school information</li>
-              <li>• <strong>Volunteers need:</strong> date_of_birth, national_id, high_school_attended</li>
-              <li>• <strong>Admins</strong> only need basic information</li>
-              <li>• <strong>School names must match exactly</strong> with existing active schools in the database</li>
-              <li>• Temporary passwords will be generated automatically</li>
-              <li>• Reset links will be provided for each user</li>
-            </ul>
+            {userType === "admin" ? (
+              <ul className="text-sm text-muted-foreground space-y-1">
+                <li>• Each user type requires different fields (see template)</li>
+                <li>• <strong>Students need:</strong> school_name (exact match), grade, security_question, security_answer</li>
+                <li>• <strong>School admins need:</strong> position and school information</li>
+                <li>• <strong>Volunteers need:</strong> date_of_birth, national_id, high_school_attended</li>
+                <li>• <strong>Admins</strong> only need basic information</li>
+                <li>• <strong>School names must match exactly</strong> with existing active schools in the database</li>
+                <li>• Temporary passwords will be generated automatically</li>
+                <li>• Reset links will be provided for each user</li>
+              </ul>
+            ) : (
+              <ul className="text-sm text-muted-foreground space-y-1">
+                <li>• All imported users will be students in your school</li>
+                <li>• <strong>Required fields:</strong> name, email, phone, grade, security_question, security_answer</li>
+                <li>• <strong>Optional fields:</strong> gender</li>
+                <li>• Students will be automatically assigned to your school</li>
+                <li>• Temporary passwords will be generated automatically</li>
+                <li>• Reset links will be provided for each student</li>
+              </ul>
+            )}
           </div>
         </div>
 
@@ -533,7 +563,7 @@ Alice Johnson,alice@example.com,+250781234570,admin,female,,,,,,,,`
             ) : (
               <>
                 <Upload className="mr-2 h-4 w-4" />
-                Import Users
+                Import {userType === "school" ? "Students" : "Users"}
               </>
             )}
           </Button>

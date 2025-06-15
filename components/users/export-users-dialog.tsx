@@ -29,16 +29,17 @@ import { formatDistanceToNow } from "date-fns"
 interface ExportUsersDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  userType?: "admin" | "school"
 }
 
-export function ExportUsersDialog({ open, onOpenChange }: ExportUsersDialogProps) {
+export function ExportUsersDialog({ open, onOpenChange, userType = "admin" }: ExportUsersDialogProps) {
   const [loading, setLoading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [exportFormat, setExportFormat] = useState<"csv" | "json">("csv")
   const [includeFields, setIncludeFields] = useState({
     basic: true,
     contact: true,
-    school: true,
+    school: userType === "admin",
     security: false,
     timestamps: true,
     status: true
@@ -46,16 +47,18 @@ export function ExportUsersDialog({ open, onOpenChange }: ExportUsersDialogProps
   const [filters, setFilters] = useState({
     roles: [] as string[],
     status: [] as string[],
-    verified: "all" as "all" | "verified" | "pending"
+    verified: "all" as "all" | "verified" | "pending",
+    grade: "all" as string
   })
 
   const { token } = useAuth()
 
-  const exportUsers = useMutation(api.functions.admin.users.exportUsers)
+  const exportAdminUsers = useMutation(api.functions.admin.users.exportUsers)
+  const exportSchoolStudents = useMutation(api.functions.school.students.exportStudents)
 
-  const usersPreview = useQuery(
+  const adminUsersPreview = useQuery(
     api.functions.admin.users.getUsers,
-    token ? {
+    userType === "admin" && token ? {
       admin_token: token,
       search: "",
       role: filters.roles.length === 1 ? filters.roles[0] as any : undefined,
@@ -65,6 +68,21 @@ export function ExportUsersDialog({ open, onOpenChange }: ExportUsersDialogProps
       limit: 5,
     } : "skip"
   )
+
+  const schoolStudentsPreview = useQuery(
+    api.functions.school.students.getStudents,
+    userType === "school" && token ? {
+      school_admin_token: token,
+      search: "",
+      grade: filters.grade !== "all" ? filters.grade : undefined,
+      status: filters.status.length === 1 ? filters.status[0] as any : undefined,
+      verified: filters.verified !== "all" ? filters.verified as any : undefined,
+      page: 1,
+      limit: 5,
+    } : "skip"
+  )
+
+  const usersPreview = userType === "admin" ? adminUsersPreview : schoolStudentsPreview
 
   const handleFieldToggle = (field: keyof typeof includeFields) => {
     setIncludeFields(prev => ({
@@ -100,18 +118,31 @@ export function ExportUsersDialog({ open, onOpenChange }: ExportUsersDialogProps
 
     while (hasMore) {
       try {
-        const response = await exportUsers({
-          admin_token: token,
-          page,
-          limit: 100,
-          role: filters.roles.length === 1 ? filters.roles[0] as any : undefined,
-          status: filters.status.length === 1 ? filters.status[0] as any : undefined,
-          verified: filters.verified !== "all" ? filters.verified as any : undefined,
-        })
+        const response = userType === "admin"
+          ? await exportAdminUsers({
+            admin_token: token,
+            page,
+            limit: 100,
+            role: filters.roles.length === 1 ? filters.roles[0] as any : undefined,
+            status: filters.status.length === 1 ? filters.status[0] as any : undefined,
+            verified: filters.verified !== "all" ? filters.verified as any : undefined,
+          })
+          : await exportSchoolStudents({
+            school_admin_token: token,
+            page,
+            limit: 100,
+            grade: filters.grade !== "all" ? filters.grade : undefined,
+            status: filters.status.length === 1 ? filters.status[0] as any : undefined,
+            verified: filters.verified !== "all" ? filters.verified as any : undefined,
+          })
 
-        allUsers = [...allUsers, ...response.users]
-        hasMore = response.hasMore
-        page++
+        const responseUsers = userType === "admin"
+          ? (response as { users: any[] }).users
+          : (response as { students: any[] }).students;
+
+        allUsers = [...allUsers, ...responseUsers];
+        hasMore = response.hasMore;
+        page++;
 
         setProgress(Math.min((allUsers.length / (response.totalCount || allUsers.length)) * 100, 100))
 
@@ -133,11 +164,15 @@ export function ExportUsersDialog({ open, onOpenChange }: ExportUsersDialogProps
       if (includeFields.basic) {
         formattedUser.name = user.name
         formattedUser.gender = user.gender || ''
-        formattedUser.role = user.role
+        if (userType === "admin") {
+          formattedUser.role = user.role
+        }
         formattedUser.grade = user.grade || ''
-        formattedUser.position = user.position || ''
-        formattedUser.national_id = user.national_id || ''
-        formattedUser.high_school_attended = user.high_school_attended || ''
+        if (userType === "admin") {
+          formattedUser.position = user.position || ''
+          formattedUser.national_id = user.national_id || ''
+          formattedUser.high_school_attended = user.high_school_attended || ''
+        }
       }
 
       if (includeFields.contact) {
@@ -145,7 +180,7 @@ export function ExportUsersDialog({ open, onOpenChange }: ExportUsersDialogProps
         formattedUser.phone = user.phone || ''
       }
 
-      if (includeFields.school && user.school) {
+      if (includeFields.school && user.school && userType === "admin") {
         formattedUser.school_name = user.school.name
         formattedUser.school_type = user.school.type
       }
@@ -153,6 +188,9 @@ export function ExportUsersDialog({ open, onOpenChange }: ExportUsersDialogProps
       if (includeFields.status) {
         formattedUser.status = user.status
         formattedUser.verified = user.verified ? 'Yes' : 'No'
+        if (userType === "school") {
+          formattedUser.has_debated = user.has_debated ? 'Yes' : 'No'
+        }
       }
 
       if (includeFields.timestamps) {
@@ -189,7 +227,7 @@ export function ExportUsersDialog({ open, onOpenChange }: ExportUsersDialogProps
     const link = document.createElement('a')
     const url = URL.createObjectURL(blob)
     link.setAttribute('href', url)
-    link.setAttribute('download', `users_export_${new Date().toISOString().split('T')[0]}.csv`)
+    link.setAttribute('download', `${userType === "school" ? "students" : "users"}_export_${new Date().toISOString().split('T')[0]}.csv`)
     link.style.visibility = 'hidden'
     document.body.appendChild(link)
     link.click()
@@ -202,14 +240,14 @@ export function ExportUsersDialog({ open, onOpenChange }: ExportUsersDialogProps
       total_users: data.length,
       filters: filters,
       included_fields: includeFields,
-      users: data
+      [userType === "school" ? "students" : "users"]: data
     }, null, 2)
 
     const blob = new Blob([jsonContent], { type: 'application/json' })
     const link = document.createElement('a')
     const url = URL.createObjectURL(blob)
     link.setAttribute('href', url)
-    link.setAttribute('download', `users_export_${new Date().toISOString().split('T')[0]}.json`)
+    link.setAttribute('download', `${userType === "school" ? "students" : "users"}_export_${new Date().toISOString().split('T')[0]}.json`)
     link.style.visibility = 'hidden'
     document.body.appendChild(link)
     link.click()
@@ -230,11 +268,11 @@ export function ExportUsersDialog({ open, onOpenChange }: ExportUsersDialogProps
         exportToJSON(formattedData)
       }
 
-      toast.success(`Exported ${formattedData.length} users successfully`)
+      toast.success(`Exported ${formattedData.length} ${userType === "school" ? "students" : "users"} successfully`)
       onOpenChange(false)
 
     } catch (error: any) {
-      toast.error(error.message?.split("Uncaught Error:")[1]?.split(/\.|Called by client/)[0]?.trim() || "Failed to export users")
+      toast.error(error.message?.split("Uncaught Error:")[1]?.split(/\.|Called by client/)[0]?.trim() || `Failed to export ${userType === "school" ? "students" : "users"}`)
     } finally {
       setLoading(false)
       setProgress(0)
@@ -247,9 +285,10 @@ export function ExportUsersDialog({ open, onOpenChange }: ExportUsersDialogProps
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Export Users</DialogTitle>
+          <DialogTitle>Export {userType === "school" ? "Students" : "Users"}</DialogTitle>
           <DialogDescription>
-            Export user data in CSV or JSON format. Choose which fields to include and apply filters.
+            Export {userType === "school" ? "student" : "user"} data in CSV or JSON format. Choose which fields to
+            include and apply filters.
           </DialogDescription>
         </DialogHeader>
 
@@ -277,7 +316,9 @@ export function ExportUsersDialog({ open, onOpenChange }: ExportUsersDialogProps
                   checked={includeFields.basic}
                   onCheckedChange={() => handleFieldToggle('basic')}
                 />
-                <Label htmlFor="basic">Basic Info (Name, Role, etc.)</Label>
+                <Label htmlFor="basic">
+                  Basic Info (Name, {userType === "school" ? "Grade" : "Role"}, etc.)
+                </Label>
               </div>
 
               <div className="flex items-center space-x-2">
@@ -289,14 +330,16 @@ export function ExportUsersDialog({ open, onOpenChange }: ExportUsersDialogProps
                 <Label htmlFor="contact">Contact Info (Email, Phone)</Label>
               </div>
 
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="school"
-                  checked={includeFields.school}
-                  onCheckedChange={() => handleFieldToggle('school')}
-                />
-                <Label htmlFor="school">School Information</Label>
-              </div>
+              {userType === "admin" && (
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="school"
+                    checked={includeFields.school}
+                    onCheckedChange={() => handleFieldToggle('school')}
+                  />
+                  <Label htmlFor="school">School Information</Label>
+                </div>
+              )}
 
               <div className="flex items-center space-x-2">
                 <Checkbox
@@ -304,7 +347,9 @@ export function ExportUsersDialog({ open, onOpenChange }: ExportUsersDialogProps
                   checked={includeFields.status}
                   onCheckedChange={() => handleFieldToggle('status')}
                 />
-                <Label htmlFor="status">Status & Verification</Label>
+                <Label htmlFor="status">
+                  Status & {userType === "school" ? "Debate Activity" : "Verification"}
+                </Label>
               </div>
 
               <div className="flex items-center space-x-2">
@@ -329,23 +374,25 @@ export function ExportUsersDialog({ open, onOpenChange }: ExportUsersDialogProps
             <Label className="text-base font-medium">Filters</Label>
 
             <div className="space-y-3">
-              <div>
-                <Label className="text-sm font-medium">User Roles</Label>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {['student', 'school_admin', 'volunteer', 'admin'].map(role => (
-                    <div key={role} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`role-${role}`}
-                        checked={filters.roles.includes(role)}
-                        onCheckedChange={() => handleRoleToggle(role)}
-                      />
-                      <Label htmlFor={`role-${role}`} className="capitalize">
-                        {role.replace('_', ' ')}
-                      </Label>
-                    </div>
-                  ))}
+              {userType === "admin" && (
+                <div>
+                  <Label className="text-sm font-medium">User Roles</Label>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {['student', 'school_admin', 'volunteer', 'admin'].map(role => (
+                      <div key={role} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`role-${role}`}
+                          checked={filters.roles.includes(role)}
+                          onCheckedChange={() => handleRoleToggle(role)}
+                        />
+                        <Label htmlFor={`role-${role}`} className="capitalize">
+                          {role.replace('_', ' ')}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div>
                 <Label className="text-sm font-medium">User Status</Label>
@@ -393,9 +440,9 @@ export function ExportUsersDialog({ open, onOpenChange }: ExportUsersDialogProps
             <Users className="h-4 w-4" />
             <AlertDescription>
               {previewCount > 0 ? (
-                `Ready to export ${previewCount} users with current filters.`
+                `Ready to export ${previewCount} ${userType === "school" ? "students" : "users"} with current filters.`
               ) : (
-                "No users match the current filters."
+                `No ${userType === "school" ? "students" : "users"} match the current filters.`
               )}
             </AlertDescription>
           </Alert>
@@ -403,7 +450,7 @@ export function ExportUsersDialog({ open, onOpenChange }: ExportUsersDialogProps
           {loading && (
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span>Exporting users...</span>
+                <span>Exporting {userType === "school" ? "students" : "users"}...</span>
                 <span>{Math.round(progress)}%</span>
               </div>
               <Progress value={progress} className="w-full" />
@@ -427,7 +474,7 @@ export function ExportUsersDialog({ open, onOpenChange }: ExportUsersDialogProps
             ) : (
               <>
                 <Download className="mr-2 h-4 w-4" />
-                Export {previewCount} Users
+                Export {previewCount} {userType === "school" ? "Students" : "Users"}
               </>
             )}
           </Button>
