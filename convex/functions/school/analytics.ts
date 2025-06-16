@@ -1508,24 +1508,6 @@ export const getSchoolAchievementsAndBadges = query({
         max_progress: 100,
         locked: totalTournaments < 5,
       },
-      {
-        id: "improvement_master",
-        title: "Improvement Master",
-        description: "Show significant improvement over time",
-        criteria: "Improve average ranking by 20% over 6 months",
-        progress: 0,
-        max_progress: 100,
-        locked: true,
-      },
-      {
-        id: "mentor_school",
-        title: "Mentor School",
-        description: "Help other schools improve their programs",
-        criteria: "Share resources and mentor 3+ schools",
-        progress: 0,
-        max_progress: 100,
-        locked: true,
-      },
     ];
 
     const totalWins = teamResults.reduce((sum, tr) => sum + (tr.result?.wins || 0), 0);
