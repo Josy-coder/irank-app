@@ -1026,6 +1026,8 @@ export const verifySessionReadOnly = internalQuery({
           status: user.status,
           verified: user.verified,
           school_id: user.school_id,
+          last_login: user.last_login_at,
+          created_at: user.created_at,
         },
         session: {
           expires_at: session.expires_at,
@@ -1085,6 +1087,8 @@ export const verifySession = internalMutation({
           status: user.status,
           verified: user.verified,
           school_id: user.school_id,
+          last_login: user.last_login_at,
+          created_at: user.created_at,
         },
         session: {
           expires_at: session.expires_at,

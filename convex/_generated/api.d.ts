@@ -43,6 +43,7 @@ import type * as functions_student_teams from "../functions/student/teams.js";
 import type * as functions_teams from "../functions/teams.js";
 import type * as functions_tournaments from "../functions/tournaments.js";
 import type * as functions_users from "../functions/users.js";
+import type * as functions_volunteers_analytics from "../functions/volunteers/analytics.js";
 import type * as functions_volunteers_ballots from "../functions/volunteers/ballots.js";
 import type * as functions_volunteers_dashboard from "../functions/volunteers/dashboard.js";
 import type * as lib_password from "../lib/password.js";
@@ -87,6 +88,7 @@ declare const fullApi: ApiFromModules<{
   "functions/teams": typeof functions_teams;
   "functions/tournaments": typeof functions_tournaments;
   "functions/users": typeof functions_users;
+  "functions/volunteers/analytics": typeof functions_volunteers_analytics;
   "functions/volunteers/ballots": typeof functions_volunteers_ballots;
   "functions/volunteers/dashboard": typeof functions_volunteers_dashboard;
   "lib/password": typeof lib_password;
