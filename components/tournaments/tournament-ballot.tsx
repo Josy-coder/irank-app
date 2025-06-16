@@ -55,7 +55,6 @@ import {
   Minus,
   ArrowRight,
   AlertCircle,
-  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Id } from "@/convex/_generated/dataModel";
@@ -2655,21 +2654,6 @@ export default function TournamentBallots({
                 <SelectItem value="noShow">No Show</SelectItem>
               </SelectContent>
             </Select>
-
-            {userRole === "admin" && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 bg-background"
-                onClick={() => {
-
-                  window.location.reload();
-                }}
-              >
-                <RefreshCw className="h-3 w-3 mr-1" />
-                Refresh
-              </Button>
-            )}
           </div>
         </div>
 
