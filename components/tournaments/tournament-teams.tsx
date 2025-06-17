@@ -56,6 +56,7 @@ import { TeamManagementDialog } from "@/components/tournaments/team-management-d
 import { JoinTeamDialog } from "@/components/tournaments/join-team-dialog"
 import { ShareTeamDialog } from "@/components/tournaments/share-team-dialog"
 import { WaiverCodeDialog } from "@/components/tournaments/waiver-code-dialog";
+import { useOffline } from "@/hooks/useOffline";
 
 interface TournamentTeamsProps {
   tournament: any;
@@ -222,7 +223,7 @@ export function TournamentTeams({
   const canAccessWaiverCodes = isAdmin && tournament.league?.type !== "Dreams Mode";
   const canJoinTeams = isStudent && tournament.league?.type === "Dreams Mode";
 
-  const teamsData = useQuery(
+  const teamsData = useOffline(useQuery(
     api.functions.teams.getTournamentTeams,
     hasToken ? {
       token: token as string,
@@ -234,7 +235,7 @@ export function TournamentTeams({
       page,
       limit: 20,
     } : "skip"
-  );
+  ), "tournament-teams");
 
   const tournamentSchools = useQuery(
     api.functions.tournaments.getTournamentSchools,

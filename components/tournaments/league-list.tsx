@@ -31,6 +31,7 @@ import { Id } from "@/convex/_generated/dataModel"
 import { useDebounce } from "@/hooks/use-debounce"
 import { AddLeagueDialog } from "./add-league-dialog"
 import { ViewLeagueDetailsDialog } from "./view-league-details-dialog"
+import { useOffline } from "@/hooks/useOffline";
 
 interface League {
   _id: Id<"leagues">
@@ -95,14 +96,14 @@ export function LeagueList({ userRole, token, selectedLeagueId, onLeagueSelect, 
 
   const debouncedSearch = useDebounce(searchTerm, 300)
 
-  const leaguesData = useQuery(
+  const leaguesData = useOffline(useQuery(
     api.functions.leagues.getLeagues,
     {
       search: debouncedSearch,
       page,
       limit: 20,
     }
-  )
+  ), "league-list")
 
   console.log('leaguesData:', leaguesData)
   console.log('leagues state:', leagues)

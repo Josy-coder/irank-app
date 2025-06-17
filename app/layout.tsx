@@ -2,7 +2,7 @@ import './globals.css'
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import { Toaster } from '@/components/ui/sonner'
-import { ConvexClientProvider } from "@/components/ConvexClientProvider";
+import { ConvexOfflineProvider } from "@/components/ConvexOfflineProvider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/hooks/useAuth";
 import React from "react";
@@ -28,7 +28,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
     <body className={inter.className}>
     <ThemeProvider attribute="class" defaultTheme="light" forcedTheme="light">
-      <ConvexClientProvider>
+      <ConvexOfflineProvider>
         <PWAProvider>
         <AuthProvider>
           <div className="min-h-screen">
@@ -37,7 +37,7 @@ export default function RootLayout({
           <Toaster richColors closeButton position="top-right" />
         </AuthProvider>
         </PWAProvider>
-      </ConvexClientProvider>
+      </ConvexOfflineProvider>
     </ThemeProvider>
     </body>
     </html>

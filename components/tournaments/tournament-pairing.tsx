@@ -42,6 +42,7 @@ import { toast } from "sonner";
 
 import { generateTournamentPairings, validatePairing } from "@/lib/pairing-algorithm";
 import { Id } from "@/convex/_generated/dataModel";
+import { useOffline } from "@/hooks/useOffline";
 
 interface Team {
   _id: Id<"teams">;
@@ -157,14 +158,14 @@ export default function TournamentPairings({
     } : "skip"
   );
 
-  const existingPairings = useQuery(
+  const existingPairings = useOffline(useQuery(
     api.functions.pairings.getTournamentPairings,
     canViewPairings ? {
       token,
       tournament_id: tournament._id,
       round_number: currentRound,
     } : "skip"
-  );
+  ), "tournament-pairings");
 
   const pairingStats = useQuery(
     api.functions.pairings.getPairingStats,

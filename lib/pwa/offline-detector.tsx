@@ -1,3 +1,5 @@
+"use client";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export interface ConvexOfflineState {
@@ -24,7 +26,7 @@ export interface ConvexOfflineDetectorOptions {
 }
 
 const DEFAULT_OPTIONS: Required<ConvexOfflineDetectorOptions> = {
-  pingInterval: 30000,
+  pingInterval: 10000,
   pingTimeout: 5000,
   maxRetries: 2,
   onOnline: () => {},
@@ -41,24 +43,29 @@ class ConvexOfflineDetector {
   private retryCount = 0
   private isChecking = false
   private convexConnectionStatus = true
+  private isInitialized = false
 
   constructor(options: ConvexOfflineDetectorOptions = {}) {
     this.options = { ...DEFAULT_OPTIONS, ...options }
+
+    const isClient = typeof window !== 'undefined'
     this.state = {
-      isOffline: !navigator.onLine,
-      isOnline: navigator.onLine,
-      lastOnlineAt: navigator.onLine ? new Date() : null,
-      lastOfflineAt: !navigator.onLine ? new Date() : null,
-      connectionType: this.getConnectionType(),
-      effectiveType: this.getEffectiveType(),
-      downlink: this.getDownlink(),
-      rtt: this.getRTT(),
+      isOffline: isClient ? !navigator.onLine : false,
+      isOnline: isClient ? navigator.onLine : true,
+      lastOnlineAt: isClient && navigator.onLine ? new Date() : new Date(),
+      lastOfflineAt: isClient && !navigator.onLine ? new Date() : null,
+      connectionType: isClient ? this.getConnectionType() : null,
+      effectiveType: isClient ? this.getEffectiveType() : null,
+      downlink: isClient ? this.getDownlink() : null,
+      rtt: isClient ? this.getRTT() : null,
       convexConnected: true,
       lastConvexDisconnect: null,
       lastConvexConnect: new Date(),
     }
 
-    this.init()
+    if (isClient) {
+      this.init()
+    }
   }
 
   static getInstance(options?: ConvexOfflineDetectorOptions): ConvexOfflineDetector {
@@ -69,6 +76,17 @@ class ConvexOfflineDetector {
   }
 
   private init() {
+
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    if (this.isInitialized) {
+      return
+    }
+
+    this.isInitialized = true
+
     window.addEventListener('online', this.handleOnline)
     window.addEventListener('offline', this.handleOffline)
 
@@ -78,7 +96,6 @@ class ConvexOfflineDetector {
     }
 
     this.startPingCheck()
-
     this.checkConnectivity()
   }
 
@@ -145,6 +162,10 @@ class ConvexOfflineDetector {
   }
 
   private startPingCheck() {
+    if (typeof window === 'undefined') {
+      return
+    }
+
     if (this.pingInterval) {
       clearInterval(this.pingInterval)
     }
@@ -157,6 +178,10 @@ class ConvexOfflineDetector {
   }
 
   private async checkConnectivity(): Promise<boolean> {
+    if (typeof window === 'undefined') {
+      return true // Assume online during SSR
+    }
+
     if (this.isChecking) return this.state.isOnline
 
     this.isChecking = true
@@ -235,6 +260,10 @@ class ConvexOfflineDetector {
   }
 
   private async pingExternalServer(): Promise<boolean> {
+    if (typeof window === 'undefined') {
+      return true // Assume online during SSR
+    }
+
     try {
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), this.options.pingTimeout)
@@ -286,6 +315,8 @@ class ConvexOfflineDetector {
   }
 
   private getConnectionType(): string | null {
+    if (typeof window === 'undefined') return null
+
     if ('connection' in navigator) {
       const connection = (navigator as any).connection
       return connection?.type || null
@@ -294,6 +325,8 @@ class ConvexOfflineDetector {
   }
 
   private getEffectiveType(): string | null {
+    if (typeof window === 'undefined') return null
+
     if ('connection' in navigator) {
       const connection = (navigator as any).connection
       return connection?.effectiveType || null
@@ -302,6 +335,8 @@ class ConvexOfflineDetector {
   }
 
   private getDownlink(): number | null {
+    if (typeof window === 'undefined') return null
+
     if ('connection' in navigator) {
       const connection = (navigator as any).connection
       return connection?.downlink || null
@@ -310,6 +345,8 @@ class ConvexOfflineDetector {
   }
 
   private getRTT(): number | null {
+    if (typeof window === 'undefined') return null
+
     if ('connection' in navigator) {
       const connection = (navigator as any).connection
       return connection?.rtt || null
@@ -336,6 +373,10 @@ class ConvexOfflineDetector {
   }
 
   public destroy() {
+    if (typeof window === 'undefined') {
+      return
+    }
+
     if (this.pingInterval) {
       clearInterval(this.pingInterval)
       this.pingInterval = null
@@ -351,6 +392,7 @@ class ConvexOfflineDetector {
 
     this.listeners.clear()
     ConvexOfflineDetector.instance = null
+    this.isInitialized = false
   }
 }
 
@@ -363,9 +405,10 @@ export function useConvexOfflineDetector(options?: ConvexOfflineDetectorOptions)
   const detectorRef = useRef<ConvexOfflineDetector>()
 
   useEffect(() => {
-    detectorRef.current = ConvexOfflineDetector.getInstance(options)
-
-    return detectorRef.current.subscribe(setState)
+    if (typeof window !== 'undefined') {
+      detectorRef.current = ConvexOfflineDetector.getInstance(options)
+      return detectorRef.current.subscribe(setState)
+    }
   }, [])
 
   const forceCheck = useCallback(async () => {
@@ -392,6 +435,11 @@ export function useConvexConnectionStatus() {
   const { updateConvexStatus } = useConvexOfflineDetector()
 
   useEffect(() => {
+
+    if (typeof window === 'undefined') {
+      return
+    }
+
     const handleConvexOnline = () => {
       console.log('[ConvexConnectionStatus] Convex client connected')
       updateConvexStatus(true)

@@ -59,6 +59,7 @@ import {
 import { toast } from "sonner";
 import { Id } from "@/convex/_generated/dataModel";
 import { useGemini } from "@/hooks/useGemini";
+import { useOffline } from "@/hooks/useOffline";
 
 interface TournamentBallotsProps {
   tournament: any;
@@ -2444,7 +2445,7 @@ export default function TournamentBallots({
     };
   }
 
-  const ballotsQuery = useQuery(queryFn, queryArgs);
+  const ballotsQuery = useOffline(useQuery(queryFn, queryArgs), "tournament-ballots");
 
   const submitBallot = useMutation(api.functions.volunteers.ballots.submitBallot);
   const updateBallot = useMutation(api.functions.admin.ballots.updateBallot);

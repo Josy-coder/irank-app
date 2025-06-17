@@ -195,7 +195,7 @@ export function AdvancedOfflineSheet() {
               </div>
             )}
 
-            {/* Connection details */}
+            
             {isOnline && !isOffline && (effectiveType || downlink || rtt) && (
               <div className="mt-6 space-y-3">
                 <h4 className="text-sm font-medium">Connection Details</h4>

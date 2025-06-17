@@ -41,6 +41,7 @@ import { Id } from "@/convex/_generated/dataModel"
 import { CardLayoutWithToolbar } from "@/components/shared/card-layout-with-toolbar"
 import { format } from "date-fns"
 import { useRouter } from "next/navigation";
+import { useOffline } from "@/hooks/useOffline";
 
 interface TournamentListProps {
   userRole: "admin" | "school_admin" | "volunteer" | "student"
@@ -140,7 +141,7 @@ export function TournamentList({ userRole, token, selectedLeagueId, className }:
 
   const debouncedSearch = useDebounce(searchTerm, 300)
 
-  const tournamentsData = useQuery(
+  const tournamentsData = useOffline(useQuery(
     api.functions.tournaments.getTournaments,
     {
       search: debouncedSearch,
@@ -151,7 +152,7 @@ export function TournamentList({ userRole, token, selectedLeagueId, className }:
       page,
       limit: 12,
     }
-  )
+  ), "tournament-list")
 
   const deleteTournament = useMutation(api.functions.admin.tournaments.deleteTournament)
   const archiveTournament = useMutation(api.functions.admin.tournaments.archiveTournament)

@@ -380,7 +380,6 @@ const SchoolAdminSignUpForm = () => {
                 )}
               />
 
-              {/* Location Selector */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium">School Location</Label>
                 <LocationSelector
