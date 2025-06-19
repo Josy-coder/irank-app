@@ -4,18 +4,18 @@ import { useAuth } from "./useAuth";
 import { useEffect, useState } from "react";
 
 export function useNotifications() {
-  const { user, token } = useAuth();
+  const { user, isAuthenticated, token } = useAuth();
   const [isSupported, setIsSupported] = useState(false);
   const [permission, setPermission] = useState<NotificationPermission>("default");
 
   const notifications = useQuery(
     api.functions.notifications.getUserNotifications,
-    user && token ? { token, limit: 50 } : "skip"
+    isAuthenticated && user && token ? { token, limit: 50 } : "skip"
   );
 
   const unreadCount = useQuery(
     api.functions.notifications.getUnreadCount,
-    user && token ? { token } : "skip"
+    isAuthenticated && user && token ? { token } : "skip"
   );
 
   const markAsRead = useMutation(api.functions.notifications.markAsRead);
@@ -58,7 +58,7 @@ export function useNotifications() {
   };
 
   const subscribeToPush = async () => {
-    if (!isSupported || !user || !token) {
+    if (!isSupported || !isAuthenticated || !user || !token) {
       throw new Error("Cannot subscribe: missing requirements");
     }
 
