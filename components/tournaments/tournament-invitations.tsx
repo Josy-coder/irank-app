@@ -41,7 +41,9 @@ import {
   CheckCircle,
   Mail,
   AlertTriangle,
-  Copy, CheckCircle2, CircleX
+  Copy,
+  CircleX,
+  CircleCheck
 } from "lucide-react";
 import { useDebounce } from "@/hooks/use-debounce"
 import { DataToolbar } from "@/components/shared/data-toolbar"
@@ -127,18 +129,6 @@ function getStatusColor(status: string) {
   }
 }
 
-function getStatusIcon(status: string) {
-  switch (status) {
-    case "pending":
-      return Clock;
-    case "accepted":
-      return CheckCircle2;
-    case "declined":
-      return CircleX;
-    default:
-      return Clock;
-  }
-}
 
 function getTypeIcon(type: string) {
   switch (type) {
@@ -156,13 +146,13 @@ function getTypeIcon(type: string) {
 function getTypeColor(type: string) {
   switch (type) {
     case "school":
-      return "bg-blue-100 text-blue-800";
+      return "bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-100";
     case "student":
-      return "bg-purple-100 text-purple-800";
+      return "bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-100";
     case "volunteer":
-      return "bg-green-100 text-green-800";
+      return "bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900 dark:text-fuchsia-100";
     default:
-      return "bg-gray-100 text-gray-800";
+      return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-100";
   }
 }
 
@@ -183,9 +173,9 @@ function CopyableEmail({ email }: { email: string }) {
   };
 
   return (
-    <div className="flex items-center gap-2 group">
+    <div className="flex items-center gap-1 group">
       <span
-        className="text-sm text-muted-foreground cursor-pointer hover:text-primary hover:underline"
+        className="text-sm text-muted-foreground cursor-pointer text-xs hover:text-primary hover:underline"
         onClick={() => window.location.href = `mailto:${email}`}
       >
         {email}
@@ -193,7 +183,7 @@ function CopyableEmail({ email }: { email: string }) {
       <Button
         variant="ghost"
         size="sm"
-        className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+        className="h-4 w-4 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
         onClick={handleCopy}
       >
         {copied ? (
@@ -310,8 +300,7 @@ export function TournamentInvitations({
           window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
           return;
         }
-        const canRespond = (isAdmin || invitation.target_id === userId) &&
-          invitation.status === "pending";
+        const canRespond = (isAdmin || invitation.target_id === userId) && canRespondToInvitations;
 
         if (canRespond) {
           handleRespondToInvitation(invitationId as Id<"tournament_invitations">, response as "accepted" | "declined");
@@ -548,13 +537,15 @@ export function TournamentInvitations({
                 </TableHeader>
                 <TableBody>
                   {invitations.map((invitation: any) => {
-                    const StatusIcon = getStatusIcon(invitation.status)
                     const TypeIcon = getTypeIcon(invitation.target_type)
                     const isExpired = invitation.expires_at && Date.now() > invitation.expires_at
-                    const canRespond = canRespondToInvitations &&
-                      (isAdmin || invitation.target_id === userId) &&
-                      invitation.status === "pending" &&
-                      (isAdmin || !isExpired)
+                    const isInvitee = invitation.target_id === userId;
+                    const canRespond =
+                      canRespondToInvitations &&
+                      (
+                        isAdmin ||
+                        (isInvitee && !isExpired)
+                      );
 
                     return (
                       <TableRow key={invitation._id}>
@@ -587,7 +578,7 @@ export function TournamentInvitations({
                               </div>
                               <CopyableEmail email={invitation.target?.email} />
                               {invitation.target?.school && (
-                                <div className="text-xs text-muted-foreground truncate">
+                                <div className="text-xs font-medium text-muted-foreground truncate">
                                   {invitation.target.school.name}
                                 </div>
                               )}
@@ -596,8 +587,14 @@ export function TournamentInvitations({
                         </TableCell>
                         <TableCell>
                           <div className="grid grid-cols-1 gap-2">
-                            <Badge variant="secondary" className={`max-w-20 ${getStatusColor(invitation.status)}`}>
-                              <StatusIcon className="w-3 h-3" />
+                            <Badge variant="secondary" className={`max-w-24 ${getStatusColor(invitation.status)}`}>
+                              {invitation.status === "pending" ? (
+                                <Clock className="w-3 h-3 mr-1" />
+                              ) : invitation.status === "accepted" ? (
+                                <CircleCheck className="w-3 h-3 mr-1" />
+                              ) : (
+                                <CircleX className="w-3 h-3 mr-1" />
+                              )}
                               {invitation.status.charAt(0).toUpperCase() + invitation.status.slice(1)}
                             </Badge>
                             {isExpired && (

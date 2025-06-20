@@ -30,11 +30,9 @@ import {
   Users,
   UserPlus,
   Trash2,
-  Edit,
   ChevronLeft,
   ChevronRight,
   Ban,
-  CheckCircle,
   XCircle,
   Clock,
   School,
@@ -43,7 +41,10 @@ import {
   CircleDollarSign,
   AlertTriangle,
   LogOut,
-  QrCode, Ticket
+  QrCode,
+  Ticket,
+  CircleCheck,
+  PencilLine
 } from "lucide-react";
 import { useDebounce } from "@/hooks/use-debounce"
 import { DataToolbar } from "@/components/shared/data-toolbar"
@@ -146,7 +147,7 @@ function getStatusColor(status: string) {
 function getStatusIcon(status: string) {
   switch (status) {
     case "active":
-      return CheckCircle;
+      return CircleCheck;
     case "withdrawn":
       return XCircle;
     case "disqualified":
@@ -174,7 +175,7 @@ function getPaymentStatusIcon(status: string) {
     case "pending":
       return Clock;
     case "paid":
-      return CheckCircle;
+      return CircleCheck;
     case "waived":
       return CircleDollarSign;
     default:
@@ -486,7 +487,7 @@ export function TournamentTeams({
   const bulkActions = canUseBulkActions ? [
     {
       label: "Activate Teams",
-      icon: <CheckCircle className="h-4 w-4" />,
+      icon: <CircleCheck className="h-4 w-4" />,
       onClick: () => {
         setBulkAction("activate");
         setShowBulkDialog(true);
@@ -685,7 +686,7 @@ export function TournamentTeams({
                                   className="h-8 w-8 p-0"
                                   onClick={() => handleEditTeam(team)}
                                 >
-                                  <Edit className="h-4 w-4" />
+                                  <PencilLine className="h-4 w-4" />
                                 </Button>
                               )}
 

@@ -326,11 +326,11 @@ export function TeamManagementDialog({
             <Label>Team Members ({selectedMembers.length}/{tournament.team_size})</Label>
 
             {selectedMemberObjects.length > 0 && (
-              <div className="space-y-2 p-3 border rounded-lg bg-muted/50">
+              <div className="space-y-2 p-3 border border-input rounded-lg bg-muted/50">
                 <div className="text-sm font-medium">Selected Members:</div>
                 <div className="space-y-2">
                   {selectedMemberObjects.map((member) => (
-                    <div key={member._id} className="flex items-center justify-between p-2 bg-background rounded border">
+                    <div key={member._id} className="flex items-center justify-between p-2 bg-background rounded border border-input">
                       <div className="flex items-center gap-3">
                         <Avatar className="h-8 w-8">
                           <AvatarFallback>

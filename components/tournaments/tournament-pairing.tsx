@@ -17,15 +17,18 @@ import {
   Shuffle,
   Target,
   Timer,
-  Trophy,
   Undo2,
   Users,
   Zap,
   UserMinus,
-  Crown
+  Crown,
+  X,
+  GripVertical,
+  ChevronDown,
+  ChevronRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -38,6 +41,8 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "sonner";
 
 import { generateTournamentPairings, validatePairing } from "@/lib/pairing-algorithm";
@@ -99,6 +104,751 @@ interface MoveAction {
   timestamp: number;
 }
 
+const ConfirmDialog = ({
+                         open,
+                         onOpenChange,
+                         title,
+                         description,
+                         onConfirm,
+                         onCancel,
+                         confirmText = "Confirm",
+                         cancelText = "Cancel",
+                         variant = "default"
+                       }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: string;
+  description: string;
+  onConfirm: () => void;
+  onCancel?: () => void;
+  confirmText?: string;
+  cancelText?: string;
+  variant?: "default" | "destructive";
+}) => {
+  const handleConfirm = () => {
+    onConfirm();
+    onOpenChange(false);
+  };
+
+  const handleCancel = () => {
+    onCancel?.();
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="text-sm text-muted-foreground">{description}</div>
+          <div className="flex justify-end space-x-2">
+            <Button variant="outline" onClick={handleCancel}>
+              {cancelText}
+            </Button>
+            <Button
+              variant={variant === "destructive" ? "destructive" : "default"}
+              onClick={handleConfirm}
+            >
+              {confirmText}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+const getJudgeConflicts = (judge: any, debate: any) => {
+  const conflicts: string[] = [];
+
+  if (judge.school_id) {
+    if (debate.proposition_team?.school?._id === judge.school_id) {
+      conflicts.push('Same school as Proposition team');
+    } else if (debate.opposition_team?.school?._id === judge.school_id) {
+      conflicts.push('Same school as Opposition team');
+    }
+  }
+
+  if (judge.conflicts?.includes(debate.proposition_team?._id)) {
+    conflicts.push('Feedback conflict with Proposition');
+  }
+  if (judge.conflicts?.includes(debate.opposition_team?._id)) {
+    conflicts.push('Feedback conflict with Opposition');
+  }
+
+  return conflicts;
+};
+
+const TeamCell = ({
+                    team,
+                    position,
+                    debateIndex,
+                    onDragStart,
+                    onDragEnd,
+                    onDragOver,
+                    onDragLeave,
+                    onDrop,
+                    dropZoneActive,
+                    isDragging,
+                    canEdit,
+                    onWithdraw
+                  }: {
+  team?: Team;
+  position: 'proposition' | 'opposition';
+  debateIndex: number;
+  onDragStart: (e: React.DragEvent, team: Team, debateIndex: number, position: string) => void;
+  onDragEnd: () => void;
+  onDragOver: (e: React.DragEvent, debateIndex: number, position: string) => void;
+  onDragLeave: (e: React.DragEvent) => void;
+  onDrop: (e: React.DragEvent, debateIndex: number, position: string) => void;
+  dropZoneActive: boolean;
+  isDragging: boolean;
+  canEdit: boolean;
+  onWithdraw?: (teamId: string, teamName: string) => void;
+}) => {
+  const positionKey = position === 'proposition' ? 'prop' : 'opp';
+
+  return (
+    <div
+      className={`flex items-center gap-2 p-2 rounded border transition-all duration-200 ${
+        team
+          ? `bg-background border-border ${canEdit ? 'hover:border-primary' : ''}`
+          : 'bg-muted border-dashed border-muted-foreground/25'
+      } ${
+        dropZoneActive
+          ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+          : ''
+      } ${
+        isDragging
+          ? 'opacity-50'
+          : ''
+      }`}
+      onDragOver={(e) => onDragOver(e, debateIndex, positionKey)}
+      onDragLeave={onDragLeave}
+      onDrop={(e) => onDrop(e, debateIndex, positionKey)}
+    >
+      {team ? (
+        <>
+          {canEdit && (
+            <div
+              className="cursor-move p-1 hover:bg-muted rounded"
+              draggable
+              onDragStart={(e) => onDragStart(e, team, debateIndex, positionKey)}
+              onDragEnd={onDragEnd}
+            >
+              <GripVertical className="h-4 w-4 text-muted-foreground" />
+            </div>
+          )}
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="font-medium text-xs truncate">{team.name}</span>
+              <Badge
+                variant="outline"
+                className={position === 'proposition' ? 'text-green-700 text-xs border-green-700' : 'text-red-700 text-xs border-red-700'}
+              >
+                {position === 'proposition' ? 'Prop' : 'Opp'}
+              </Badge>
+            </div>
+            {team.school && (
+              <div className="text-xs text-muted-foreground truncate">{team.school.name}</div>
+            )}
+          </div>
+
+          {onWithdraw && team.status === 'active' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onWithdraw(team._id, team.name)}
+              className="opacity-50 hover:opacity-100 h-6 w-6 p-0"
+              title="Withdraw team"
+            >
+              <UserMinus className="h-3 w-3" />
+            </Button>
+          )}
+        </>
+      ) : (
+        <div className="flex-1 text-center text-muted-foreground text-sm py-2">
+          {dropZoneActive ? (
+            <span className="text-primary font-medium">Drop team here</span>
+          ) : (
+            canEdit ? 'Drop team here' : 'No team assigned'
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const JudgeSelectionDialog = ({
+                                debate,
+                                onUpdate,
+                                trigger,
+                                pairingData,
+                                tournament,
+                                canEditJudges
+                              }: {
+  debate: any;
+  debateIndex: number;
+  onUpdate: (judges: Id<"users">[], headJudge?: Id<"users">) => void;
+  trigger: React.ReactNode;
+  pairingData: any;
+  tournament: any;
+  canEditJudges: boolean;
+}) => {
+  const [selectedJudges, setSelectedJudges] = useState<Id<"users">[]>([]);
+  const [selectedHeadJudge, setSelectedHeadJudge] = useState<Id<"users"> | undefined>(undefined);
+  const [open, setOpen] = useState(false);
+
+  React.useEffect(() => {
+    if (open) {
+      setSelectedJudges(debate.judges || []);
+      setSelectedHeadJudge(debate.head_judge_id);
+    }
+  }, [open, debate.judges, debate.head_judge_id]);
+
+  if (!canEditJudges) return null;
+
+  const handleJudgeToggle = (judgeId: Id<"users">, checked: boolean) => {
+    if (checked) {
+      const newJudges = [...selectedJudges, judgeId];
+      setSelectedJudges(newJudges);
+
+      if (newJudges.length === 1) {
+        setSelectedHeadJudge(judgeId);
+      }
+    } else {
+      const newJudges = selectedJudges.filter(id => id !== judgeId);
+      setSelectedJudges(newJudges);
+
+      if (selectedHeadJudge === judgeId) {
+        setSelectedHeadJudge(newJudges.length > 0 ? newJudges[0] : undefined);
+      }
+    }
+  };
+
+  const handleSave = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    onUpdate(selectedJudges, selectedHeadJudge);
+    setOpen(false);
+  };
+
+  const sortedJudges = [...(pairingData?.judges || [])].sort((a, b) => {
+    const conflictsA = getJudgeConflicts(a, debate).length;
+    const conflictsB = getJudgeConflicts(b, debate).length;
+
+    if (conflictsA !== conflictsB) return conflictsA - conflictsB;
+
+    const experienceA = a.total_debates_judged + (a.elimination_debates * 2);
+    const experienceB = b.total_debates_judged + (b.elimination_debates * 2);
+
+    return experienceB - experienceA;
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild onClick={(e) => e.stopPropagation()}>
+        {trigger}
+      </DialogTrigger>
+      <DialogContent className="max-w-2xl" onClick={(e) => e.stopPropagation()}>
+        <DialogHeader>
+          <DialogTitle>Edit Judges - {debate.room_name}</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="text-sm text-muted-foreground">
+            Select judges for this {debate.is_public_speaking ? 'public speaking round' : 'debate'}.
+            {!debate.is_public_speaking && ` Choose ${tournament.judges_per_debate} judges (odd number recommended).`}
+          </div>
+
+          {!debate.is_public_speaking && (
+            <>
+              <div className="grid grid-cols-2 gap-4 text-xs">
+                <div>
+                  <strong>Proposition:</strong> {debate.proposition_team?.name}
+                  {debate.proposition_team?.school && (
+                    <div className="text-muted-foreground">({debate.proposition_team.school.name})</div>
+                  )}
+                </div>
+                <div>
+                  <strong>Opposition:</strong> {debate.opposition_team?.name}
+                  {debate.opposition_team?.school && (
+                    <div className="text-muted-foreground">({debate.opposition_team.school.name})</div>
+                  )}
+                </div>
+              </div>
+              <Separator />
+            </>
+          )}
+
+          <ScrollArea className="h-96">
+            <div className="space-y-2">
+              {sortedJudges.map((judge: any) => {
+                const conflicts = !debate.is_public_speaking ? getJudgeConflicts(judge, debate) : [];
+                const isSelected = selectedJudges.includes(judge._id);
+                const isHeadJudge = selectedHeadJudge === judge._id;
+
+                return (
+                  <div
+                    key={judge._id}
+                    className={`flex items-center space-x-3 p-2 border rounded ${
+                      conflicts.length > 0 ? 'border-red-200 bg-red-50' : 'border-border'
+                    }`}
+                  >
+                    <Checkbox
+                      id={`judge-${judge._id}`}
+                      checked={isSelected}
+                      onCheckedChange={(checked) => handleJudgeToggle(judge._id, !!checked)}
+                      disabled={conflicts.length > 0}
+                    />
+
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <label htmlFor={`judge-${judge._id}`} className="text-sm font-medium cursor-pointer">
+                          {judge.name}
+                        </label>
+
+                        {isHeadJudge && (
+                          <Badge variant="default" className="gap-1">
+                            <Crown className="h-3 w-3" />
+                            Head
+                          </Badge>
+                        )}
+
+                        {judge.school_name && (
+                          <span className="text-xs text-muted-foreground">
+                          ({judge.school_name})
+                        </span>
+                        )}
+                      </div>
+
+                      <div className="text-xs text-muted-foreground">
+                        {judge.total_debates_judged} debates • {judge.elimination_debates} eliminations
+                        {judge.avg_feedback_score && (
+                          <span> • {judge.avg_feedback_score.toFixed(1)}/5 rating</span>
+                        )}
+                      </div>
+
+                      {conflicts.length > 0 && (
+                        <div className="text-xs text-red-600 mt-1">
+                          Conflicts: {conflicts.join(', ')}
+                        </div>
+                      )}
+                    </div>
+
+                    {isSelected && selectedJudges.length > 1 && (
+                      <Button
+                        variant={isHeadJudge ? "default" : "outline"}
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedHeadJudge(judge._id);
+                        }}
+                      >
+                        {isHeadJudge ? "Head Judge" : "Make Head"}
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </ScrollArea>
+
+          <div className="flex items-center justify-between pt-4 border-t">
+            <div className="text-sm text-muted-foreground">
+              Selected: {selectedJudges.length} judges
+              {selectedJudges.length % 2 === 0 && selectedJudges.length > 0 && (
+                <span className="text-orange-600 ml-1">(Even number - may cause ties)</span>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={(e) => {
+                e?.stopPropagation();
+                setOpen(false);
+              }}>
+                Cancel
+              </Button>
+              <Button onClick={handleSave}>
+                Save Changes
+              </Button>
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+const PairingsTable = ({
+                         displayPairings,
+                         isDraft,
+                         canEditPairings,
+                         canEditJudges,
+                         canEditRoomNames,
+                         canViewConflicts,
+                         canViewQualityScores,
+                         canWithdrawTeams,
+                         editingRoom,
+                         setEditingRoom,
+                         updateRoomName,
+                         swapSides,
+                         handleTeamDragStart,
+                         handleTeamDragEnd,
+                         handleTeamDragOver,
+                         handleTeamDragLeave,
+                         handleTeamDrop,
+                         dropZoneActive,
+                         draggedTeam,
+                         handleTeamWithdrawal,
+                         updateDebateJudges,
+                         handleJudgeDragStart,
+                         handleJudgeDragEnd,
+                         handleJudgeDragOver,
+                         handleJudgeDragLeave,
+                         handleJudgeDrop,
+                         judgeDropZoneActive,
+                         pairingData,
+                         tournament,
+                         updateSavedPairing
+                       }: any) => {
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+
+  const toggleRow = (index: number) => {
+    const newExpanded = new Set(expandedRows);
+    if (newExpanded.has(index)) {
+      newExpanded.delete(index);
+    } else {
+      newExpanded.add(index);
+    }
+    setExpandedRows(newExpanded);
+  };
+
+  const ConflictBadge = ({ conflicts }: { conflicts: any[] }) => {
+    if (!canViewConflicts || conflicts.length === 0) return null;
+    const hasErrors = conflicts.some(c => c.severity === 'error');
+    return (
+      <Badge variant={hasErrors ? "destructive" : "secondary"} className="gap-1">
+        {hasErrors ? <AlertCircle className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+        {conflicts.length}
+      </Badge>
+    );
+  };
+
+  const QualityBadge = ({ score }: { score: number }) => {
+    if (!canViewQualityScores) return null;
+    const getVariant = () => {
+      if (score >= 90) return "default";
+      if (score >= 70) return "secondary";
+      return "destructive";
+    };
+    const getIcon = () => {
+      if (score >= 90) return <Target className="h-3 w-3" />;
+      if (score >= 70) return <Zap className="h-3 w-3" />;
+      return <AlertTriangle className="h-3 w-3" />;
+    };
+    return (
+      <Badge variant={getVariant()} className="gap-1">
+        {getIcon()}
+        {score.toFixed(0)}
+      </Badge>
+    );
+  };
+
+  return (
+    <div className="rounded-md border border-input">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-4"></TableHead>
+            <TableHead className="w-32">Room</TableHead>
+            <TableHead className="w-80">Proposition</TableHead>
+            <TableHead className="w-80">Opposition</TableHead>
+            <TableHead className="w-48">Judges</TableHead>
+            <TableHead className="w-20">Status</TableHead>
+            <TableHead className="w-24">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {displayPairings.map((debate: any, index: number) => {
+            const isExpanded = expandedRows.has(index);
+
+            return (
+              <React.Fragment key={debate._id}>
+                <TableRow className={judgeDropZoneActive === index ? 'bg-sky-50' : ''}>
+                  <TableCell>
+                    <Collapsible>
+                      <CollapsibleTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="p-0 h-4 w-4"
+                          onClick={() => toggleRow(index)}
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className="h-3 w-3" />
+                          ) : (
+                            <ChevronRight className="h-3 w-3" />
+                          )}
+                        </Button>
+                      </CollapsibleTrigger>
+                    </Collapsible>
+                  </TableCell>
+
+                  <TableCell>
+                    <div className="flex items-center gap-1">
+                      {editingRoom === debate._id ? (
+                        <Input
+                          value={debate.room_name || ''}
+                          onChange={(e) => updateRoomName(index, e.target.value)}
+                          onBlur={() => setEditingRoom(null)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') setEditingRoom(null);
+                            if (e.key === 'Escape') setEditingRoom(null);
+                          }}
+                          className="h-7 text-sm"
+                          autoFocus
+                        />
+                      ) : (
+                        <span
+                          className={`font-medium ${canEditRoomNames && isDraft ? 'cursor-pointer text-sm hover:text-primary' : ''}`}
+                          onClick={() => {
+                            if (canEditRoomNames && isDraft) {
+                              setEditingRoom(debate._id);
+                            }
+                          }}
+                        >
+                          {debate.room_name || `Room ${index + 1}`}
+                        </span>
+                      )}
+
+                      {debate.is_public_speaking && (
+                        <Badge variant="secondary" className="gap-1 ml-1">
+                          <Timer className="h-3 w-3" />
+                          PS
+                        </Badge>
+                      )}
+                    </div>
+                  </TableCell>
+
+                  <TableCell>
+                    <TeamCell
+                      team={debate.proposition_team}
+                      position="proposition"
+                      debateIndex={index}
+                      onDragStart={handleTeamDragStart}
+                      onDragEnd={handleTeamDragEnd}
+                      onDragOver={handleTeamDragOver}
+                      onDragLeave={handleTeamDragLeave}
+                      onDrop={handleTeamDrop}
+                      dropZoneActive={dropZoneActive === `${index}-prop`}
+                      isDragging={draggedTeam?.team._id === debate.proposition_team?._id}
+                      canEdit={canEditPairings && isDraft}
+                      onWithdraw={canWithdrawTeams ? handleTeamWithdrawal : undefined}
+                    />
+                  </TableCell>
+
+                  <TableCell>
+                    {debate.is_public_speaking ? (
+                      <div className="text-muted-foreground text-xs text-left py-1">
+                        Public Speaking
+                      </div>
+                    ) : (
+                      <TeamCell
+                        team={debate.opposition_team}
+                        position="opposition"
+                        debateIndex={index}
+                        onDragStart={handleTeamDragStart}
+                        onDragEnd={handleTeamDragEnd}
+                        onDragOver={handleTeamDragOver}
+                        onDragLeave={handleTeamDragLeave}
+                        onDrop={handleTeamDrop}
+                        dropZoneActive={dropZoneActive === `${index}-opp`}
+                        isDragging={draggedTeam?.team._id === debate.opposition_team?._id}
+                        canEdit={canEditPairings && isDraft}
+                        onWithdraw={canWithdrawTeams ? handleTeamWithdrawal : undefined}
+                      />
+                    )}
+                  </TableCell>
+
+                  <TableCell
+                    onDragOver={(e) => handleJudgeDragOver(e, index)}
+                    onDragLeave={handleJudgeDragLeave}
+                    onDrop={(e) => handleJudgeDrop(e, index)}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap gap-1">
+                        {debate.judge_details?.length > 0 ? (
+                          debate.judge_details.slice(0, 2).map((judge: any) => (
+                            <Badge
+                              key={judge._id}
+                              variant={judge._id === debate.head_judge?._id ? "default" : "outline"}
+                              className={`gap-1 text-xs ${isDraft && canEditJudges ? 'cursor-move hover:bg-primary/70' : ''}`}
+                              draggable={!!(isDraft && canEditJudges)}
+                              onDragStart={(e) => handleJudgeDragStart(e, judge, index)}
+                              onDragEnd={handleJudgeDragEnd}
+                            >
+                              {judge.name}
+                              {judge._id === debate.head_judge?._id && <Crown className="h-4 w-4" />}
+                            </Badge>
+                          ))
+                        ) : (
+                          <span className="text-muted-foreground text-xs">No judges</span>
+                        )}
+                        {debate.judge_details?.length > 2 && (
+                          <Badge variant="outline" className="text-xs">
+                            +{debate.judge_details.length - 2}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </TableCell>
+
+                  <TableCell>
+                    <div className="flex flex-col gap-1">
+                      <ConflictBadge conflicts={debate.pairing_conflicts || debate.conflicts || []} />
+                      {debate.quality_score !== undefined && (
+                        <QualityBadge score={debate.quality_score} />
+                      )}
+                    </div>
+                  </TableCell>
+
+                  <TableCell>
+                    <div className="flex items-center gap-1">
+                      {canEditJudges && (
+                        <JudgeSelectionDialog
+                          debate={debate}
+                          debateIndex={index}
+                          onUpdate={(judges, headJudge) => updateDebateJudges(index, judges, headJudge)}
+                          pairingData={pairingData}
+                          tournament={tournament}
+                          canEditJudges={canEditJudges}
+                          trigger={
+                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                              <Edit3 className="h-3 w-3" />
+                            </Button>
+                          }
+                        />
+                      )}
+
+                      {canEditPairings && !debate.is_public_speaking && isDraft && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => swapSides(index)}
+                          className="h-6 w-6 p-0"
+                          title="Swap team sides"
+                        >
+                          <ArrowLeftRight className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+
+                {isExpanded && (
+                  <TableRow>
+                    <TableCell colSpan={7} className="bg-muted/20">
+                      <Collapsible open={isExpanded}>
+                        <CollapsibleContent>
+                          <div className="p-4 space-y-4">
+                            
+                            <div>
+                              <h4 className="font-medium mb-2">Judge Information</h4>
+                              <div className="grid gap-2">
+                                {debate.judge_details?.length > 0 ? (
+                                  debate.judge_details.map((judge: any) => (
+                                    <div key={judge._id} className="flex items-center justify-between p-2 bg-background rounded border">
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-medium">{judge.name}</span>
+                                        {judge._id === debate.head_judge?._id && (
+                                          <Badge variant="default" className="gap-1">
+                                            <Crown className="h-3 w-3" />
+                                            Head Judge
+                                          </Badge>
+                                        )}
+                                        {judge.school && (
+                                          <span className="text-sm text-muted-foreground">({judge.school.name})</span>
+                                        )}
+                                      </div>
+                                      <div className="text-sm text-muted-foreground">
+                                        {judge.total_debates_judged || 0} debates • {judge.elimination_debates || 0} eliminations
+                                      </div>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <div className="text-muted-foreground text-sm">No judges assigned</div>
+                                )}
+                              </div>
+                            </div>
+
+                            
+                            {canViewConflicts && (debate.pairing_conflicts || debate.conflicts) &&
+                              (debate.pairing_conflicts || debate.conflicts).length > 0 && (
+                                <div>
+                                  <h4 className="font-medium mb-2">Conflicts</h4>
+                                  <div className="space-y-1">
+                                    {(debate.pairing_conflicts || debate.conflicts).map((conflict: any, i: number) => (
+                                      <div key={i} className="text-sm p-2 bg-background rounded border-l-4 border-l-orange-500">
+                                        <span className="font-medium capitalize">{conflict.type.replace('_', ' ')}: </span>
+                                        {conflict.description}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                            
+                            {!debate.is_public_speaking && (debate.proposition_team || debate.opposition_team) && (
+                              <div>
+                                <h4 className="font-medium mb-2">Team Details</h4>
+                                <div className="grid grid-cols-2 gap-4">
+                                  {debate.proposition_team && (
+                                    <div className="p-2 bg-background rounded border">
+                                      <div className="font-medium text-green-700 mb-1">{debate.proposition_team.name}</div>
+                                      <div className="text-sm text-muted-foreground">
+                                        {debate.proposition_team.school?.name} • {debate.proposition_team.members?.length} members
+                                      </div>
+                                      {canViewConflicts && (
+                                        <div className="text-xs text-muted-foreground mt-1">
+                                          Payment: {debate.proposition_team.payment_status}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                  {debate.opposition_team && (
+                                    <div className="p-2 bg-background rounded border">
+                                      <div className="font-medium text-red-700 mb-1">{debate.opposition_team.name}</div>
+                                      <div className="text-sm text-muted-foreground">
+                                        {debate.opposition_team.school?.name} • {debate.opposition_team.members?.length} members
+                                      </div>
+                                      {canViewConflicts && (
+                                        <div className="text-xs text-muted-foreground mt-1">
+                                          Payment: {debate.opposition_team.payment_status}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </React.Fragment>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  );
+};
+
 export default function TournamentPairings({
                                              tournament,
                                              userRole,
@@ -112,12 +862,50 @@ export default function TournamentPairings({
   const [autoSaveDrafts, setAutoSaveDrafts] = useState(true);
   const [pairingMethod, setPairingMethod] = useState<'fold' | 'swiss' | 'auto'>('auto');
 
+  const [draggedJudge, setDraggedJudge] = useState<{
+    judge: Judge;
+    fromDebateIndex: number;
+  } | null>(null);
+
   const [draggedTeam, setDraggedTeam] = useState<{
     team: Team;
     fromDebateIndex: number;
     fromPosition: string;
   } | null>(null);
+
   const [dropZoneActive, setDropZoneActive] = useState<string | null>(null);
+  const [judgeDropZoneActive, setJudgeDropZoneActive] = useState<number | null>(null);
+
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+    onConfirm: () => void;
+    onCancel?: () => void;
+    confirmText?: string;
+    cancelText?: string;
+    variant?: "default" | "destructive";
+  }>({
+    open: false,
+    title: "",
+    description: "",
+    onConfirm: () => {},
+  });
+
+  const [inputDialog, setInputDialog] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+    placeholder: string;
+    onConfirm: (value: string) => void;
+    onCancel?: () => void;
+  }>({
+    open: false,
+    title: "",
+    description: "",
+    placeholder: "",
+    onConfirm: () => {},
+  });
 
   const [draftPairings, setDraftPairings] = useState<PairingDraft[]>([]);
   const [undoStack, setUndoStack] = useState<PairingDraft[][]>([]);
@@ -127,7 +915,6 @@ export default function TournamentPairings({
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
-  const [selectedDebateIndex, setSelectedDebateIndex] = useState<number | null>(null);
   const [isRecalculating, setIsRecalculating] = useState(false);
 
   const draftSaveTimeoutRef = useRef<NodeJS.Timeout>();
@@ -158,6 +945,14 @@ export default function TournamentPairings({
     } : "skip"
   );
 
+  const prelimsCheck = useQuery(
+    api.functions.pairings.checkPreliminariesComplete,
+    canGeneratePairings ? {
+      token,
+      tournament_id: tournament._id,
+    } : "skip"
+  );
+
   const existingPairings = useOffline(useQuery(
     api.functions.pairings.getTournamentPairings,
     canViewPairings ? {
@@ -185,7 +980,6 @@ export default function TournamentPairings({
   }, [existingPairings]);
 
   const saveDraft = useCallback((newPairings: PairingDraft[], immediate = false) => {
-
     if (!canEditPairings || (!autoSaveDrafts && !immediate)) return;
 
     const draft = {
@@ -213,6 +1007,59 @@ export default function TournamentPairings({
     }
   }, [canEditPairings, autoSaveDrafts, currentRound, tournament._id, pairingMethod, moveHistory]);
 
+  const InputDialog = () => {
+    const [inputValue, setInputValue] = useState("");
+
+    useEffect(() => {
+      if (inputDialog.open) {
+        setInputValue("");
+      }
+    }, [inputDialog.open]);
+
+    const handleConfirm = () => {
+      inputDialog.onConfirm(inputValue);
+      setInputDialog(prev => ({ ...prev, open: false }));
+    };
+
+    const handleCancel = () => {
+      inputDialog.onCancel?.();
+      setInputDialog(prev => ({ ...prev, open: false }));
+    };
+
+    return (
+      <Dialog open={inputDialog.open} onOpenChange={(open) =>
+        setInputDialog(prev => ({ ...prev, open }))
+      }>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{inputDialog.title}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="text-sm text-muted-foreground">{inputDialog.description}</div>
+            <Input
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              placeholder={inputDialog.placeholder}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleConfirm();
+                if (e.key === 'Escape') handleCancel();
+              }}
+              autoFocus
+            />
+            <div className="flex justify-end space-x-2">
+              <Button variant="outline" onClick={handleCancel}>
+                Cancel
+              </Button>
+              <Button onClick={handleConfirm} disabled={!inputValue.trim()}>
+                Confirm
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  };
+
   useEffect(() => {
     const hasSavedPairings = currentDebates.length > 0;
 
@@ -222,20 +1069,37 @@ export default function TournamentPairings({
       setUndoStack([]);
       setRedoStack([]);
       setMoveHistory([]);
+      localStorage.removeItem(`pairings_draft_${tournament._id}_${currentRound}`);
     } else if (canEditPairings) {
-
       const savedDraft = localStorage.getItem(`pairings_draft_${tournament._id}_${currentRound}`);
       if (savedDraft) {
         try {
           const draft = JSON.parse(savedDraft);
-          setDraftPairings(draft.pairings || []);
-          setMoveHistory(draft.move_history || []);
-          setLastSavedTimestamp(draft.timestamp);
-          setIsDraft(true);
+          if (draft.round === currentRound) {
+            setDraftPairings(draft.pairings || []);
+            setMoveHistory(draft.move_history || []);
+            setLastSavedTimestamp(draft.timestamp);
+            setIsDraft(true);
+          } else {
+            localStorage.removeItem(`pairings_draft_${tournament._id}_${currentRound}`);
+            setDraftPairings([]);
+            setMoveHistory([]);
+            setLastSavedTimestamp(null);
+            setIsDraft(false);
+          }
         } catch (error) {
           console.error('Error loading draft:', error);
           toast.error('Failed to load draft pairings');
+          setDraftPairings([]);
+          setMoveHistory([]);
+          setLastSavedTimestamp(null);
+          setIsDraft(false);
         }
+      } else {
+        setDraftPairings([]);
+        setMoveHistory([]);
+        setLastSavedTimestamp(null);
+        setIsDraft(false);
       }
     }
   }, [tournament._id, currentRound, currentDebates, canEditPairings]);
@@ -266,6 +1130,18 @@ export default function TournamentPairings({
       return;
     }
 
+    const isElimination = currentRound > tournament.prelim_rounds;
+
+    if (isElimination) {
+
+      if (!prelimsCheck || !prelimsCheck.all_complete) {
+        toast.error("Cannot generate elimination pairings", {
+          description: `All preliminary rounds must be completed first. ${prelimsCheck?.completed_prelims || 0}/${prelimsCheck?.total_prelims || tournament.prelim_rounds} completed.`
+        });
+        return;
+      }
+    }
+
     setIsGenerating(true);
     setGenerationProgress(0);
 
@@ -277,11 +1153,17 @@ export default function TournamentPairings({
 
       setGenerationProgress(25);
 
-      const method = pairingMethod === 'auto'
-        ? (currentRound <= 5 ? 'fold' : 'swiss')
-        : pairingMethod;
+      const method = isElimination
+        ? 'swiss' // or 'elimination_bracket'
+        : (pairingMethod === 'auto'
+          ? (currentRound <= 5 ? 'fold' : 'swiss')
+          : pairingMethod);
 
-      if (currentRound > 5 && method === 'swiss') {
+      if (isElimination) {
+        toast.info("Generating elimination pairings", {
+          description: "Using performance-based matching for elimination rounds",
+        });
+      } else if (currentRound > 5 && method === 'swiss') {
         toast.info("Switching to Swiss system for round 6+", {
           description: "The fold system is limited to 5 rounds. Using Swiss pairing for better matchups.",
         });
@@ -370,20 +1252,48 @@ export default function TournamentPairings({
       setIsGenerating(false);
       setGenerationProgress(0);
     }
-  },[canGeneratePairings, pairingData, draftPairings, currentRound, pairingMethod, tournament, stats]);
+  },[canGeneratePairings, pairingData, draftPairings, currentRound, pairingMethod, tournament, stats, prelimsCheck]);
 
   const savePairings = useCallback(async () => {
     if (!canSavePairings || !savePairingsMutation) {
       toast.error("You don't have permission to save pairings");
       return;
     }
+    const finalPairings = draftPairings.map(({ conflicts, quality_score, ...rest }) => rest);
 
     if (stats.errors > 0) {
-      const confirmed = window.confirm(
-        `There are ${stats.errors} errors in the pairings. ` +
-        `These may cause issues during the tournament. Save anyway?`
-      );
-      if (!confirmed) return;
+      setConfirmDialog({
+        open: true,
+        title: "Save Pairings with Errors?",
+        description: `There are ${stats.errors} errors in the pairings. These may cause issues during the tournament. Save anyway?`,
+        onConfirm: async () => {
+          try {
+            await savePairingsMutation({
+              token,
+              tournament_id: tournament._id,
+              round_number: currentRound,
+              pairings: finalPairings,
+            });
+
+            setIsDraft(false);
+            localStorage.removeItem(`pairings_draft_${tournament._id}_${currentRound}`);
+            setUndoStack([]);
+            setRedoStack([]);
+            setMoveHistory([]);
+
+            toast.success("Pairings saved successfully!", {
+              description: "All participants have been notified",
+            });
+          } catch (error: any) {
+            toast.error("Failed to save pairings", {
+              description: error.message || "Please try again",
+            });
+          }
+        },
+        variant: "destructive",
+        confirmText: "Save Anyway",
+      });
+      return;
     }
 
     try {
@@ -391,7 +1301,7 @@ export default function TournamentPairings({
         token,
         tournament_id: tournament._id,
         round_number: currentRound,
-        pairings: draftPairings,
+        pairings: finalPairings,
       });
 
       setIsDraft(false);
@@ -416,56 +1326,101 @@ export default function TournamentPairings({
       return;
     }
 
-    const reason = window.prompt(`Why is ${teamName} withdrawing?`);
-    if (reason === null) return;
+    setInputDialog({
+      open: true,
+      title: `Withdraw ${teamName}`,
+      description: `Please provide a reason for withdrawing ${teamName} from the tournament:`,
+      placeholder: "Enter withdrawal reason...",
+      onConfirm: async (reason: string) => {
+        try {
+          const result = await handleTeamWithdrawalMutation({
+            token,
+            team_id: teamId,
+            reason: reason || undefined,
+          });
 
-    try {
-      const result = await handleTeamWithdrawalMutation({
-        token,
-        team_id: teamId,
-        reason: reason || undefined,
-      });
+          toast.success(`${teamName} withdrawn`, {
+            description: `${result.affected_debates.length} debates converted to public speaking`,
+          });
 
-      toast.success(`${teamName} withdrawn`, {
-        description: `${result.affected_debates.length} debates converted to public speaking`,
-      });
-
-      setCurrentRound(prev => prev);
-    } catch (error: any) {
-      toast.error("Failed to withdraw team", {
-        description: error.message,
-      });
-    }
+          setCurrentRound(prev => prev);
+        } catch (error: any) {
+          toast.error("Failed to withdraw team", {
+            description: error.message,
+          });
+        }
+      },
+    });
   };
 
-  const handleDragStart = (team: Team, debateIndex: number, position: string) => {
-    if (!canEditPairings || !isDraft) return;
+  const handleTeamDragStart = useCallback((e: React.DragEvent, team: Team, debateIndex: number, position: string) => {
+    if (!canEditPairings || !isDraft) {
+      e.preventDefault();
+      return;
+    }
 
     setDraggedTeam({ team, fromDebateIndex: debateIndex, fromPosition: position });
-    document.body.style.cursor = 'grabbing';
-  };
 
-  const handleDragEnd = () => {
+    e.dataTransfer.setData('application/json', JSON.stringify({
+      type: 'team',
+      teamId: team._id,
+      teamName: team.name,
+      fromDebateIndex: debateIndex,
+      fromPosition: position
+    }));
+
+    e.dataTransfer.effectAllowed = 'move';
+
+    const dragImage = document.createElement('div');
+    dragImage.textContent = team.name;
+    dragImage.className = 'p-2 bg-primary text-primary-foreground rounded shadow-lg text-sm font-medium';
+    dragImage.style.position = 'absolute';
+    dragImage.style.top = '-1000px';
+    document.body.appendChild(dragImage);
+    e.dataTransfer.setDragImage(dragImage, 0, 0);
+
+    setTimeout(() => document.body.removeChild(dragImage), 0);
+
+    document.body.style.cursor = 'grabbing';
+  }, [canEditPairings, isDraft]);
+
+  const handleTeamDragEnd = useCallback(() => {
     setDraggedTeam(null);
     setDropZoneActive(null);
     document.body.style.cursor = '';
-  };
+  }, []);
 
-  const handleDragOver = (e: React.DragEvent, debateIndex: number, position: string) => {
+  const handleTeamDragOver = useCallback((e: React.DragEvent, debateIndex: number, position: string) => {
     e.preventDefault();
-    if (draggedTeam && canEditPairings) {
-      setDropZoneActive(`${debateIndex}-${position}`);
+    e.dataTransfer.dropEffect = 'move';
+
+    if (draggedTeam && canEditPairings && isDraft) {
+      const dropTarget = `${debateIndex}-${position}`;
+      setDropZoneActive(dropTarget);
     }
-  };
+  }, [draggedTeam, canEditPairings, isDraft]);
 
-  const handleDragLeave = () => {
-    setDropZoneActive(null);
-  };
+  const handleTeamDragLeave = useCallback((e: React.DragEvent) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
 
-  const handleDrop = async (e: React.DragEvent, toDebateIndex: number, toPosition: string) => {
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+      setDropZoneActive(null);
+    }
+  }, []);
+
+  const handleTeamDrop = useCallback(async (e: React.DragEvent, toDebateIndex: number, toPosition: string) => {
     e.preventDefault();
+    e.stopPropagation();
 
     if (!draggedTeam || !isDraft || !canEditPairings) return;
+
+    if (draggedTeam.fromDebateIndex === toDebateIndex && draggedTeam.fromPosition === toPosition) {
+      setDraggedTeam(null);
+      setDropZoneActive(null);
+      return;
+    }
 
     setIsRecalculating(true);
 
@@ -491,7 +1446,8 @@ export default function TournamentPairings({
         newPairings[toDebateIndex].opposition_team_id = draggedTeam.team._id;
       }
 
-      [draggedTeam.fromDebateIndex, toDebateIndex].forEach(index => {
+      const affectedDebates = new Set([draggedTeam.fromDebateIndex, toDebateIndex]);
+      affectedDebates.forEach(index => {
         if (newPairings[index] && pairingData) {
           newPairings[index].conflicts = validatePairing(
             pairingData.teams,
@@ -514,22 +1470,29 @@ export default function TournamentPairings({
           to: { index: toDebateIndex, position: toPosition }
         },
         newValue: draggedTeam.team.name,
-        description: `Moved ${draggedTeam.team.name} to ${toPosition} in ${newPairings[toDebateIndex].room_name}`,
+        description: destTeamId
+          ? `Swapped ${draggedTeam.team.name} with another team`
+          : `Moved ${draggedTeam.team.name} to ${toPosition} in ${newPairings[toDebateIndex].room_name}`,
         timestamp: Date.now(),
       };
       setMoveHistory(prev => [...prev, moveAction]);
 
-      toast.success(`Moved ${draggedTeam.team.name}`, {
+      toast.success(`Team moved successfully`, {
         description: moveAction.description,
         duration: 2000,
       });
 
+    } catch (error) {
+      console.error('Error during team drop:', error);
+      toast.error("Failed to move team", {
+        description: "Please try again",
+      });
     } finally {
       setIsRecalculating(false);
       setDraggedTeam(null);
       setDropZoneActive(null);
     }
-  };
+  }, [draggedTeam, isDraft, canEditPairings, draftPairings, pairingData, saveDraft]);
 
   const swapSides = async (debateIndex: number) => {
     if (!isDraft || !canEditPairings) return;
@@ -603,6 +1566,14 @@ export default function TournamentPairings({
   const updateDebateJudges = async (debateIndex: number, newJudges: Id<"users">[], newHeadJudge?: Id<"users">) => {
     if (!isDraft || !canEditJudges) return;
 
+    const debate = draftPairings[debateIndex];
+    if (!debate.is_bye_round && newJudges.length === 0) {
+      toast.error("Cannot remove all judges", {
+        description: "Debates must have at least one judge",
+      });
+      return;
+    }
+
     setIsRecalculating(true);
 
     try {
@@ -614,7 +1585,14 @@ export default function TournamentPairings({
       const oldHeadJudge = newPairings[debateIndex].head_judge_id;
 
       newPairings[debateIndex].judges = newJudges;
-      newPairings[debateIndex].head_judge_id = newHeadJudge;
+
+      if (newJudges.length === 0) {
+        newPairings[debateIndex].head_judge_id = undefined;
+      } else if (newHeadJudge && newJudges.includes(newHeadJudge)) {
+        newPairings[debateIndex].head_judge_id = newHeadJudge;
+      } else {
+        newPairings[debateIndex].head_judge_id = newJudges[0];
+      }
 
       if (pairingData) {
         newPairings[debateIndex].conflicts = validatePairing(
@@ -633,7 +1611,7 @@ export default function TournamentPairings({
         type: 'update_judges',
         debateIndex,
         oldValue: { judges: oldJudges, headJudge: oldHeadJudge },
-        newValue: { judges: newJudges, headJudge: newHeadJudge },
+        newValue: { judges: newJudges, headJudge: newPairings[debateIndex].head_judge_id },
         description: `Updated judges in ${newPairings[debateIndex].room_name}`,
         timestamp: Date.now(),
       };
@@ -712,6 +1690,141 @@ export default function TournamentPairings({
     return pairingData.judges.find((j: Judge) => j._id === judgeId);
   };
 
+  const clearDraft = useCallback(() => {
+    if (!canEditPairings || !isDraft) return;
+
+    setConfirmDialog({
+      open: true,
+      title: "Clear Draft Pairings",
+      description: "Are you sure you want to clear all draft pairings? This action cannot be undone.",
+      onConfirm: () => {
+        setDraftPairings([]);
+        setUndoStack([]);
+        setRedoStack([]);
+        setMoveHistory([]);
+        localStorage.removeItem(`pairings_draft_${tournament._id}_${currentRound}`);
+        setLastSavedTimestamp(null);
+
+        toast.success("Draft cleared", {
+          description: "All draft pairings have been cleared",
+          duration: 2000,
+        });
+      },
+      variant: "destructive",
+      confirmText: "Clear Draft",
+    });
+  }, [canEditPairings, isDraft, tournament._id, currentRound]);
+
+  const handleJudgeDragStart = useCallback((e: React.DragEvent, judge: Judge, debateIndex: number) => {
+    if (!canEditJudges || !isDraft) {
+      e.preventDefault();
+      return;
+    }
+
+    setDraggedJudge({ judge, fromDebateIndex: debateIndex });
+
+    e.dataTransfer.setData('text/plain', JSON.stringify({
+      type: 'judge',
+      judgeId: judge._id,
+      fromDebateIndex: debateIndex
+    }));
+
+    e.dataTransfer.effectAllowed = 'move';
+    document.body.style.cursor = 'grabbing';
+  }, [canEditJudges, isDraft]);
+
+  const handleJudgeDragEnd = useCallback(() => {
+    setDraggedJudge(null);
+    setJudgeDropZoneActive(null);
+    document.body.style.cursor = '';
+  }, []);
+
+  const handleJudgeDragOver = useCallback((e: React.DragEvent, debateIndex: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+
+    if (draggedJudge && canEditJudges && isDraft) {
+      setJudgeDropZoneActive(debateIndex);
+    }
+  }, [draggedJudge, canEditJudges, isDraft]);
+
+  const handleJudgeDragLeave = useCallback((e: React.DragEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
+
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+      setJudgeDropZoneActive(null);
+    }
+  }, []);
+
+  const handleJudgeDrop = useCallback(async (e: React.DragEvent, toDebateIndex: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!draggedJudge || !isDraft || !canEditJudges) return;
+
+    if (draggedJudge.fromDebateIndex === toDebateIndex) return;
+
+    setIsRecalculating(true);
+
+    try {
+      setUndoStack(prev => [...prev.slice(-9), draftPairings]);
+      setRedoStack([]);
+
+      const newPairings = [...draftPairings];
+
+      const sourceDebate = newPairings[draggedJudge.fromDebateIndex];
+      sourceDebate.judges = sourceDebate.judges.filter(id => id !== draggedJudge.judge._id);
+      if (sourceDebate.head_judge_id === draggedJudge.judge._id) {
+        sourceDebate.head_judge_id = sourceDebate.judges[0] || undefined;
+      }
+
+      const destDebate = newPairings[toDebateIndex];
+      if (!destDebate.judges.includes(draggedJudge.judge._id)) {
+        destDebate.judges = [...destDebate.judges, draggedJudge.judge._id];
+        if (!destDebate.head_judge_id) {
+          destDebate.head_judge_id = draggedJudge.judge._id;
+        }
+      }
+
+      [draggedJudge.fromDebateIndex, toDebateIndex].forEach(index => {
+        if (newPairings[index] && pairingData) {
+          newPairings[index].conflicts = validatePairing(
+            pairingData.teams,
+            pairingData.judges,
+            newPairings[index].proposition_team_id,
+            newPairings[index].opposition_team_id,
+            newPairings[index].judges
+          );
+        }
+      });
+
+      setDraftPairings(newPairings);
+      saveDraft(newPairings);
+
+      const moveAction: MoveAction = {
+        type: 'update_judges',
+        debateIndex: toDebateIndex,
+        oldValue: draggedJudge.fromDebateIndex,
+        newValue: toDebateIndex,
+        description: `Moved judge ${draggedJudge.judge.name} from ${sourceDebate.room_name} to ${destDebate.room_name}`,
+        timestamp: Date.now(),
+      };
+      setMoveHistory(prev => [...prev, moveAction]);
+
+      toast.success(`Moved judge ${draggedJudge.judge.name}`, {
+        description: moveAction.description,
+        duration: 2000,
+      });
+
+    } finally {
+      setIsRecalculating(false);
+      setDraggedJudge(null);
+      setJudgeDropZoneActive(null);
+    }
+  }, [draggedJudge, isDraft, canEditJudges, draftPairings, pairingData, saveDraft]);
+
   React.useEffect(() => {
     if (!canUseKeyboardShortcuts || !isDraft) return;
 
@@ -741,320 +1854,6 @@ export default function TournamentPairings({
     window.addEventListener('keydown', handleKeyboard);
     return () => window.removeEventListener('keydown', handleKeyboard);
   }, [canUseKeyboardShortcuts, isDraft, undo, redo, savePairings, generatePairings]);
-
-  const ConflictBadge = ({ conflicts }: { conflicts: any[] }) => {
-    if (!canViewConflicts || conflicts.length === 0) return null;
-
-    const hasErrors = conflicts.some(c => c.severity === 'error');
-
-    return (
-      <Badge variant={hasErrors ? "destructive" : "secondary"} className="gap-1">
-        {hasErrors ? <AlertCircle className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
-        {conflicts.length}
-      </Badge>
-    );
-  };
-
-  const QualityBadge = ({ score }: { score: number }) => {
-    if (!canViewQualityScores) return null;
-
-    const getVariant = () => {
-      if (score >= 90) return "default";
-      if (score >= 70) return "secondary";
-      return "destructive";
-    };
-
-    const getIcon = () => {
-      if (score >= 90) return <Target className="h-3 w-3" />;
-      if (score >= 70) return <Zap className="h-3 w-3" />;
-      return <AlertTriangle className="h-3 w-3" />;
-    };
-
-    return (
-      <Badge variant={getVariant()} className="gap-1">
-        {getIcon()}
-        {score.toFixed(0)}
-      </Badge>
-    );
-  };
-
-  const TeamCard = ({
-                      team,
-                      position,
-                      debateIndex,
-                    }: {
-    team?: Team;
-    position: 'proposition' | 'opposition';
-    debateIndex: number;
-  }) => {
-    const isDropTarget = dropZoneActive === `${debateIndex}-${position === 'proposition' ? 'prop' : 'opp'}`;
-
-    return (
-      <div
-        draggable={canEditPairings && team && isDraft}
-        onDragStart={() => team && handleDragStart(team, debateIndex, position === 'proposition' ? 'prop' : 'opp')}
-        onDragEnd={handleDragEnd}
-        onDragOver={(e) => handleDragOver(e, debateIndex, position === 'proposition' ? 'prop' : 'opp')}
-        onDragLeave={handleDragLeave}
-        onDrop={(e) => handleDrop(e, debateIndex, position === 'proposition' ? 'prop' : 'opp')}
-        className={`p-3 border rounded-lg transition-all duration-200 ${
-          team
-            ? `bg-background border-border hover:border-primary ${isDraft && canEditPairings ? 'cursor-move' : ''}`
-            : 'bg-muted border-dashed border-muted-foreground/25'
-        } ${
-          isDropTarget
-            ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
-            : ''
-        } ${
-          draggedTeam && !isDropTarget
-            ? 'opacity-50'
-            : ''
-        }`}
-      >
-        {team ? (
-          <div>
-            <div className="font-medium text-foreground flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {team.name}
-                {position === 'proposition' && (
-                  <Badge variant="outline" className="text-green-700 border-green-700">Prop</Badge>
-                )}
-                {position === 'opposition' && (
-                  <Badge variant="outline" className="text-red-700 border-red-700">Opp</Badge>
-                )}
-              </div>
-
-              {canWithdrawTeams && team.status === 'active' && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleTeamWithdrawal(team._id, team.name);
-                  }}
-                  className="opacity-50 hover:opacity-100"
-                  title="Withdraw team"
-                >
-                  <UserMinus className="h-3 w-3" />
-                </Button>
-              )}
-            </div>
-            {team.school && (
-              <div className="text-sm text-muted-foreground">{team.school.name}</div>
-            )}
-            <div className="text-xs text-muted-foreground mt-1">
-              {team.members.length} members • {team.status}
-            </div>
-          </div>
-        ) : (
-          <div className="text-muted-foreground text-center py-2 text-sm">
-            {isDropTarget ? (
-              <div className="text-primary font-medium">Drop team here</div>
-            ) : (
-              canEditPairings ? 'Drop team here' : 'No team assigned'
-            )}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const JudgeSelectionDialog = ({
-                                  debate,
-                                  onUpdate
-                                }: {
-    debate: any;
-    debateIndex: number;
-    onUpdate: (judges: Id<"users">[], headJudge?: Id<"users">) => void;
-  }) => {
-    const [selectedJudges, setSelectedJudges] = useState<Id<"users">[]>(debate.judges || []);
-    const [selectedHeadJudge, setSelectedHeadJudge] = useState<Id<"users"> | undefined>(debate.head_judge_id);
-    const [open, setOpen] = useState(false);
-
-    if (!canEditJudges) return null;
-
-    const handleJudgeToggle = (judgeId: Id<"users">, checked: boolean) => {
-      if (checked) {
-        const newJudges = [...selectedJudges, judgeId];
-        setSelectedJudges(newJudges);
-
-        if (newJudges.length === 1) {
-          setSelectedHeadJudge(judgeId);
-        }
-      } else {
-        const newJudges = selectedJudges.filter(id => id !== judgeId);
-        setSelectedJudges(newJudges);
-
-        if (selectedHeadJudge === judgeId) {
-          setSelectedHeadJudge(newJudges.length > 0 ? newJudges[0] : undefined);
-        }
-      }
-    };
-
-    const handleSave = () => {
-      onUpdate(selectedJudges, selectedHeadJudge);
-      setOpen(false);
-    };
-
-    const getJudgeConflicts = (judge: any) => {
-      const conflicts: string[] = [];
-
-      if (debate.proposition_team?.school?._id === judge.school_id) {
-        conflicts.push('Same school as Prop team');
-      }
-      if (debate.opposition_team?.school?._id === judge.school_id) {
-        conflicts.push('Same school as Opp team');
-      }
-
-      if (judge.conflicts?.includes(debate.proposition_team?._id)) {
-        conflicts.push('Feedback conflict with Prop');
-      }
-      if (judge.conflicts?.includes(debate.opposition_team?._id)) {
-        conflicts.push('Feedback conflict with Opp');
-      }
-
-      return conflicts;
-    };
-
-    const sortedJudges = [...(pairingData?.judges || [])].sort((a, b) => {
-      const conflictsA = getJudgeConflicts(a).length;
-      const conflictsB = getJudgeConflicts(b).length;
-
-      if (conflictsA !== conflictsB) return conflictsA - conflictsB;
-
-      const experienceA = a.total_debates_judged + (a.elimination_debates * 2);
-      const experienceB = b.total_debates_judged + (b.elimination_debates * 2);
-
-      return experienceB - experienceA;
-    });
-
-    return (
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger asChild>
-          <Button variant="ghost" size="sm">
-            <Edit3 className="h-3 w-3 mr-1" />
-            Edit
-          </Button>
-        </DialogTrigger>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Edit Judges - {debate.room_name}</DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div className="text-sm text-muted-foreground">
-              Select judges for this debate. Choose {tournament.judges_per_debate} judges (odd number recommended).
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 text-xs">
-              <div>
-                <strong>Proposition:</strong> {debate.proposition_team?.name}
-                {debate.proposition_team?.school && (
-                  <div className="text-muted-foreground">({debate.proposition_team.school.name})</div>
-                )}
-              </div>
-              <div>
-                <strong>Opposition:</strong> {debate.opposition_team?.name}
-                {debate.opposition_team?.school && (
-                  <div className="text-muted-foreground">({debate.opposition_team.school.name})</div>
-                )}
-              </div>
-            </div>
-
-            <Separator />
-
-            <ScrollArea className="h-96">
-              <div className="space-y-2">
-                {sortedJudges.map((judge: any) => {
-                  const conflicts = getJudgeConflicts(judge);
-                  const isSelected = selectedJudges.includes(judge._id);
-                  const isHeadJudge = selectedHeadJudge === judge._id;
-
-                  return (
-                    <div
-                      key={judge._id}
-                      className={`flex items-center space-x-3 p-2 border rounded ${
-                        conflicts.length > 0 ? 'border-red-200 bg-red-50' : 'border-border'
-                      }`}
-                    >
-                      <Checkbox
-                        id={`judge-${judge._id}`}
-                        checked={isSelected}
-                        onCheckedChange={(checked) => handleJudgeToggle(judge._id, !!checked)}
-                        disabled={conflicts.length > 0}
-                      />
-
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <label htmlFor={`judge-${judge._id}`} className="text-sm font-medium">
-                            {judge.name}
-                          </label>
-
-                          {isHeadJudge && (
-                            <Badge variant="default" className="gap-1">
-                              <Crown className="h-3 w-3" />
-                              Head
-                            </Badge>
-                          )}
-
-                          {judge.school_name && (
-                            <span className="text-xs text-muted-foreground">
-                              ({judge.school_name})
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="text-xs text-muted-foreground">
-                          {judge.total_debates_judged} debates • {judge.elimination_debates} eliminations
-                          {judge.avg_feedback_score && (
-                            <span> • {judge.avg_feedback_score.toFixed(1)}/5 rating</span>
-                          )}
-                        </div>
-
-                        {conflicts.length > 0 && (
-                          <div className="text-xs text-red-600 mt-1">
-                            Conflicts: {conflicts.join(', ')}
-                          </div>
-                        )}
-                      </div>
-
-                      {isSelected && selectedJudges.length > 1 && (
-                        <Button
-                          variant={isHeadJudge ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => setSelectedHeadJudge(judge._id)}
-                        >
-                          {isHeadJudge ? "Head Judge" : "Make Head"}
-                        </Button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </ScrollArea>
-
-            <div className="flex items-center justify-between pt-4 border-t">
-              <div className="text-sm text-muted-foreground">
-                Selected: {selectedJudges.length} judges
-                {selectedJudges.length % 2 === 0 && selectedJudges.length > 0 && (
-                  <span className="text-orange-600 ml-1">(Even number - may cause ties)</span>
-                )}
-              </div>
-
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleSave}>
-                  Save Changes
-                </Button>
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-    );
-  };
 
   const LoadingSkeleton = () => (
     <div className="space-y-2">
@@ -1086,54 +1885,6 @@ export default function TournamentPairings({
             </Card>
           ))}
         </div>
-
-        <div className="grid gap-4 lg:grid-cols-2 p-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Card key={i}>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <Skeleton className="h-6 w-24" />
-                  <div className="flex gap-2">
-                    <Skeleton className="h-5 w-8" />
-                    <Skeleton className="h-5 w-8" />
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Skeleton className="h-4 w-20 mb-2" />
-                    <div className="p-3 border rounded-lg">
-                      <Skeleton className="h-5 w-32 mb-1" />
-                      <Skeleton className="h-4 w-24 mb-1" />
-                      <Skeleton className="h-3 w-20" />
-                    </div>
-                  </div>
-                  <div>
-                    <Skeleton className="h-4 w-20 mb-2" />
-                    <div className="p-3 border rounded-lg">
-                      <Skeleton className="h-5 w-32 mb-1" />
-                      <Skeleton className="h-4 w-24 mb-1" />
-                      <Skeleton className="h-3 w-20" />
-                    </div>
-                  </div>
-                </div>
-                <Separator />
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <Skeleton className="h-4 w-16" />
-                    <Skeleton className="h-6 w-12" />
-                  </div>
-                  <div className="flex gap-2">
-                    <Skeleton className="h-6 w-20" />
-                    <Skeleton className="h-6 w-24" />
-                    <Skeleton className="h-6 w-18" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
       </Card>
     </div>
   );
@@ -1157,6 +1908,17 @@ export default function TournamentPairings({
 
   return (
     <div className="space-y-2">
+      
+      <ConfirmDialog
+        {...confirmDialog}
+        onOpenChange={(open) =>
+          setConfirmDialog((prev) => ({ ...prev, open }))
+        }
+      />
+
+      
+      <InputDialog />
+
       <Card className="">
         <div className="flex flex-col lg:flex-row lg:items-center bg-brown rounded-t-md lg:justify-between gap-4 p-3">
           <div>
@@ -1179,20 +1941,76 @@ export default function TournamentPairings({
             </div>
           </div>
 
-          
           {canEditPairings && (
             <div className="flex items-center gap-3 flex-wrap">
-              <Select value={currentRound.toString()} onValueChange={(value) => setCurrentRound(Number(value))}>
+              <Select
+                value={currentRound.toString()}
+                onValueChange={(value) => {
+                  const newRound = Number(value);
+
+                  if (isDraft && draftPairings.length > 0 && newRound !== currentRound) {
+                    setConfirmDialog({
+                      open: true,
+                      title: "Switch Rounds",
+                      description: "You have unsaved draft pairings. Switching rounds will clear your current draft. Continue?",
+                      onConfirm: () => {
+                        setDraftPairings([]);
+                        setUndoStack([]);
+                        setRedoStack([]);
+                        setMoveHistory([]);
+                        localStorage.removeItem(`pairings_draft_${tournament._id}_${currentRound}`);
+                        setLastSavedTimestamp(null);
+                        setIsDraft(false);
+                        setCurrentRound(newRound);
+                      },
+                      onCancel: () => {},
+                      variant: "destructive",
+                      confirmText: "Switch Anyway",
+                    });
+                    return;
+                  }
+
+                  setCurrentRound(newRound);
+                }}
+              >
                 <SelectTrigger className="w-24 h-8 bg-background">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Array.from({ length: tournament.prelim_rounds + tournament.elimination_rounds }, (_, i) => (
-                    <SelectItem key={i + 1} value={(i + 1).toString()}>
-                      Round {i + 1}
-                      {i + 1 <= tournament.prelim_rounds ? ' (Prelim)' : ' (Elim)'}
-                    </SelectItem>
-                  ))}
+                  {Array.from(
+                    { length: tournament.prelim_rounds + tournament.elimination_rounds },
+                    (_, i) => {
+                      const roundNumber = i + 1;
+                      const isElim = roundNumber > tournament.prelim_rounds;
+
+                      let label = `Round ${roundNumber}`;
+
+                      if (isElim) {
+                        const elimNames = [
+                          "Round of 64",
+                          "Round of 32",
+                          "Round of 16",
+                          "Octofinals",
+                          "Quarterfinals",
+                          "Semifinals",
+                          "Finals"
+                        ];
+
+                        const elimIndex = roundNumber - tournament.prelim_rounds - 1;
+                        const nameStartIndex = elimNames.length - tournament.elimination_rounds;
+
+                        const labelName = elimNames[nameStartIndex + elimIndex] ?? `Elim Round ${elimIndex + 1}`;
+                        label = labelName;
+                      }
+
+                      return (
+                        <SelectItem key={roundNumber} value={roundNumber.toString()}>
+                          {label}
+                        </SelectItem>
+                      );
+                    }
+                  )}
+
                 </SelectContent>
               </Select>
 
@@ -1292,32 +2110,31 @@ export default function TournamentPairings({
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-2">
-                  <Users className="h-5 w-5 text-blue-500" />
+                  <Users className="h-4 w-4 text-sky-500" />
                   <span className="text-sm font-medium">Debates</span>
                 </div>
-                <div className="text-2xl font-bold mt-1">{stats.totalDebates}</div>
+                <div className="text-xl text-primary font-bold mt-1">{stats.totalDebates}</div>
               </CardContent>
             </Card>
 
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-2">
-                  <Timer className="h-5 w-5 text-green-500" />
+                  <Timer className="h-4 w-4 text-green-500" />
                   <span className="text-sm font-medium">Bye Rounds</span>
                 </div>
-                <div className="text-2xl font-bold mt-1">{stats.byeRounds}</div>
+                <div className="text-xl text-primary font-bold mt-1">{stats.byeRounds}</div>
               </CardContent>
             </Card>
 
-            
             {canViewConflicts && (
               <Card>
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2">
-                    <AlertTriangle className="h-5 w-5 text-yellow-500" />
+                    <AlertTriangle className="h-4 w-4 text-yellow-500" />
                     <span className="text-sm font-medium">Conflicts</span>
                   </div>
-                  <div className="text-2xl font-bold mt-1">{stats.conflicts}</div>
+                  <div className="text-xl text-primary font-bold mt-1">{stats.conflicts}</div>
                 </CardContent>
               </Card>
             )}
@@ -1326,10 +2143,10 @@ export default function TournamentPairings({
               <Card>
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2">
-                    <AlertCircle className="h-5 w-5 text-red-500" />
+                    <AlertCircle className="h-4 w-4 text-red-500" />
                     <span className="text-sm font-medium">Errors</span>
                   </div>
-                  <div className="text-2xl font-bold mt-1">{stats.errors}</div>
+                  <div className="text-xl text-primary font-bold mt-1">{stats.errors}</div>
                 </CardContent>
               </Card>
             )}
@@ -1338,10 +2155,10 @@ export default function TournamentPairings({
               <Card>
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2">
-                    <Target className="h-5 w-5 text-purple-500" />
+                    <Target className="h-4 w-4 text-fuchsia-500" />
                     <span className="text-sm font-medium">Avg Quality</span>
                   </div>
-                  <div className="text-2xl font-bold mt-1">{stats.avgQuality.toFixed(1)}</div>
+                  <div className="text-xl text-primary font-bold mt-1">{stats.avgQuality.toFixed(1)}</div>
                 </CardContent>
               </Card>
             )}
@@ -1361,7 +2178,7 @@ export default function TournamentPairings({
                     size="sm"
                   >
                     <Undo2 className="h-4 w-4 mr-1" />
-                    Undo
+                    <span className="hidden md:block">Undo</span>
                   </Button>
 
                   <Button
@@ -1371,7 +2188,18 @@ export default function TournamentPairings({
                     size="sm"
                   >
                     <Redo2 className="h-4 w-4 mr-1" />
-                    Redo
+                    <span className="hidden md:block">Redo</span>
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    onClick={clearDraft}
+                    disabled={draftPairings.length === 0}
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    <span className="hidden md:block">Clear</span>
                   </Button>
 
                   {canViewHistory && moveHistory.length > 0 && (
@@ -1379,7 +2207,7 @@ export default function TournamentPairings({
                       <DialogTrigger asChild>
                         <Button variant="outline" size="sm">
                           <RefreshCw className="h-4 w-4 mr-1" />
-                          History ({moveHistory.length})
+                          <span className="hidden md:block">History ({moveHistory.length})</span>
                         </Button>
                       </DialogTrigger>
                       <DialogContent className="max-w-2xl">
@@ -1410,7 +2238,7 @@ export default function TournamentPairings({
                       <DialogTrigger asChild>
                         <Button variant="outline" size="sm">
                           <Info className="h-4 w-4 mr-1" />
-                          Stats
+                          <span className="hidden md:block">Stats</span>
                         </Button>
                       </DialogTrigger>
                       <DialogContent className="max-w-4xl">
@@ -1483,6 +2311,7 @@ export default function TournamentPairings({
           </Card>
         )}
 
+        
         {currentRound > 5 && tournament.prelim_rounds > 5 && (
           <div className="mx-4 mb-4">
             <Alert>
@@ -1497,285 +2326,40 @@ export default function TournamentPairings({
         )}
 
         
-        <div className="grid gap-4 lg:grid-cols-2 p-4">
-          {displayPairings.map((debate: any, index: number) => (
-            <Card
-              key={debate._id}
-              className={`transition-all duration-200 ${
-                selectedDebateIndex === index ? 'ring-2 ring-primary' : ''
-              }`}
-              onClick={() => setSelectedDebateIndex(selectedDebateIndex === index ? null : index)}
-            >
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    {editingRoom === debate._id ? (
-                      <Input
-                        value={debate.room_name || ''}
-                        onChange={(e) => updateRoomName(index, e.target.value)}
-                        onBlur={() => setEditingRoom(null)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') setEditingRoom(null);
-                          if (e.key === 'Escape') setEditingRoom(null);
-                        }}
-                        className="w-32"
-                        autoFocus
-                      />
-                    ) : (
-                      <CardTitle
-                        className={`cursor-pointer hover:text-primary ${
-                          canEditRoomNames && isDraft ? 'hover:underline' : ''
-                        }`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (canEditRoomNames && isDraft) {
-                            setEditingRoom(debate._id);
-                          }
-                        }}
-                      >
-                        {debate.room_name || `Room ${index + 1}`}
-                      </CardTitle>
-                    )}
-
-                    {debate.is_public_speaking && (
-                      <Badge variant="secondary" className="gap-1">
-                        <Timer className="h-3 w-3" />
-                        Public Speaking
-                      </Badge>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <ConflictBadge conflicts={debate.pairing_conflicts || debate.conflicts || []} />
-
-                    {debate.quality_score !== undefined && (
-                      <QualityBadge score={debate.quality_score} />
-                    )}
-
-                    {canEditPairings && !debate.is_public_speaking && isDraft && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          swapSides(index);
-                        }}
-                        title="Swap team sides"
-                      >
-                        <ArrowLeftRight className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </CardHeader>
-
-              <CardContent className="space-y-4">
-                {debate.is_public_speaking ? (
-                  <div>
-                    <div className="mb-2">
-                      <span className="text-sm font-medium text-muted-foreground">Public Speaking:</span>
-                    </div>
-                    <TeamCard
-                      team={debate.proposition_team}
-                      position="proposition"
-                      debateIndex={index}
-                    />
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <div className="mb-2 flex items-center gap-2">
-                        <span className="text-sm font-medium text-green-700">Proposition</span>
-                        <Badge variant="outline" className="text-green-700 border-green-700 text-xs">
-                          Prop
-                        </Badge>
-                      </div>
-                      <TeamCard
-                        team={debate.proposition_team}
-                        position="proposition"
-                        debateIndex={index}
-                      />
-                    </div>
-
-                    <div>
-                      <div className="mb-2 flex items-center gap-2">
-                        <span className="text-sm font-medium text-red-700">Opposition</span>
-                        <Badge variant="outline" className="text-red-700 border-red-700 text-xs">
-                          Opp
-                        </Badge>
-                      </div>
-                      <TeamCard
-                        team={debate.opposition_team}
-                        position="opposition"
-                        debateIndex={index}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {!debate.is_public_speaking && (
-                  <>
-                    <Separator />
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium">
-                          Judges ({debate.judge_details?.length || 0})
-                        </span>
-                        {canEditJudges && (
-                          <>
-                            {isDraft ? (
-                              <JudgeSelectionDialog
-                                debate={debate}
-                                debateIndex={index}
-                                onUpdate={(judges, headJudge) => updateDebateJudges(index, judges, headJudge)}
-                              />
-                            ) : (
-                              <Dialog>
-                                <DialogTrigger asChild>
-                                  <Button variant="ghost" size="sm">
-                                    <Edit3 className="h-3 w-3 mr-1" />
-                                    Edit
-                                  </Button>
-                                </DialogTrigger>
-                                <DialogContent>
-                                  <DialogHeader>
-                                    <DialogTitle>Edit Saved Pairing - {debate.room_name}</DialogTitle>
-                                  </DialogHeader>
-                                  <div className="space-y-4">
-                                    <div className="text-sm text-muted-foreground">
-                                      Update room name, judges, or other details for this saved pairing.
-                                    </div>
-
-                                    <div className="space-y-2">
-                                      <Label>Room Name</Label>
-                                      <Input
-                                        defaultValue={debate.room_name}
-                                        onChange={(e) => {
-                                          setTimeout(() => {
-                                            updateSavedPairing(debate._id, { room_name: e.target.value });
-                                          }, 1000);
-                                        }}
-                                      />
-                                    </div>
-
-                                    <div className="text-sm">
-                                      For advanced judge changes, please create new draft pairings.
-                                    </div>
-                                  </div>
-                                </DialogContent>
-                              </Dialog>
-                            )}
-                          </>
-                        )}
-                      </div>
-
-                      {debate.judge_details && debate.judge_details.length > 0 ? (
-                        <div className="flex flex-wrap gap-2">
-                          {debate.judge_details.map((judge: Judge) => (
-                            <Badge
-                              key={judge._id}
-                              variant={judge._id === debate.head_judge?._id ? "default" : "outline"}
-                              className="gap-1"
-                            >
-                              {judge.name}
-                              {judge._id === debate.head_judge?._id && (
-                                <Trophy className="h-3 w-3" />
-                              )}
-                            </Badge>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-sm text-muted-foreground">No judges assigned</div>
-                      )}
-                    </div>
-                  </>
-                )}
-
-                
-                {canViewConflicts && (debate.pairing_conflicts || debate.conflicts) &&
-                  (debate.pairing_conflicts || debate.conflicts).length > 0 && (
-                    <>
-                      <Separator />
-                      <div className="space-y-2">
-                        <div className="text-sm font-medium">Conflicts:</div>
-                        {(debate.pairing_conflicts || debate.conflicts).map((conflict: any, i: number) => (
-                          <Alert key={i} variant={conflict.severity === 'error' ? 'destructive' : 'default'}>
-                            <AlertTriangle className="h-4 w-4" />
-                            <AlertDescription className="text-xs">
-                              <span className="font-medium capitalize">{conflict.type.replace('_', ' ')}: </span>
-                              {conflict.description}
-                            </AlertDescription>
-                          </Alert>
-                        ))}
-                      </div>
-                    </>
-                  )}
-
-                {selectedDebateIndex === index && (
-                  <>
-                    <Separator />
-                    <div className="space-y-2 text-sm">
-                      <div className="font-medium">Debate Details:</div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <span className="text-muted-foreground">Status:</span>
-                          <span className="ml-2 capitalize">{debate.status}</span>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Type:</span>
-                          <span className="ml-2">
-                            {debate.is_public_speaking ? 'Public Speaking' : 'Debate'}
-                          </span>
-                        </div>
-                        {canViewQualityScores && debate.quality_score !== undefined && (
-                          <div>
-                            <span className="text-muted-foreground">Quality Score:</span>
-                            <span className="ml-2">{debate.quality_score.toFixed(1)}/100</span>
-                          </div>
-                        )}
-                        <div>
-                          <span className="text-muted-foreground">Round Type:</span>
-                          <span className="ml-2">
-                            {currentRound <= tournament.prelim_rounds ? 'Preliminary' : 'Elimination'}
-                          </span>
-                        </div>
-                      </div>
-
-                      {!debate.is_public_speaking && (debate.proposition_team || debate.opposition_team) && (
-                        <div className="mt-3 pt-2 border-t">
-                          <div className="font-medium mb-2">Team Performance:</div>
-                          <div className="grid grid-cols-2 gap-4 text-xs">
-                            {debate.proposition_team && (
-                              <div>
-                                <div className="font-medium text-green-700">{debate.proposition_team.name}</div>
-                                
-                                {canViewConflicts && (
-                                  <div className="text-muted-foreground">
-                                    Payment: {debate.proposition_team.payment_status}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                            {debate.opposition_team && (
-                              <div>
-                                <div className="font-medium text-red-700">{debate.opposition_team.name}</div>
-                                
-                                {canViewConflicts && (
-                                  <div className="text-muted-foreground">
-                                    Payment: {debate.opposition_team.payment_status}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+        <div className="p-4">
+          <PairingsTable
+            displayPairings={displayPairings}
+            isDraft={isDraft}
+            canEditPairings={canEditPairings}
+            canEditJudges={canEditJudges}
+            canEditRoomNames={canEditRoomNames}
+            canViewConflicts={canViewConflicts}
+            canViewQualityScores={canViewQualityScores}
+            canWithdrawTeams={canWithdrawTeams}
+            editingRoom={editingRoom}
+            setEditingRoom={setEditingRoom}
+            updateRoomName={updateRoomName}
+            swapSides={swapSides}
+            handleTeamDragStart={handleTeamDragStart}
+            handleTeamDragEnd={handleTeamDragEnd}
+            handleTeamDragOver={handleTeamDragOver}
+            handleTeamDragLeave={handleTeamDragLeave}
+            handleTeamDrop={handleTeamDrop}
+            dropZoneActive={dropZoneActive}
+            draggedTeam={draggedTeam}
+            handleTeamWithdrawal={handleTeamWithdrawal}
+            updateDebateJudges={updateDebateJudges}
+            handleJudgeDragStart={handleJudgeDragStart}
+            handleJudgeDragEnd={handleJudgeDragEnd}
+            handleJudgeDragOver={handleJudgeDragOver}
+            handleJudgeDragLeave={handleJudgeDragLeave}
+            handleJudgeDrop={handleJudgeDrop}
+            judgeDropZoneActive={judgeDropZoneActive}
+            pairingData={pairingData}
+            tournament={tournament}
+            updateSavedPairing={updateSavedPairing}
+            isRecalculating={isRecalculating}
+          />
         </div>
 
         
@@ -1876,12 +2460,14 @@ export default function TournamentPairings({
                   </div>
 
                   <div>
-                    <h4 className="font-medium mb-2">Mouse Controls</h4>
+                    <h4 className="font-medium mb-2">Table Controls</h4>
                     <div className="text-sm space-y-1">
-                      <div>• <strong>Drag & Drop</strong> - Move teams between positions</div>
+                      <div>• <strong>Drag Team Handle</strong> - Move teams between debates and sides</div>
+                      <div>• <strong>Drag Judge Badge</strong> - Move judges between debates</div>
                       <div>• <strong>Click Room Name</strong> - Edit room name</div>
                       <div>• <strong>Click Swap Button</strong> - Switch team sides</div>
-                      <div>• <strong>Click Card</strong> - Expand debate details</div>
+                      <div>• <strong>Click Edit Button</strong> - Modify judge assignments</div>
+                      <div>• <strong>Click Chevron</strong> - Expand/collapse debate details</div>
                     </div>
                   </div>
 
@@ -1891,6 +2477,16 @@ export default function TournamentPairings({
                       <div>🟢 <strong>Green (90+)</strong> - Excellent pairing</div>
                       <div>🟡 <strong>Yellow (70-89)</strong> - Good pairing</div>
                       <div>🔴 <strong>Red (&lt;70)</strong> - Needs attention</div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="font-medium mb-2">Drop Zones</h4>
+                    <div className="text-sm space-y-1">
+                      <div>• <strong>Team Cells</strong> - Drag teams to proposition/opposition positions</div>
+                      <div>• <strong>Judge Areas</strong> - Drag judges to assign them to debates</div>
+                      <div>• <strong>Empty Slots</strong> - Drop teams/judges where none are assigned</div>
+                      <div>• <strong>Visual Feedback</strong> - Blue highlights show valid drop targets</div>
                     </div>
                   </div>
                 </div>

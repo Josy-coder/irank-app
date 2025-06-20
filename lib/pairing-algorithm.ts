@@ -359,9 +359,6 @@ export class PairingAlgorithm {
     availableJudges.forEach(judge => judgeAssignments.set(judge._id, judge.assignments_this_tournament));
 
     return pairings.map((pairing) => {
-      if (pairing.is_bye_round) {
-        return pairing;
-      }
 
       const assignedJudges: Id<"users">[] = [];
       const conflicts: PairingConflict[] = [...pairing.conflicts];
@@ -442,9 +439,7 @@ export class PairingAlgorithm {
 
     return pairings.map(pairing => ({
       ...pairing,
-      room_name: pairing.is_bye_round
-        ? `Public Speaking ${roomCounter++}`
-        : `Room ${roomCounter++}`,
+      room_name: `Room ${roomCounter++}`,
     }));
   }
 

@@ -396,8 +396,49 @@ export const savePairings = mutation({
       )
       .first();
 
+    let roundId: Id<"rounds">;
+
     if (existingRound) {
-      throw new Error("Round already exists. Cannot overwrite saved pairings.");
+      const existingDebates = await ctx.db
+        .query("debates")
+        .withIndex("by_round_id", (q) => q.eq("round_id", existingRound._id))
+        .collect();
+
+      if (existingDebates.length > 0) {
+
+        const activeDebates = existingDebates.filter(d =>
+          d.status === "inProgress" || d.status === "completed"
+        );
+
+        if (activeDebates.length > 0) {
+          throw new Error(`Cannot overwrite pairings: ${activeDebates.length} debates are in progress or completed`);
+        }
+
+        if (tournament.status === "inProgress") {
+
+          if (existingRound.status === "inProgress") {
+            throw new Error("Cannot overwrite pairings: Round is currently in progress");
+          }
+        }
+
+        for (const debate of existingDebates) {
+          await ctx.db.delete(debate._id);
+        }
+      }
+
+      roundId = existingRound._id;
+    } else {
+
+      roundId = await ctx.db.insert("rounds", {
+        tournament_id: args.tournament_id,
+        round_number: args.round_number,
+        type: args.round_number <= tournament.prelim_rounds ? "preliminary" : "elimination",
+        status: "pending",
+        start_time: Date.now() + (24 * 60 * 60 * 1000),
+        end_time: Date.now() + (25 * 60 * 60 * 1000),
+        motion: "",
+        is_impromptu: false,
+      });
     }
 
     const validationErrors: string[] = [];
@@ -444,17 +485,6 @@ export const savePairings = mutation({
       throw new Error(`Validation failed: ${validationErrors.join(', ')}`);
     }
 
-    const roundId = await ctx.db.insert("rounds", {
-      tournament_id: args.tournament_id,
-      round_number: args.round_number,
-      type: args.round_number <= tournament.prelim_rounds ? "preliminary" : "elimination",
-      status: "pending",
-      start_time: Date.now() + (24 * 60 * 60 * 1000),
-      end_time: Date.now() + (25 * 60 * 60 * 1000),
-      motion: "",
-      is_impromptu: false,
-    });
-
     const debateIds: Id<"debates">[] = [];
 
     for (const pairing of args.pairings) {
@@ -485,7 +515,6 @@ export const savePairings = mutation({
       });
     } catch (error) {
       console.warn("Failed to send notifications:", error);
-
     }
 
     await ctx.runMutation(internal.functions.audit.createAuditLog, {
@@ -995,6 +1024,7 @@ export const generateMultiplePrelimRounds = mutation({
     token: v.string(),
     tournament_id: v.id("tournaments"),
     rounds_to_generate: v.number(),
+    round_type: v.optional(v.union(v.literal("preliminary"), v.literal("elimination")))
   },
   handler: async (ctx, args) => {
     const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
@@ -1010,29 +1040,82 @@ export const generateMultiplePrelimRounds = mutation({
       throw new Error("Tournament not found");
     }
 
-    if (args.rounds_to_generate > 5) {
-      throw new Error("Can only generate up to 5 rounds at once using fold system");
+    const roundType = args.round_type || "preliminary";
+
+    if (roundType === "preliminary") {
+      if (args.rounds_to_generate > 5) {
+        throw new Error("Can only generate up to 5 preliminary rounds at once using fold system");
+      }
+
+      if (args.rounds_to_generate > tournament.prelim_rounds) {
+        throw new Error(`Tournament only has ${tournament.prelim_rounds} preliminary rounds`);
+      }
+    } else if (roundType === "elimination") {
+
+      const prelimRounds = await ctx.db
+        .query("rounds")
+        .withIndex("by_tournament_id", (q) => q.eq("tournament_id", args.tournament_id))
+        .filter(q => q.eq(q.field("type"), "preliminary"))
+        .collect();
+
+      const incompletePrelims = prelimRounds.filter(r => r.status !== "completed");
+      if (incompletePrelims.length > 0) {
+        throw new Error(`Cannot generate elimination rounds: ${incompletePrelims.length} preliminary rounds are not yet completed`);
+      }
+
+      if (args.rounds_to_generate > tournament.elimination_rounds) {
+        throw new Error(`Tournament only has ${tournament.elimination_rounds} elimination rounds`);
+      }
+
+      const results = await ctx.db
+        .query("tournament_results")
+        .withIndex("by_tournament_id_result_type", (q) =>
+          q.eq("tournament_id", args.tournament_id).eq("result_type", "team")
+        )
+        .collect();
+
+      if (results.length === 0) {
+        throw new Error("Cannot generate elimination rounds: No team rankings available. Please calculate preliminary results first.");
+      }
     }
 
-    const existingRounds = await ctx.db
+    const existingDebates = await ctx.db
+      .query("debates")
+      .withIndex("by_tournament_id", (q) => q.eq("tournament_id", args.tournament_id))
+      .collect();
+
+    const rounds = await ctx.db
       .query("rounds")
       .withIndex("by_tournament_id", (q) => q.eq("tournament_id", args.tournament_id))
       .collect();
 
-    if (existingRounds.length > 0) {
-      throw new Error("Cannot generate multiple rounds when rounds already exist");
-    }
+    const targetRounds = rounds
+      .filter(r => r.type === roundType)
+      .sort((a, b) => a.round_number - b.round_number)
+      .slice(0, args.rounds_to_generate);
 
+    const roundsWithDebates = targetRounds.filter(round =>
+      existingDebates.some(debate => debate.round_id === round._id)
+    );
+
+    if (roundsWithDebates.length > 0) {
+      throw new Error(`Cannot generate multiple ${roundType} rounds: Some rounds already have pairings`);
+    }
 
     return {
       success: true,
-      message: `Ready to generate ${args.rounds_to_generate} preliminary rounds using fold system`,
+      message: `Ready to generate ${args.rounds_to_generate} ${roundType} rounds`,
       should_generate_on_frontend: true,
-      method: "fold",
+      method: roundType === "preliminary" && args.rounds_to_generate <= 5 ? "fold" : "swiss",
+      round_type: roundType,
+      target_rounds: targetRounds.map(r => ({
+        round_id: r._id,
+        round_number: r.round_number,
+        type: r.type
+      }))
     };
   },
 });
-
 function generatePairingRecommendations(
   qualityMetrics: any,
   totalTeams: number,
@@ -1211,5 +1294,44 @@ export const validatePairingConflicts = query({
     }
 
     return conflicts;
+  },
+});
+
+export const checkPreliminariesComplete = query({
+  args: {
+    token: v.string(),
+    tournament_id: v.id("tournaments"),
+  },
+  handler: async (ctx, args) => {
+    const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
+      token: args.token,
+    });
+
+    if (!sessionResult.valid) {
+      throw new Error("Authentication required");
+    }
+
+    const tournament = await ctx.db.get(args.tournament_id);
+    if (!tournament) {
+      throw new Error("Tournament not found");
+    }
+
+    const prelimRounds = await ctx.db
+      .query("rounds")
+      .withIndex("by_tournament_id", (q) => q.eq("tournament_id", args.tournament_id))
+      .filter(q => q.eq(q.field("type"), "preliminary"))
+      .collect();
+
+    const incompleteRounds = prelimRounds.filter(r => r.status !== "completed");
+
+    return {
+      total_prelims: tournament.prelim_rounds,
+      completed_prelims: prelimRounds.length - incompleteRounds.length,
+      all_complete: incompleteRounds.length === 0,
+      incomplete_rounds: incompleteRounds.map(r => ({
+        round_number: r.round_number,
+        status: r.status
+      }))
+    };
   },
 });

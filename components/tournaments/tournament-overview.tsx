@@ -371,6 +371,24 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
     }
 
     try {
+      let updatedSpeakingTimes = { ...tournament.speaking_times }
+
+      if (!hasInProgressOrCompletedRounds && structureEditForm.team_size !== tournament.team_size) {
+        const newTeamSize = structureEditForm.team_size
+        const currentTeamSize = tournament.team_size
+
+        if (newTeamSize > currentTeamSize) {
+          const lastSpeakerTime = updatedSpeakingTimes[`speaker${currentTeamSize}`] || 8
+          for (let i = currentTeamSize + 1; i <= newTeamSize; i++) {
+            updatedSpeakingTimes[`speaker${i}`] = lastSpeakerTime
+          }
+        } else if (newTeamSize < currentTeamSize) {
+          for (let i = newTeamSize + 1; i <= currentTeamSize; i++) {
+            delete updatedSpeakingTimes[`speaker${i}`]
+          }
+        }
+      }
+
       await updateTournament({
         admin_token: token,
         tournament_id: tournament._id,
@@ -389,7 +407,7 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
         judges_per_debate: !hasInProgressOrCompletedRounds ? structureEditForm.judges_per_debate : tournament.judges_per_debate,
         fee: !hasInProgressOrCompletedRounds ? (structureEditForm.fee ? parseInt(structureEditForm.fee) : undefined) : tournament.fee,
         fee_currency: !hasInProgressOrCompletedRounds ? structureEditForm.fee_currency : tournament.fee_currency,
-        speaking_times: tournament.speaking_times,
+        speaking_times: updatedSpeakingTimes,
         motions: {},
         image: tournament.image,
         status: tournament.status as any
