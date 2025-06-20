@@ -1,7 +1,7 @@
 import { mutation, query } from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
-import { Id, Doc } from "../_generated/dataModel";
+import { Doc, Id } from "../_generated/dataModel";
 
 export const getTournamentBallots = query({
   args: {
@@ -178,5 +178,31 @@ export const updateRecording = mutation({
     });
 
     return { success: true };
+  },
+});
+
+export const getSpeakerNames = query({
+  args: {
+    token: v.string(),
+    speaker_ids: v.array(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
+      token: args.token,
+    });
+
+    if (!sessionResult.valid || !sessionResult.user) {
+      throw new Error("Invalid session");
+    }
+
+    return await Promise.all(
+      args.speaker_ids.map(async (speakerId) => {
+        const user = await ctx.db.get(speakerId);
+        return {
+          id: speakerId,
+          name: user?.name ?? null,
+        };
+      })
+    );
   },
 });

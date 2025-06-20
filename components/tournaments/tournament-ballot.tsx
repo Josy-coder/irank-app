@@ -1,14 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, useMemo} from "react";
-import { useQuery, useMutation } from "convex/react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -23,38 +18,42 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from "@/components/ui/drawer";
 import { Progress } from "@/components/ui/progress";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  FileText,
-  Users,
-  Crown,
-  CheckCircle,
-  Clock,
+  AlertCircle,
   AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  BarChart3,
+  Brain,
+  CheckCircle,
+  CheckSquare, CircleCheck,
+  Clock,
+  Crown,
+  Download,
   Edit3,
   Eye,
-  Download,
-  Timer,
+  FileText,
+  Flag,
+  Grid,
+  Link2,
+  List,
+  Loader2,
   MessageSquare,
-  BarChart3,
   Mic,
   MicOff,
-  Play,
-  Pause,
-  Square,
-  ArrowUp,
-  ArrowDown,
-  Users2,
-  Brain,
-  Shield,
-  Target,
-  Loader2,
-  Flag,
-  CheckSquare,
-  Search,
-  Plus,
   Minus,
-  ArrowRight,
-  AlertCircle,
+  Pause,
+  Play,
+  Plus,
+  Search,
+  Send,
+  Shield,
+  Square,
+  Target,
+  Timer,
+  Users,
+  Users2
 } from "lucide-react";
 import { toast } from "sonner";
 import { Id } from "@/convex/_generated/dataModel";
@@ -115,34 +114,19 @@ const getPositionsForFormat = (format: string, teamSize: number) => {
 
 function BallotSkeleton() {
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="space-y-4">
       {Array.from({ length: 6 }).map((_, i) => (
-        <Card key={i}>
-          <CardHeader>
-            <div className="flex justify-between items-start">
-              <div className="space-y-2">
-                <Skeleton className="h-6 w-24" />
-                <Skeleton className="h-4 w-48" />
-              </div>
-              <Skeleton className="h-6 w-20" />
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex gap-2">
-              <Skeleton className="h-6 w-16" />
-              <Skeleton className="h-6 w-16" />
-              <Skeleton className="h-6 w-16" />
-            </div>
-            <Separator />
-            <div className="space-y-2">
-              <Skeleton className="h-4 w-20" />
-              <div className="flex gap-2">
-                <Skeleton className="h-6 w-24" />
-                <Skeleton className="h-6 w-28" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <div key={i} className="flex items-center space-x-4 p-4 border rounded-lg">
+          <Skeleton className="h-12 w-12 rounded" />
+          <div className="space-y-2 flex-1">
+            <Skeleton className="h-4 w-[250px]" />
+            <Skeleton className="h-4 w-[200px]" />
+          </div>
+          <div className="flex space-x-2">
+            <Skeleton className="h-8 w-16" />
+            <Skeleton className="h-8 w-16" />
+          </div>
+        </div>
       ))}
     </div>
   );
@@ -181,10 +165,9 @@ function calculateFinalScore(scores: Record<string, number>): number {
   return Math.round(finalScore * 10) / 10;
 }
 
-function DebateTimer({ debate, onUpdateDebate }: any) {
+function DebateTimer({ debate, onUpdateDebate, compact = false }: any) {
   const [currentTime, setCurrentTime] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
-  const [speakingTime, setSpeakingTime] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
@@ -202,7 +185,6 @@ function DebateTimer({ debate, onUpdateDebate }: any) {
     if (isRunning) {
       interval = setInterval(() => {
         setCurrentTime(prev => prev + 1);
-        setSpeakingTime(prev => prev + 1);
       }, 1000);
     }
     return () => clearInterval(interval);
@@ -247,19 +229,18 @@ function DebateTimer({ debate, onUpdateDebate }: any) {
         mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
       });
 
-      setAudioChunks([]);
+      const chunks: Blob[] = [];
+      setAudioChunks(chunks);
 
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
-          setAudioChunks(prev => [...prev, event.data]);
+          chunks.push(event.data);
         }
       };
 
       recorder.onstop = async () => {
-
-        const audioBlob = new Blob(audioChunks, { type: recorder.mimeType });
+        const audioBlob = new Blob(chunks, { type: recorder.mimeType });
         await uploadRecording(audioBlob);
-
         stream.getTracks().forEach(track => track.stop());
       };
 
@@ -274,7 +255,7 @@ function DebateTimer({ debate, onUpdateDebate }: any) {
       toast.error("Failed to start recording. Please check microphone permissions.");
     }
   };
-  
+
   const stopRecording = () => {
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
       mediaRecorder.stop();
@@ -286,7 +267,6 @@ function DebateTimer({ debate, onUpdateDebate }: any) {
   const uploadRecording = async (audioBlob: Blob) => {
     setIsUploading(true);
     try {
-
       const uploadUrl = await generateUploadUrl();
 
       const result = await fetch(uploadUrl, {
@@ -358,21 +338,47 @@ function DebateTimer({ debate, onUpdateDebate }: any) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const formatFileSize = (bytes: number) => {
-    const mb = bytes / (1024 * 1024);
-    return `${mb.toFixed(1)} MB`;
-  };
+  if (compact) {
+    return (
+      <div className="flex items-center gap-2">
+        <div className="text-sm font-mono font-bold">
+          {formatTime(currentTime)}
+        </div>
 
-  const estimatedSize = recordingDuration * 8 * 1024;
+        <div className="flex gap-1">
+          <Button
+            onClick={() => setIsRunning(!isRunning)}
+            variant={isRunning ? "destructive" : "default"}
+            size="sm"
+            className="h-5 w-5 p-0"
+          >
+            {isRunning ? <Pause className="h-2 w-2" /> : <Play className="h-2 w-2" />}
+          </Button>
+
+          <Button
+            onClick={() => {
+              setCurrentTime(0);
+              setIsRunning(false);
+            }}
+            variant="outline"
+            size="sm"
+            className="h-5 w-5 p-0"
+          >
+            <Square className="h-2 w-2" />
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <Card className="p-4">
       <div className="text-center space-y-4">
-        <div className="text-3xl font-bold font-mono">
+        <div className="text-2xl md:text-3xl font-bold font-mono">
           {formatTime(currentTime)}
         </div>
 
-        <div className="flex justify-center gap-2">
+        <div className="flex justify-center gap-2 flex-wrap">
           <Button
             onClick={() => setIsRunning(!isRunning)}
             variant={isRunning ? "destructive" : "default"}
@@ -384,7 +390,6 @@ function DebateTimer({ debate, onUpdateDebate }: any) {
           <Button
             onClick={() => {
               setCurrentTime(0);
-              setSpeakingTime(0);
               setIsRunning(false);
             }}
             variant="outline"
@@ -410,22 +415,18 @@ function DebateTimer({ debate, onUpdateDebate }: any) {
         </div>
 
         <div className="text-sm text-muted-foreground space-y-1">
-          <div>Speaking Time: {formatTime(speakingTime)}</div>
-          <div>Current Speaker: {debate.current_speaker || "None"}</div>
-          <div>POIs: {debate.poi_count || 0}</div>
 
           {isRecording && (
             <div className="text-red-600 font-medium flex items-center justify-center gap-1">
               <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse"></div>
               Recording: {formatTime(recordingDuration)}
-              <span className="text-xs">({formatFileSize(estimatedSize)})</span>
             </div>
           )}
 
-          {debate.recording && (
+          {debate.recording && audioUrl && (
             <div className="text-green-600 text-xs space-y-2">
-              <div className="flex items-center justify-center gap-1">
-                <CheckCircle className="h-3 w-3" />
+              <div className="flex items-center justify-center gap-1 text-sm">
+                <CircleCheck className="h-3 w-3" />
                 Recorded ({formatTime(debate.recording_duration || 0)})
               </div>
 
@@ -434,7 +435,7 @@ function DebateTimer({ debate, onUpdateDebate }: any) {
                   variant="ghost"
                   size="sm"
                   onClick={playRecording}
-                  disabled={isPlaying || !audioUrl}
+                  disabled={isPlaying}
                   className="h-6 px-2"
                 >
                   {isPlaying ? (
@@ -448,7 +449,6 @@ function DebateTimer({ debate, onUpdateDebate }: any) {
                   variant="ghost"
                   size="sm"
                   onClick={downloadRecording}
-                  disabled={!audioUrl}
                   className="h-6 px-2"
                 >
                   <Download className="h-3 w-3" />
@@ -461,11 +461,13 @@ function DebateTimer({ debate, onUpdateDebate }: any) {
     </Card>
   );
 }
+
 function ArgumentFlow({ debate, onAddArgument, onUpdateArgumentFlow }: any) {
   const [newArgument, setNewArgument] = useState("");
   const [argumentType, setArgumentType] = useState<"main" | "rebuttal" | "poi">("main");
-  const [selectedArgument, setSelectedArgument] = useState<string | null>(null);
-  const [argumentStrength, setArgumentStrength] = useState(5);
+  const [argumentStrength, setArgumentStrength] = useState(3);
+  const [linkingMode, setLinkingMode] = useState(false);
+  const [selectedArgument, setSelectedArgument] = useState<number | null>(null);
 
   const argumentFlow = debate.argument_flow || [];
 
@@ -484,20 +486,23 @@ function ArgumentFlow({ debate, onAddArgument, onUpdateArgumentFlow }: any) {
 
     onAddArgument(newArg);
     setNewArgument("");
-    setArgumentStrength(5);
+    setArgumentStrength(3);
   };
 
-  const handleArgumentConnection = (parentId: string, childId: string) => {
+  const handleArgumentConnection = (parentIndex: number, childIndex: number) => {
     const updatedFlow = argumentFlow.map((arg: any, index: number) => {
-      if (index === parseInt(parentId)) {
+      if (index === parentIndex) {
         return {
           ...arg,
-          rebutted_by: [...(arg.rebutted_by || []), childId]
+          rebutted_by: [...(arg.rebutted_by || []), childIndex.toString()]
         };
       }
       return arg;
     });
     onUpdateArgumentFlow(updatedFlow);
+    setLinkingMode(false);
+    setSelectedArgument(null);
+    toast.success("Arguments linked successfully");
   };
 
   const getArgumentColor = (type: string) => {
@@ -512,72 +517,96 @@ function ArgumentFlow({ debate, onAddArgument, onUpdateArgumentFlow }: any) {
   return (
     <Card className="p-4">
       <div className="space-y-4">
-        <h4 className="font-medium flex items-center gap-2">
-          <BarChart3 className="h-4 w-4" />
-          Argument Flow
-        </h4>
+        <div className="flex items-center justify-between">
+          <h4 className="font-medium flex items-center gap-2">
+            <BarChart3 className="h-4 w-4" />
+            Argument Flow
+          </h4>
+          <Button
+            size="sm"
+            variant={linkingMode ? "default" : "outline"}
+            onClick={() => {
+              setLinkingMode(!linkingMode);
+              setSelectedArgument(null);
+            }}
+          >
+            <Link2 className="h-3 w-3 mr-1" />
+            {linkingMode ? "Exit Linking" : "Link Arguments"}
+          </Button>
+        </div>
+
+        {linkingMode && (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Select two arguments to link them. First argument will be marked as rebutted by the second.
+            </AlertDescription>
+          </Alert>
+        )}
 
         <ScrollArea className="h-64">
           <div className="space-y-3">
             {argumentFlow.map((arg: any, index: number) => (
-              <div key={index} className={`p-3 border rounded-lg ${getArgumentColor(arg.type)}`}>
+              <div
+                key={index}
+                className={`p-3 border rounded-lg cursor-pointer transition-all ${getArgumentColor(arg.type)} ${
+                  linkingMode ? 'hover:shadow-md' : ''
+                } ${selectedArgument === index ? 'ring-2 ring-blue-500' : ''}`}
+                onClick={() => {
+                  if (linkingMode) {
+                    if (selectedArgument === null) {
+                      setSelectedArgument(index);
+                    } else if (selectedArgument !== index) {
+                      handleArgumentConnection(selectedArgument, index);
+                    }
+                  }
+                }}
+              >
                 <div className="flex justify-between items-start mb-2">
                   <Badge variant="outline" className="mb-1">
-                    {arg.type}
+                    {arg.type} #{index + 1}
                   </Badge>
-                  <div className="flex items-center gap-1">
-                    <span className="text-xs">Strength:</span>
+                  <div className="flex items-center gap-2">
                     <div className="flex">
                       {Array.from({ length: 5 }, (_, i) => (
                         <div
                           key={i}
                           className={`w-2 h-2 rounded-full mx-px ${
-                            i < (arg.strength || 3) ? 'bg-blue-500' : 'bg-gray-300'
+                            i < (arg.strength || 3) ? 'bg-green-500' : 'bg-gray-300'
                           }`}
                         />
                       ))}
                     </div>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(arg.timestamp).toLocaleTimeString()}
+                    </span>
                   </div>
                 </div>
 
                 <p className="text-sm mb-2">{arg.content}</p>
 
-                <div className="flex justify-between items-center text-xs text-muted-foreground">
-                  <span>Speaker {arg.speaker}</span>
-                  <span>{new Date(arg.timestamp).toLocaleTimeString()}</span>
+                <div className="text-xs text-muted-foreground">
+                  <span>Speaker: {arg.speaker || 'Unknown'}</span>
                 </div>
 
                 {arg.rebutted_by && arg.rebutted_by.length > 0 && (
                   <div className="mt-2 pt-2 border-t">
-                    <span className="text-xs text-muted-foreground">Rebutted by:</span>
-                    <div className="flex gap-1 mt-1">
+                    <span className="text-xs text-muted-foreground">Links to:</span>
+                    <div className="flex gap-1 mt-1 flex-wrap">
                       {arg.rebutted_by.map((rebuttal: string, idx: number) => (
                         <Badge key={idx} variant="secondary" className="text-xs">
-                          Arg {rebuttal}
+                          #{parseInt(rebuttal) + 1}
                         </Badge>
                       ))}
                     </div>
                   </div>
                 )}
 
-                <div className="flex gap-1 mt-2">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      if (selectedArgument && selectedArgument !== index.toString()) {
-                        handleArgumentConnection(selectedArgument, index.toString());
-                        setSelectedArgument(null);
-                      } else {
-                        setSelectedArgument(index.toString());
-                      }
-                    }}
-                    className={`h-6 text-xs ${selectedArgument === index.toString() ? 'bg-blue-100' : ''}`}
-                  >
-                    <ArrowRight className="h-3 w-3 mr-1" />
-                    {selectedArgument === index.toString() ? 'Selected' : 'Link'}
-                  </Button>
-                </div>
+                {linkingMode && selectedArgument === index && (
+                  <div className="mt-2 pt-2 border-t">
+                    <span className="text-xs font-medium text-blue-600">Selected - Choose target argument</span>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -623,7 +652,7 @@ function ArgumentFlow({ debate, onAddArgument, onUpdateArgumentFlow }: any) {
                   <div
                     key={i}
                     className={`w-3 h-3 rounded-full mx-px cursor-pointer ${
-                      i < argumentStrength ? 'bg-blue-500' : 'bg-gray-300'
+                      i < argumentStrength ? 'bg-green-500' : 'bg-gray-300'
                     }`}
                     onClick={() => setArgumentStrength(i + 1)}
                   />
@@ -730,7 +759,7 @@ function FactCheckingInterface({ debate, onAddFactCheck, userId }: any) {
             />
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button
               onClick={handleAIFactCheck}
               disabled={!selectedText.trim() || isFactChecking}
@@ -882,17 +911,21 @@ function CollaborativeNotes({ debate, userId, onUpdateNotes }: any) {
   const [notes, setNotes] = useState("");
   const [visibility, setVisibility] = useState<"private" | "judges" | "all">("judges");
 
+  const existingNotes = debate.shared_notes || [];
+
   const handleSaveNote = () => {
     if (!notes.trim()) return;
 
-    onUpdateNotes({
+    const newNote = {
       content: notes,
       author: userId,
       timestamp: Date.now(),
       visibility,
-    });
+    };
 
+    onUpdateNotes(newNote);
     setNotes("");
+    toast.success("Note added successfully");
   };
 
   return (
@@ -917,33 +950,48 @@ function CollaborativeNotes({ debate, userId, onUpdateNotes }: any) {
 
         <ScrollArea className="h-32">
           <div className="space-y-2">
-            {debate.shared_notes?.map((note: any, index: number) => (
+            {existingNotes.map((note: any, index: number) => (
               <div key={index} className="p-2 bg-muted rounded text-sm">
                 <div className="flex justify-between items-start mb-1">
                   <span className="font-medium">Judge {note.author}</span>
-                  <Badge variant="outline" className="text-xs">
-                    {note.visibility}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-xs">
+                      {note.visibility}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(note.timestamp).toLocaleTimeString()}
+                    </span>
+                  </div>
                 </div>
                 <p>{note.content}</p>
-                <div className="text-xs text-muted-foreground mt-1">
-                  {new Date(note.timestamp).toLocaleTimeString()}
-                </div>
               </div>
             ))}
+            {existingNotes.length === 0 && (
+              <div className="text-center text-muted-foreground text-sm py-4">
+                No notes yet. Add the first note below.
+              </div>
+            )}
           </div>
         </ScrollArea>
 
         <div className="space-y-2">
-          <Textarea
-            placeholder="Add a note..."
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={2}
-          />
-          <Button onClick={handleSaveNote} size="sm" className="w-full">
-            Save Note
-          </Button>
+          <div className="flex gap-2">
+            <Textarea
+              placeholder="Add a note..."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
+              className="flex-1"
+            />
+            <Button
+              onClick={handleSaveNote}
+              size="sm"
+              disabled={!notes.trim()}
+              className="self-end"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </div>
     </Card>
@@ -989,22 +1037,19 @@ function SpeakerPositionManager({ speakers, positions, onUpdatePositions, tourna
   return (
     <Card className="p-4">
       <div className="space-y-4">
-        <h4 className="font-medium">Speaker Positions</h4>
-        <div className="text-xs text-muted-foreground">
-          Format: {tournament.format || "WorldSchools"} • Team Size: {tournament.team_size || 6}
-        </div>
+        <h4 className="font-medium text-sm">Speaker Positions</h4>
 
         <div className="space-y-2">
           {speakers.map((speaker: any) => (
             <div key={speaker.id} className="flex items-center gap-2 p-2 border rounded">
               <div className="flex-1 min-w-0">
-                <p className="font-medium truncate">{speaker.name}</p>
-                <p className="text-sm text-muted-foreground">
+                <p className="font-medium text-sm truncate">{speaker.name}</p>
+                <p className="text-xs text-muted-foreground">
                   {availablePositions.find(p => p.id === speakerPositions[speaker.id])?.label || "Unassigned"}
                 </p>
               </div>
 
-              <div className="flex items-center gap-1">
+              <div className="hidden md:flex items-center gap-1">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1027,7 +1072,7 @@ function SpeakerPositionManager({ speakers, positions, onUpdatePositions, tourna
                 value={speakerPositions[speaker.id] || ""}
                 onValueChange={(value) => handlePositionChange(speaker.id, value)}
               >
-                <SelectTrigger className="w-40">
+                <SelectTrigger className="w-32 md:w-40">
                   <SelectValue placeholder="Select position" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1046,7 +1091,14 @@ function SpeakerPositionManager({ speakers, positions, onUpdatePositions, tourna
   );
 }
 
-function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament }: any) {
+export function useSpeakerNames(token: string, speakerIds: string[]) {
+  return useOffline(useQuery(api.functions.ballots.getSpeakerNames, {
+    token,
+    speaker_ids: speakerIds as Id<"users">[],
+  }), "speaker names");
+}
+
+function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, token }: any) {
   const { validateFeedback, checkBias, isValidating, isBiasChecking } = useGemini();
   const [scores, setScores] = useState<Record<string, Record<string, number>>>({});
   const [teamWinner, setTeamWinner] = useState<string>("");
@@ -1060,9 +1112,29 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament }
   const [isMobile, setIsMobile] = useState(false);
   const [argumentFlow, setArgumentFlow] = useState<any[]>(debate.argument_flow || []);
   const [factChecks, setFactChecks] = useState<any[]>(debate.fact_checks || []);
+  const [sharedNotes, setSharedNotes] = useState<any[]>(debate.shared_notes || []);
 
   const isHeadJudge = debate.head_judge_id === debate.my_submission?.judge_id;
   const canEdit = !ballot?.feedback_submitted;
+  const allSpeakers = [
+    ...(debate.proposition_team?.members || []),
+    ...(debate.opposition_team?.members || [])
+  ];
+
+  const speakerNamesQuery = useSpeakerNames(token, allSpeakers);
+  const speakerNamesMap = useMemo(() => {
+    if (!speakerNamesQuery) return {};
+    const map: Record<string, string> = {};
+    speakerNamesQuery.forEach((speaker) => {
+      map[speaker.id] = speaker.name || `Speaker ${speaker.id.slice(-4)}`;
+    });
+    return map;
+  }, [speakerNamesQuery]);
+
+  const getSpeakerName = (speakerId: string) => {
+    return speakerNamesMap[speakerId] || `Speaker ${speakerId.slice(-4)}`;
+  };
+
 
   useEffect(() => {
     const checkIsMobile = () => setIsMobile(window.innerWidth < 768);
@@ -1145,13 +1217,16 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament }
     setFactChecks(prev => [...prev, factCheck]);
   };
 
+  const handleUpdateNotes = (note: any) => {
+    setSharedNotes(prev => [...prev, note]);
+  };
+
   const handleSubmit = async (isFinal: boolean = false) => {
     if (!canEdit && !isHeadJudge) return;
 
     setIsSubmitting(true);
 
     try {
-
       const validation = await handleValidation();
 
       if (!validation.isAppropriate) {
@@ -1192,7 +1267,6 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament }
         speaker_scores: speakerScores,
         notes,
         is_final_submission: isFinal,
-
         fact_checks: factChecks.length > 0 ? factChecks : undefined,
         argument_flow: argumentFlow.length > 0 ? argumentFlow : undefined,
       });
@@ -1206,10 +1280,29 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament }
     }
   };
 
-  const allSpeakers = [
-    ...(debate.proposition_team?.members || []),
-    ...(debate.opposition_team?.members || [])
-  ];
+  const getAvailableTeams = () => {
+    const teams = [];
+
+    if (debate.proposition_team && (!debate.is_public_speaking || debate.proposition_team?.members?.length > 0)) {
+      teams.push({
+        id: debate.proposition_team._id,
+        name: debate.proposition_team.name,
+        position: "proposition"
+      });
+    }
+
+    if (debate.opposition_team && (!debate.is_public_speaking || debate.opposition_team?.members?.length > 0)) {
+      teams.push({
+        id: debate.opposition_team._id,
+        name: debate.opposition_team.name,
+        position: "opposition"
+      });
+    }
+
+    return teams;
+  };
+
+  const availableTeams = getAvailableTeams();
 
   if (isMobile) {
     return (
@@ -1220,46 +1313,57 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament }
             Open Judging Interface
           </Button>
         </DrawerTrigger>
-        <DrawerContent className="max-h-[95vh]">
+        <DrawerContent className="max-h-[80vh]">
           <DrawerHeader>
-            <DrawerTitle className="flex items-center gap-2">
-              <Edit3 className="h-5 w-5" />
-              Judge Ballot - {debate.room_name}
+            <DrawerTitle className="flex items-center justify-between gap-1">
+              <div className="flex items-center gap-1">
+              <Edit3 className="h-3 w-3" />
+              <span className="text-sm"> Judge Ballot - {debate.room_name} </span>
               {isHeadJudge && (
                 <Badge variant="default" className="ml-2">
                   <Crown className="h-3 w-3 mr-1" />
                   Head Judge
                 </Badge>
               )}
+              </div>
+              <DebateTimer debate={debate} onTimeUpdate={() => {}} compact={true} />
             </DrawerTitle>
           </DrawerHeader>
 
-          <ScrollArea className="flex-1 px-4">
-            <div className="space-y-6 pb-4">
 
+            <div className="space-y-6 pb-4">
               <Tabs defaultValue="scoring" className="w-full">
-                <TabsList className="grid w-full grid-cols-5">
+                <TabsList className="grid w-full grid-cols-4">
                   <TabsTrigger value="scoring">Scoring</TabsTrigger>
                   <TabsTrigger value="winner">Winner</TabsTrigger>
-                  <TabsTrigger value="tools">Tools</TabsTrigger>
                   <TabsTrigger value="arguments">Arguments</TabsTrigger>
                   <TabsTrigger value="notes">Notes</TabsTrigger>
                 </TabsList>
-
+                <ScrollArea className="flex-1 px-4">
                 <TabsContent value="scoring" className="space-y-4 mt-4">
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="p-3 border rounded-lg">
-                      <h4 className="font-medium text-green-700 text-sm mb-1">Proposition</h4>
-                      <p className="font-semibold text-sm">{debate.proposition_team?.name}</p>
-                    </div>
-                    <div className="p-3 border rounded-lg">
-                      <h4 className="font-medium text-red-700 text-sm mb-1">Opposition</h4>
-                      <p className="font-semibold text-sm">{debate.opposition_team?.name}</p>
-                    </div>
+                  
+                  <div className="grid grid-cols-2 gap-1">
+                    {debate.proposition_team && (
+                      <div className="p-2 border rounded-lg">
+                        <h4 className="font-medium text-green-700 text-xs mb-1">Proposition</h4>
+                        <p className="font-semibold text-sm">{debate.proposition_team?.name}</p>
+                      </div>
+                    )}
+                    {debate.opposition_team && (
+                      <div className="p-2 border rounded-lg">
+                        <h4 className="font-medium text-red-700 text-xs mb-1">Opposition</h4>
+                        <p className="font-semibold text-sm">{debate.opposition_team?.name}</p>
+                      </div>
+                    )}
                   </div>
+                  <SpeakerPositionManager
+                    speakers={allSpeakers.map((id) => ({ id, name: getSpeakerName(id) }))}
+                    positions={speakerPositions}
+                    onUpdatePositions={setSpeakerPositions}
+                    tournament={tournament}
+                  />
 
-
+                  
                   {allSpeakers.map((speakerId) => {
                     const speakerScores = scores[speakerId] || {};
                     const finalScore = calculateFinalScore(speakerScores);
@@ -1271,19 +1375,19 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament }
                     return (
                       <Card key={speakerId} className="p-3">
                         <div className="space-y-3">
-
+                          
                           <div className="flex justify-between items-center">
                             <div>
-                              <h4 className="font-medium">Speaker {speakerId}</h4>
+                              <h4 className="font-medium text-sm">{getSpeakerName(speakerId)}</h4>
                               <p className="text-xs text-muted-foreground">{team?.name}</p>
                             </div>
                             <div className="text-right">
-                              <div className="text-xl font-bold text-primary">{finalScore}</div>
+                              <div className="font-bold text-primary">{finalScore}</div>
                               <div className="text-xs text-muted-foreground">out of 30</div>
                             </div>
                           </div>
 
-
+                          
                           <div className="grid grid-cols-2 gap-3">
                             {SCORING_CATEGORIES.map((category) => {
                               const CategoryIcon = category.icon;
@@ -1310,7 +1414,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament }
                             })}
                           </div>
 
-
+                          
                           <div className="space-y-2">
                             <div className="flex items-center justify-between">
                               <Label className="text-xs">Feedback</Label>
@@ -1354,51 +1458,35 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament }
                 </TabsContent>
 
                 <TabsContent value="winner" className="space-y-4 mt-4">
-                  {canEdit && (
+                  {canEdit && availableTeams.length > 0 && (
                     <div className="space-y-4">
                       <Label className="text-base font-medium">Select Winning Team</Label>
                       <div className="space-y-3">
-                        <Button
-                          variant={teamWinner === debate.proposition_team?._id ? "default" : "outline"}
-                          onClick={() => {
-                            setTeamWinner(debate.proposition_team._id);
-                            setWinningPosition("proposition");
-                          }}
-                          className="w-full p-4 h-auto"
-                        >
-                          <div className="text-center">
-                            <div className="font-medium">{debate.proposition_team?.name}</div>
-                            <div className="text-sm opacity-75">Proposition</div>
-                          </div>
-                        </Button>
-                        <Button
-                          variant={teamWinner === debate.opposition_team?._id ? "default" : "outline"}
-                          onClick={() => {
-                            setTeamWinner(debate.opposition_team._id);
-                            setWinningPosition("opposition");
-                          }}
-                          className="w-full p-4 h-auto"
-                        >
-                          <div className="text-center">
-                            <div className="font-medium">{debate.opposition_team?.name}</div>
-                            <div className="text-sm opacity-75">Opposition</div>
-                          </div>
-                        </Button>
+                        {availableTeams.map((team) => (
+                          <Button
+                            key={team.id}
+                            variant={teamWinner === team.id ? "default" : "outline"}
+                            onClick={() => {
+                              setTeamWinner(team.id);
+                              setWinningPosition(team.position as "proposition" | "opposition");
+                            }}
+                            className="w-full p-4 h-auto"
+                          >
+                            <div className="text-center">
+                              <div className="font-medium">{team.name}</div>
+                              <div className="text-sm opacity-75 capitalize">{team.position}</div>
+                            </div>
+                          </Button>
+                        ))}
                       </div>
                     </div>
                   )}
-                </TabsContent>
-
-                <TabsContent value="tools" className="space-y-4 mt-4">
-                  <div className="grid gap-4">
-                    <DebateTimer debate={debate} onTimeUpdate={() => {}} />
-                    <SpeakerPositionManager
-                      speakers={allSpeakers.map(id => ({ id, name: `Speaker ${id}` }))}
-                      positions={speakerPositions}
-                      onUpdatePositions={setSpeakerPositions}
-                      tournament={tournament}
-                    />
-                  </div>
+                  {availableTeams.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <AlertTriangle className="h-8 w-8 mx-auto mb-2" />
+                      <p>No teams available for selection</p>
+                    </div>
+                  )}
                 </TabsContent>
 
                 <TabsContent value="arguments" className="space-y-4 mt-4">
@@ -1419,9 +1507,9 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament }
                 <TabsContent value="notes" className="space-y-4 mt-4">
                   <div className="space-y-4">
                     <CollaborativeNotes
-                      debate={debate}
+                      debate={{ ...debate, shared_notes: sharedNotes }}
                       userId={userId}
-                      onUpdateNotes={() => {}}
+                      onUpdateNotes={handleUpdateNotes}
                     />
 
                     <div className="space-y-2">
@@ -1436,9 +1524,10 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament }
                     </div>
                   </div>
                 </TabsContent>
+                </ScrollArea>
               </Tabs>
 
-
+              
               {validationResult && !validationResult.isAppropriate && (
                 <Alert variant="destructive">
                   <AlertTriangle className="h-4 w-4" />
@@ -1448,7 +1537,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament }
                 </Alert>
               )}
 
-
+              
               {canEdit && (
                 <div className="flex flex-col gap-2 pt-4">
                   <Button
@@ -1468,7 +1557,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament }
                   </Button>
                   <Button
                     onClick={() => handleSubmit(true)}
-                    disabled={isSubmitting || !teamWinner || isValidating}
+                    disabled={isSubmitting || !teamWinner || isValidating || availableTeams.length === 0}
                     className="w-full"
                   >
                     {isSubmitting ? "Submitting..." : "Submit Final Ballot"}
@@ -1484,8 +1573,9 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament }
                   </AlertDescription>
                 </Alert>
               )}
+
             </div>
-          </ScrollArea>
+
         </DrawerContent>
       </Drawer>
     );
@@ -1508,58 +1598,52 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament }
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
+            
             <div className="lg:col-span-2 space-y-6">
-
+              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="p-4 border rounded-lg">
-                  <h4 className="font-medium text-green-700 mb-2">Proposition</h4>
-                  <p className="font-semibold">{debate.proposition_team?.name}</p>
-                  <p className="text-sm text-muted-foreground">{debate.proposition_team?.school?.name}</p>
-                </div>
-                <div className="p-4 border rounded-lg">
-                  <h4 className="font-medium text-red-700 mb-2">Opposition</h4>
-                  <p className="font-semibold">{debate.opposition_team?.name}</p>
-                  <p className="text-sm text-muted-foreground">{debate.opposition_team?.school?.name}</p>
-                </div>
+                {debate.proposition_team && (
+                  <div className="p-4 border rounded-lg">
+                    <h4 className="font-medium text-green-700 mb-2">Proposition</h4>
+                    <p className="font-semibold">{debate.proposition_team?.name}</p>
+                    <p className="text-sm text-muted-foreground">{debate.proposition_team?.school?.name}</p>
+                  </div>
+                )}
+                {debate.opposition_team && (
+                  <div className="p-4 border rounded-lg">
+                    <h4 className="font-medium text-red-700 mb-2">Opposition</h4>
+                    <p className="font-semibold">{debate.opposition_team?.name}</p>
+                    <p className="text-sm text-muted-foreground">{debate.opposition_team?.school?.name}</p>
+                  </div>
+                )}
               </div>
 
-
-              {canEdit && (
+              
+              {canEdit && availableTeams.length > 0 && (
                 <div className="space-y-4">
                   <Label className="text-base font-medium">Winning Team</Label>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Button
-                      variant={teamWinner === debate.proposition_team?._id ? "default" : "outline"}
-                      onClick={() => {
-                        setTeamWinner(debate.proposition_team._id);
-                        setWinningPosition("proposition");
-                      }}
-                      className="p-4 h-auto"
-                    >
-                      <div className="text-center">
-                        <div className="font-medium">{debate.proposition_team?.name}</div>
-                        <div className="text-sm opacity-75">Proposition</div>
-                      </div>
-                    </Button>
-                    <Button
-                      variant={teamWinner === debate.opposition_team?._id ? "default" : "outline"}
-                      onClick={() => {
-                        setTeamWinner(debate.opposition_team._id);
-                        setWinningPosition("opposition");
-                      }}
-                      className="p-4 h-auto"
-                    >
-                      <div className="text-center">
-                        <div className="font-medium">{debate.opposition_team?.name}</div>
-                        <div className="text-sm opacity-75">Opposition</div>
-                      </div>
-                    </Button>
+                    {availableTeams.map((team) => (
+                      <Button
+                        key={team.id}
+                        variant={teamWinner === team.id ? "default" : "outline"}
+                        onClick={() => {
+                          setTeamWinner(team.id);
+                          setWinningPosition(team.position as "proposition" | "opposition");
+                        }}
+                        className="p-4 h-auto"
+                      >
+                        <div className="text-center">
+                          <div className="font-medium">{team.name}</div>
+                          <div className="text-sm opacity-75 capitalize">{team.position}</div>
+                        </div>
+                      </Button>
+                    ))}
                   </div>
                 </div>
               )}
 
-
+              
               <div className="space-y-6">
                 <Label className="text-base font-medium">Speaker Scores</Label>
 
@@ -1576,7 +1660,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament }
                       <div className="space-y-4">
                         <div className="flex justify-between items-center">
                           <div>
-                            <h4 className="font-medium">Speaker {speakerId}</h4>
+                            <h4 className="font-medium">{getSpeakerName(speakerId)}</h4>
                             <p className="text-sm text-muted-foreground">{team?.name}</p>
                             <p className="text-xs text-muted-foreground">
                               Position: {speakerPositions[speakerId] || "Unassigned"}
@@ -1589,7 +1673,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament }
                           </div>
                         </div>
 
-
+                        
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                           {SCORING_CATEGORIES.map((category) => {
                             const CategoryIcon = category.icon;
@@ -1621,7 +1705,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament }
                           })}
                         </div>
 
-
+                        
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
                             <Label className="text-sm">Comments & Feedback</Label>
@@ -1672,7 +1756,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament }
                 })}
               </div>
 
-
+              
               <div className="space-y-2">
                 <Label className="text-base font-medium">Judge Notes</Label>
                 <Textarea
@@ -1680,14 +1764,25 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament }
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   disabled={!canEdit}
-                  rows={4}
+                  rows={2}
+                />
+                <FactCheckingInterface
+                  debate={{ ...debate, fact_checks: factChecks }}
+                  onAddFactCheck={handleAddFactCheck}
+                  userId={userId}
                 />
               </div>
             </div>
 
-
+            
             <div className="space-y-4">
               <DebateTimer debate={debate} onTimeUpdate={() => {}} />
+              <SpeakerPositionManager
+                speakers={allSpeakers.map((id) => ({ id, name: getSpeakerName(id) }))}
+                positions={speakerPositions}
+                onUpdatePositions={setSpeakerPositions}
+                tournament={tournament}
+              />
 
               <ArgumentFlow
                 debate={{ ...debate, argument_flow: argumentFlow }}
@@ -1695,28 +1790,17 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament }
                 onUpdateArgumentFlow={handleUpdateArgumentFlow}
               />
 
-              <FactCheckingInterface
-                debate={{ ...debate, fact_checks: factChecks }}
-                onAddFactCheck={handleAddFactCheck}
-                userId={userId}
-              />
-
               <CollaborativeNotes
-                debate={debate}
+                debate={{ ...debate, shared_notes: sharedNotes }}
                 userId={userId}
-                onUpdateNotes={() => {}}
+                onUpdateNotes={handleUpdateNotes}
               />
 
-              <SpeakerPositionManager
-                speakers={allSpeakers.map(id => ({ id, name: `Speaker ${id}` }))}
-                positions={speakerPositions}
-                onUpdatePositions={setSpeakerPositions}
-                tournament={tournament}
-              />
+
             </div>
           </div>
 
-
+          
           {validationResult && (
             <div className="mt-6">
               {validationResult.isAppropriate ? (
@@ -1754,7 +1838,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament }
             </div>
           )}
 
-
+          
           {canEdit && (
             <div className="flex gap-2 pt-6 border-t">
               <Button
@@ -1773,7 +1857,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament }
               </Button>
               <Button
                 onClick={() => handleSubmit(true)}
-                disabled={isSubmitting || !teamWinner || isValidating}
+                disabled={isSubmitting || !teamWinner || isValidating || availableTeams.length === 0}
               >
                 {isSubmitting ? "Submitting..." : "Submit Final Ballot"}
               </Button>
@@ -1803,24 +1887,168 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament }
   );
 }
 
+function BallotRow({ debate, userRole, userId, onViewDetails, onEditBallot, onFlagBallot, onUnflagBallot }: any) {
+  const StatusIcon = getDebateStatusIcon(debate.status);
+  const canEdit = userRole === "admin" || (userRole === "volunteer" && debate.judges?.some((j: any) => j._id === userId));
+  const canSeeDetails = debate.can_see_full_details || userRole === "admin" || userRole === "volunteer";
+  const canFlag = userRole === "admin" || (userRole === "volunteer" && debate.judges?.some((j: any) => j._id === userId));
+  const hasFlaggedBallots = debate.has_flagged_ballots || debate.judges?.some((j: any) => j.is_flagged);
+
+  return (
+    <TableRow className="hover:bg-muted/50">
+      <TableCell>
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="font-medium">{debate.room_name}</span>
+            <Badge variant="secondary" className={getDebateStatusColor(debate.status)}>
+              <StatusIcon className="h-3 w-3 mr-1" />
+              {debate.status}
+            </Badge>
+            {hasFlaggedBallots && (
+              <Badge variant="destructive" className="gap-1">
+                <Flag className="h-3 w-3" />
+                Flagged
+              </Badge>
+            )}
+          </div>
+          <div className="text-sm text-muted-foreground">
+            Round {debate.round?.round_number} • {debate.round?.type}
+          </div>
+        </div>
+      </TableCell>
+
+      <TableCell>
+        <div className="space-y-2">
+          {debate.proposition_team && (
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-green-700 border-green-700 text-xs">Prop</Badge>
+              <span className="text-sm">{debate.proposition_team.name}</span>
+              {debate.winning_team_id === debate.proposition_team._id && (
+                <Crown className="h-3 w-3 text-yellow-500" />
+              )}
+            </div>
+          )}
+          {debate.opposition_team && (
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-red-700 border-red-700 text-xs">Opp</Badge>
+              <span className="text-sm">{debate.opposition_team.name}</span>
+              {debate.winning_team_id === debate.opposition_team._id && (
+                <Crown className="h-3 w-3 text-yellow-500" />
+              )}
+            </div>
+          )}
+        </div>
+      </TableCell>
+
+      <TableCell>
+        <div className="flex flex-wrap gap-1">
+          {debate.judges?.slice(0, 3).map((judge: any) => (
+            <Badge
+              key={judge._id}
+              variant={judge.is_head_judge ? "default" : "outline"}
+              className={`text-xs ${judge.is_flagged ? 'border-red-500 text-red-600' : ''}`}
+            >
+              {judge.name?.split(' ')[0] || `J${judge._id.slice(-3)}`}
+              {judge.is_head_judge && <Crown className="h-2 w-2 ml-1" />}
+              {userRole === "admin" && (
+                <div className="ml-1">
+                  {judge.is_final ? (
+                    <CheckCircle className="h-2 w-2 text-green-500" />
+                  ) : judge.has_submitted ? (
+                    <Clock className="h-2 w-2 text-yellow-500" />
+                  ) : (
+                    <div className="h-2 w-2 rounded-full bg-gray-300" />
+                  )}
+                </div>
+              )}
+            </Badge>
+          ))}
+          {debate.judges?.length > 3 && (
+            <Badge variant="outline" className="text-xs">
+              +{debate.judges.length - 3}
+            </Badge>
+          )}
+        </div>
+      </TableCell>
+
+      <TableCell>
+        {userRole === "admin" && debate.judges?.length > 0 && (
+          <div className="space-y-1">
+            <div className="text-sm">
+              {debate.final_submissions_count || 0}/{debate.judges.length}
+            </div>
+            <Progress
+              value={debate.judges.length > 0 ? (debate.final_submissions_count || 0) / debate.judges.length * 100 : 0}
+              className="w-16 h-1"
+            />
+          </div>
+        )}
+      </TableCell>
+
+      <TableCell>
+        <div className="flex items-center gap-1">
+          {debate.recording && (
+            <Button variant="ghost" size="sm" title="Download Recording" className="h-6 w-6 p-0">
+              <Download className="h-3 w-3" />
+            </Button>
+          )}
+          {canFlag && debate.status !== "pending" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onFlagBallot(debate)}
+              title="Flag Ballot"
+              className={`h-6 w-6 p-0 ${hasFlaggedBallots ? "text-red-600" : ""}`}
+            >
+              <Flag className="h-3 w-3" />
+            </Button>
+          )}
+          {userRole === "admin" && hasFlaggedBallots && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onUnflagBallot(debate)}
+              title="Unflag Ballot"
+              className="h-6 w-6 p-0 text-green-600"
+            >
+              <CheckCircle className="h-3 w-3" />
+            </Button>
+          )}
+          {canEdit && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onEditBallot(debate)}
+              title="Edit Ballot"
+              className="h-6 w-6 p-0"
+            >
+              <Edit3 className="h-3 w-3" />
+            </Button>
+          )}
+          {canSeeDetails && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onViewDetails(debate)}
+              title="View Details"
+              className="h-6 w-6 p-0"
+            >
+              <Eye className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+}
+
 function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot, onFlagBallot, onUnflagBallot }: any) {
   const StatusIcon = getDebateStatusIcon(debate.status);
-
-  const canEdit = userRole === "admin" ||
-    (userRole === "volunteer" && debate.judges?.some((j: any) => j._id === userId));
-
+  const canEdit = userRole === "admin" || (userRole === "volunteer" && debate.judges?.some((j: any) => j._id === userId));
   const canSeeDetails = debate.can_see_full_details || userRole === "admin" || userRole === "volunteer";
-
-  const canFlag = userRole === "admin" ||
-    (userRole === "volunteer" && debate.judges?.some((j: any) => j._id === userId));
-
-  const submissionProgress = debate.judges?.length > 0
-    ? (debate.final_submissions_count || 0) / debate.judges.length * 100
-    : 0;
-
-  const hasFlaggedBallots = debate.has_flagged_ballots ||
-    debate.judges?.some((j: any) => j.is_flagged);
-
+  const canFlag = userRole === "admin" || (userRole === "volunteer" && debate.judges?.some((j: any) => j._id === userId));
+  const hasFlaggedBallots = debate.has_flagged_ballots || debate.judges?.some((j: any) => j.is_flagged);
+  const submissionProgress = debate.judges?.length > 0 ? (debate.final_submissions_count || 0) / debate.judges.length * 100 : 0;
 
   return (
     <Card className="hover:shadow-md transition-all duration-200">
@@ -1845,29 +2073,27 @@ function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot, onF
                 <Download className="h-4 w-4" />
               </Button>
             )}
-            {canFlag && (
-              <>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onFlagBallot(debate)}
-                  title="Flag Ballot"
-                  className={hasFlaggedBallots ? "text-red-600" : ""}
-                >
-                  <Flag className="h-4 w-4" />
-                </Button>
-                {userRole === "admin" && hasFlaggedBallots && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onUnflagBallot(debate)}
-                    title="Unflag Ballot"
-                    className="text-green-600"
-                  >
-                    <CheckCircle className="h-4 w-4" />
-                  </Button>
-                )}
-              </>
+            {canFlag && debate.status !== "pending" && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onFlagBallot(debate)}
+                title="Flag Ballot"
+                className={hasFlaggedBallots ? "text-red-600" : ""}
+              >
+                <Flag className="h-4 w-4" />
+              </Button>
+            )}
+            {userRole === "admin" && hasFlaggedBallots && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onUnflagBallot(debate)}
+                title="Unflag Ballot"
+                className="text-green-600"
+              >
+                <CheckCircle className="h-4 w-4" />
+              </Button>
             )}
             {canEdit && (
               <Button variant="ghost" size="sm" onClick={() => onEditBallot(debate)} title="Edit Ballot">
@@ -1884,42 +2110,46 @@ function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot, onF
       </CardHeader>
 
       <CardContent className="space-y-4">
-
+        
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="text-green-700 border-green-700">Prop</Badge>
-            <div className="min-w-0 flex-1">
-              <p className="font-medium truncate">{debate.proposition_team?.name}</p>
-              {debate.proposition_team?.school && (
-                <p className="text-xs text-muted-foreground truncate">
-                  {debate.proposition_team.school.name}
-                </p>
+          {debate.proposition_team && (
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-green-700 border-green-700">Prop</Badge>
+              <div className="min-w-0 flex-1">
+                <p className="font-medium truncate">{debate.proposition_team.name}</p>
+                {debate.proposition_team.school && (
+                  <p className="text-xs text-muted-foreground truncate">
+                    {debate.proposition_team.school.name}
+                  </p>
+                )}
+              </div>
+              {debate.winning_team_id === debate.proposition_team._id && (
+                <Crown className="h-4 w-4 text-yellow-500" />
               )}
             </div>
-            {debate.winning_team_id === debate.proposition_team?._id && (
-              <Crown className="h-4 w-4 text-yellow-500" />
-            )}
-          </div>
+          )}
 
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="text-red-700 border-red-700">Opp</Badge>
-            <div className="min-w-0 flex-1">
-              <p className="font-medium truncate">{debate.opposition_team?.name}</p>
-              {debate.opposition_team?.school && (
-                <p className="text-xs text-muted-foreground truncate">
-                  {debate.opposition_team.school.name}
-                </p>
+          {debate.opposition_team && (
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-red-700 border-red-700">Opp</Badge>
+              <div className="min-w-0 flex-1">
+                <p className="font-medium truncate">{debate.opposition_team.name}</p>
+                {debate.opposition_team.school && (
+                  <p className="text-xs text-muted-foreground truncate">
+                    {debate.opposition_team.school.name}
+                  </p>
+                )}
+              </div>
+              {debate.winning_team_id === debate.opposition_team._id && (
+                <Crown className="h-4 w-4 text-yellow-500" />
               )}
             </div>
-            {debate.winning_team_id === debate.opposition_team?._id && (
-              <Crown className="h-4 w-4 text-yellow-500" />
-            )}
-          </div>
+          )}
         </div>
 
         <Separator />
 
-
+        
         <div>
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium">
@@ -1939,7 +2169,7 @@ function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot, onF
                 variant={judge.is_head_judge ? "default" : "outline"}
                 className={`gap-1 ${judge.is_flagged ? 'border-red-500 text-red-600' : ''}`}
               >
-                {judge.name || `Judge ${judge._id}`}
+                {judge.name?.split(' ')[0] || `Judge ${judge._id.slice(-3)}`}
                 {judge.is_head_judge && <Crown className="h-3 w-3" />}
                 {judge.is_flagged && <Flag className="h-3 w-3" />}
                 {userRole === "admin" && (
@@ -1958,13 +2188,13 @@ function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot, onF
           </div>
         </div>
 
-
+        
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <span>Round {debate.round?.round_number}</span>
           <span>{debate.round?.type}</span>
         </div>
 
-
+        
         {userRole === "admin" && debate.judges?.length > 0 && (
           <div className="space-y-1">
             <div className="flex justify-between text-xs">
@@ -1975,7 +2205,7 @@ function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot, onF
           </div>
         )}
 
-
+        
         {debate.winning_team_id && canSeeDetails && (
           <div className="pt-2 border-t">
             <div className="flex items-center justify-between text-sm">
@@ -1999,7 +2229,7 @@ function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot, onF
           </div>
         )}
 
-
+        
         {(debate.fact_checks?.length > 0 || debate.argument_flow?.length > 0) && canSeeDetails && (
           <div className="pt-2 border-t">
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
@@ -2042,7 +2272,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
         </DialogHeader>
 
         <div className="space-y-6">
-
+          
           {ballotDetails.length > 1 && (
             <div className="flex items-center gap-2">
               <Label>View Judge:</Label>
@@ -2063,7 +2293,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
             </div>
           )}
 
-
+          
           <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
             <div className="text-center">
               <h3 className="font-semibold text-green-700">{debate?.proposition_team?.name}</h3>
@@ -2087,7 +2317,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
             </div>
           </div>
 
-
+          
           {debate?.fact_checks?.length > 0 && (
             <Card>
               <CardHeader>
@@ -2134,7 +2364,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
             </Card>
           )}
 
-
+          
           {debate?.argument_flow?.length > 0 && (
             <Card>
               <CardHeader>
@@ -2153,7 +2383,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
                     }`}>
                       <div className="flex justify-between items-start mb-2">
                         <Badge variant="outline" className="capitalize">
-                          {arg.type}
+                          {arg.type} #{idx + 1}
                         </Badge>
                         <div className="flex items-center gap-2">
                           {arg.strength && (
@@ -2162,7 +2392,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
                                 <div
                                   key={i}
                                   className={`w-2 h-2 rounded-full mx-px ${
-                                    i < arg.strength ? 'bg-blue-500' : 'bg-gray-300'
+                                    i < arg.strength ? 'bg-sky-500' : 'bg-gray-300'
                                   }`}
                                 />
                               ))}
@@ -2179,11 +2409,11 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
                       </p>
                       {arg.rebutted_by?.length > 0 && (
                         <div className="mt-2 pt-2 border-t">
-                          <span className="text-xs text-muted-foreground">Rebutted by:</span>
+                          <span className="text-xs text-muted-foreground">Links to:</span>
                           <div className="flex gap-1 mt-1">
                             {arg.rebutted_by.map((rebuttal: string, i: number) => (
                               <Badge key={i} variant="secondary" className="text-xs">
-                                Arg {rebuttal}
+                                #{parseInt(rebuttal) + 1}
                               </Badge>
                             ))}
                           </div>
@@ -2196,7 +2426,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
             </Card>
           )}
 
-
+          
           {filteredBallots.map((ballot: any, index: number) => (
             <Card key={ballot.judge_id || index}>
               <CardHeader>
@@ -2223,7 +2453,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-
+                
                 <div className="p-3 bg-muted rounded-lg">
                   <div className="flex items-center justify-between">
                     <span className="font-medium">Decision:</span>
@@ -2245,7 +2475,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
                   </div>
                 </div>
 
-
+                
                 <div>
                   <h4 className="font-medium mb-3">Speaker Scores</h4>
                   <div className="space-y-3">
@@ -2262,7 +2492,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
                           </div>
                         </div>
 
-
+                        
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
                           {SCORING_CATEGORIES.map((category) => {
                             const CategoryIcon = category.icon;
@@ -2280,7 +2510,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
                           })}
                         </div>
 
-
+                        
                         {score.comments && (
                           <div className="pt-3 border-t">
                             <Label className="text-xs font-medium">Judge Feedback:</Label>
@@ -2288,7 +2518,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
                           </div>
                         )}
 
-
+                        
                         {score.bias_detected && (
                           <div className="pt-3 border-t">
                             <Alert variant="destructive">
@@ -2307,7 +2537,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
                   </div>
                 </div>
 
-
+                
                 {ballot.notes && (
                   <div className="pt-3 border-t">
                     <Label className="text-sm font-medium">Judge Notes:</Label>
@@ -2315,7 +2545,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
                   </div>
                 )}
 
-
+                
                 <div className="text-xs text-muted-foreground pt-2 border-t">
                   Submitted: {new Date(ballot.submitted_at).toLocaleString()}
                 </div>
@@ -2417,6 +2647,8 @@ export default function TournamentBallots({
   const [showDetailsDialog, setShowDetailsDialog] = useState(false);
   const [showFlagDialog, setShowFlagDialog] = useState(false);
   const [flaggingDebate, setFlaggingDebate] = useState<any>(null);
+  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
+  const [isMobile, setIsMobile] = useState(false);
 
   let queryFn: any;
   let queryArgs: any;
@@ -2455,6 +2687,19 @@ export default function TournamentBallots({
 
   const ballots = useMemo(() => ballotsQuery || [], [ballotsQuery]);
   const isLoading = ballotsQuery === undefined;
+
+  useEffect(() => {
+    const checkIsMobile = () => setIsMobile(window.innerWidth < 768);
+    checkIsMobile();
+    window.addEventListener('resize', checkIsMobile);
+    return () => window.removeEventListener('resize', checkIsMobile);
+  }, []);
+
+  useEffect(() => {
+    if (!isMobile && ballots.length > 20) {
+      setViewMode("table");
+    }
+  }, [isMobile, ballots.length]);
 
   const availableRounds = useMemo<number[]>(() => {
     if (!ballots || ballots.length === 0) return [];
@@ -2498,8 +2743,6 @@ export default function TournamentBallots({
   const handleSubmitFlag = async (debate: any, reason: string) => {
     try {
       if (userRole === "admin") {
-
-
         const submissions = debate.judges?.filter((j: any) => j.has_submitted);
         if (!submissions || submissions.length === 0) {
           toast.error("No submitted ballots found to flag");
@@ -2512,7 +2755,6 @@ export default function TournamentBallots({
           reason,
         });
       } else if (userRole === "volunteer") {
-
         const mySubmission = debate.my_submission;
         if (!mySubmission) {
           toast.error("No ballot found to flag");
@@ -2609,7 +2851,7 @@ export default function TournamentBallots({
         <div className="flex bg-brown rounded-t-md flex-col lg:flex-row lg:items-center lg:justify-between gap-4 p-3">
           <div>
             <h2 className="text-xl text-white font-bold">Tournament Ballots</h2>
-            <div className="flex items-center gap-4 text-xs text-gray-300">
+            <div className="flex items-center gap-4 text-xs text-gray-300 flex-wrap">
               <span>{filteredBallots.length} debates</span>
               {userRole === "volunteer" && <span>Your judging assignments</span>}
               {userRole === "admin" && (
@@ -2629,6 +2871,28 @@ export default function TournamentBallots({
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
+            
+            {!isMobile && (
+              <div className="flex border rounded-md bg-background">
+                <Button
+                  variant={viewMode === "cards" ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setViewMode("cards")}
+                  className="h-8 px-3 rounded-r-none"
+                >
+                  <Grid className="h-3 w-3" />
+                </Button>
+                <Button
+                  variant={viewMode === "table" ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setViewMode("table")}
+                  className="h-8 px-3 rounded-l-none"
+                >
+                  <List className="h-3 w-3" />
+                </Button>
+              </div>
+            )}
+
             <Select value={selectedRound?.toString() || "all"} onValueChange={(value) => setSelectedRound(value === "all" ? null : Number(value))}>
               <SelectTrigger className="w-32 h-8 bg-background">
                 <SelectValue placeholder="All Rounds" />
@@ -2673,36 +2937,62 @@ export default function TournamentBallots({
               </p>
             </div>
           ) : (
-            <div className="grid gap-4 lg:grid-cols-2">
-              {filteredBallots.map((debate: any) => (
-                <BallotCard
-                  key={debate._id}
-                  debate={debate}
-                  userRole={userRole}
-                  token={token}
-                  userId={userId}
-                  onViewDetails={handleViewDetails}
-                  onEditBallot={handleEditBallot}
-                  onFlagBallot={handleFlagBallot}
-                  onUnflagBallot={handleUnflagBallot}
-                />
-              ))}
-            </div>
+            <>
+              
+              {viewMode === "table" && !isMobile ? (
+                <div className="border rounded-md">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Debate</TableHead>
+                        <TableHead>Teams</TableHead>
+                        <TableHead>Judges</TableHead>
+                        {userRole === "admin" && <TableHead>Progress</TableHead>}
+                        <TableHead className="w-24">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredBallots.map((debate: any) => (
+                        <BallotRow
+                          key={debate._id}
+                          debate={debate}
+                          userRole={userRole}
+                          userId={userId}
+                          onViewDetails={handleViewDetails}
+                          onEditBallot={handleEditBallot}
+                          onFlagBallot={handleFlagBallot}
+                          onUnflagBallot={handleUnflagBallot}
+                        />
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                /* Card view for mobile and desktop with fewer items */
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {filteredBallots.map((debate: any) => (
+                    <BallotCard
+                      key={debate._id}
+                      debate={debate}
+                      userRole={userRole}
+                      userId={userId}
+                      onViewDetails={handleViewDetails}
+                      onEditBallot={handleEditBallot}
+                      onFlagBallot={handleFlagBallot}
+                      onUnflagBallot={handleUnflagBallot}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       </Card>
+
+      
       {showJudgingInterface && judgingDebate && (
         <Dialog open={showJudgingInterface} onOpenChange={setShowJudgingInterface}>
-          <DialogContent className="max-w-7xl max-h-[95vh] overflow-hidden">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Edit3 className="h-5 w-5" />
-                Judging Interface
-                <Badge variant="outline" className="ml-2">
-                  {tournament.format || "WorldSchools"} Format
-                </Badge>
-              </DialogTitle>
-            </DialogHeader>
+          <DialogContent className="max-w-7xl max-h-[90vh] overflow-hidden">
             <div className="overflow-y-auto max-h-[85vh]">
               <JudgingInterface
                 debate={judgingDebate}
