@@ -154,11 +154,11 @@ function CopyableField({ value, type = "text" }: { value: string, type?: "email"
   }
 
   return (
-    <div className="flex items-center gap-2 group">
+    <div className="flex items-center gap-1 group">
       <span
         className={cn(
           "truncate",
-          (type === "email" || type === "phone") && "cursor-pointer hover:text-primary hover:underline"
+          (type === "email" || type === "phone") && "cursor-pointer text-xs hover:text-primary hover:underline"
         )}
         onClick={handleClick}
       >
@@ -167,7 +167,7 @@ function CopyableField({ value, type = "text" }: { value: string, type?: "email"
       <Button
         variant="ghost"
         size="sm"
-        className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+        className="h-4 w-4 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
         onClick={handleCopy}
       >
         {copied ? (
@@ -687,7 +687,17 @@ export default function UsersPage() {
 
                               <div className="flex flex-col gap-1 min-w-0">
                                 <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                  <Badge variant="secondary" className={`w-fit ${getRoleColor(currentUser.role)}`}>
+                                  <Badge variant="secondary" className={`w-fit ${
+                                      currentUser.role.includes('admin')
+                                          ? currentUser.role === 'admin'
+                                              ? 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-100'
+                                              : 'bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-100'
+                                          : currentUser.role === 'student'
+                                              ? 'bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-100'
+                                              : currentUser.role === 'volunteer'
+                                                  ? 'bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900 dark:text-fuchsia-100'
+                                                  : 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-100'
+                                  }`}>
                                     <div className="flex items-center gap-1">
                                       <RoleIcon className="h-4 w-4" />
                                       <span className="capitalize">{currentUser.role.replace('_', ' ')}</span>

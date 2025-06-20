@@ -24,13 +24,13 @@ import {
 import {
   Upload,
   Download,
-  CheckCircle,
   XCircle,
   AlertCircle,
   Copy,
   Check,
   Eye,
-  EyeOff
+  EyeOff,
+  CircleCheck
 } from "lucide-react"
 import { toast } from "sonner"
 import { useMutation } from "convex/react"
@@ -168,20 +168,27 @@ Bob Wilson,bob@example.com,+250781234569,male,Grade 12,What is your favorite boo
             let processedUserData = { ...userData }
 
             if (userData.role === "school_admin" || selectedTemplate === "school_admin") {
+
+              const {
+                school_name, school_type, country, province, district, sector, cell, village,
+                contact_name, contact_email, contact_phone,
+                ...cleanUserData
+              } = userData
+
               processedUserData = {
-                ...userData,
+                ...cleanUserData,
                 school_data: {
-                  name: userData.school_name,
-                  type: userData.school_type,
-                  country: userData.country || "RW",
-                  province: userData.province,
-                  district: userData.district,
-                  sector: userData.sector,
-                  cell: userData.cell,
-                  village: userData.village,
-                  contact_name: userData.contact_name,
-                  contact_email: userData.contact_email,
-                  contact_phone: userData.contact_phone,
+                  name: school_name,
+                  type: school_type,
+                  country: country || "RW",
+                  province: province,
+                  district: district,
+                  sector: sector,
+                  cell: cell,
+                  village: village,
+                  contact_name: contact_name,
+                  contact_email: contact_email,
+                  contact_phone: contact_phone,
                 }
               }
             }
@@ -427,7 +434,7 @@ Bob Wilson,bob@example.com,+250781234569,male,Grade 12,What is your favorite boo
 
     return (
         <Dialog open={open} onOpenChange={handleClose}>
-          <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="sm:max-w-3xl max-h-[70vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Import Results</DialogTitle>
               <DialogDescription>
@@ -439,7 +446,7 @@ Bob Wilson,bob@example.com,+250781234569,male,Grade 12,What is your favorite boo
               <div className="flex justify-between items-center">
                 <div className="flex gap-4">
                   <Badge variant="secondary" className="text-green-600 bg-green-100">
-                    <CheckCircle className="h-4 w-4 mr-1" />
+                    <CircleCheck className="h-4 w-4 mr-1" />
                     {successfulResults.length} Success
                   </Badge>
                   <Badge variant="secondary" className="text-red-600 bg-red-100">
@@ -472,13 +479,13 @@ Bob Wilson,bob@example.com,+250781234569,male,Grade 12,What is your favorite boo
                           <div key={index} className="border rounded-lg p-4 space-y-3">
                             <div className="flex items-center justify-between">
                               <div>
-                                <h4 className="font-medium">{result.userData.name}</h4>
-                                <p className="text-sm text-muted-foreground">
+                                <h4 className="text-sm font-medium">{result.userData.name}</h4>
+                                <p className="text-xs text-muted-foreground">
                                   {result.userData.email} • {userType === "admin" ? result.userData.role : result.userData.grade}
                                 </p>
                               </div>
                               <Badge className="bg-green-100 text-green-700">
-                                <CheckCircle className="h-4 w-4 mr-1" />
+                                <CircleCheck className="h-4 w-4 mr-1" />
                                 Created
                               </Badge>
                             </div>
@@ -555,8 +562,8 @@ Bob Wilson,bob@example.com,+250781234569,male,Grade 12,What is your favorite boo
                           <div key={index} className="border rounded-lg p-4">
                             <div className="flex items-center justify-between">
                               <div>
-                                <h4 className="font-medium">{result.userData.name}</h4>
-                                <p className="text-sm text-muted-foreground">
+                                <h4 className="text-sm font-medium">{result.userData.name}</h4>
+                                <p className="text-xs text-muted-foreground">
                                   {result.userData.email} • {userType === "admin" ? result.userData.role : result.userData.grade}
                                 </p>
                               </div>
@@ -566,9 +573,11 @@ Bob Wilson,bob@example.com,+250781234569,male,Grade 12,What is your favorite boo
                               </Badge>
                             </div>
                             {result.error && (
-                                <Alert className="mt-3">
+                                <Alert className="mt-3 text-sm">
+                                  <div className="flex items-center justify-start gap-2">
                                   <AlertCircle className="h-4 w-4" />
-                                  <AlertDescription>{result.error}</AlertDescription>
+                                  <AlertDescription className="text-xs">{result.error}</AlertDescription>
+                                  </div>
                                 </Alert>
                             )}
                           </div>
@@ -638,7 +647,7 @@ Bob Wilson,bob@example.com,+250781234569,male,Grade 12,What is your favorite boo
 
               {uploadedFile && (
                   <Alert>
-                    <CheckCircle className="h-4 w-4" />
+                    <CircleCheck className="h-4 w-4" />
                     <AlertDescription>
                       File &#34;{uploadedFile.name}&#34; selected. Ready to import.
                     </AlertDescription>
