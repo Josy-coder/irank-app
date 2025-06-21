@@ -16,14 +16,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from "@/components/ui/drawer";
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   AlertCircle,
   AlertTriangle,
-  ArrowDown,
-  ArrowUp,
   BarChart3,
   Brain,
   CheckCircle,
@@ -171,7 +169,7 @@ function DebateTimer({ debate, onUpdateDebate, compact = false }: any) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
-  const [audioChunks, setAudioChunks] = useState<Blob[]>([]);
+  const [, setAudioChunks] = useState<Blob[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -907,18 +905,23 @@ function FactCheckingInterface({ debate, onAddFactCheck, userId }: any) {
   );
 }
 
-function CollaborativeNotes({ debate, userId, onUpdateNotes }: any) {
+function CollaborativeNotes({ debate, userId, onUpdateNotes, token }: any) {
   const [notes, setNotes] = useState("");
   const [visibility, setVisibility] = useState<"private" | "judges" | "all">("judges");
+  const userNames = useNames(token, [userId]);
 
   const existingNotes = debate.shared_notes || [];
 
   const handleSaveNote = () => {
     if (!notes.trim()) return;
+    const nameEntry = userNames?.find((entry) => entry.id === userId);
+    const fullName = nameEntry?.name ?? "Judge";
+    const userName = fullName.trim().split(" ")[0];
 
     const newNote = {
       content: notes,
       author: userId,
+      name: userName,
       timestamp: Date.now(),
       visibility,
     };
@@ -937,7 +940,7 @@ function CollaborativeNotes({ debate, userId, onUpdateNotes }: any) {
             Collaborative Notes
           </h4>
           <Select value={visibility} onValueChange={(value: any) => setVisibility(value)}>
-            <SelectTrigger className="w-24">
+            <SelectTrigger className="w-20 text-sm">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -953,7 +956,7 @@ function CollaborativeNotes({ debate, userId, onUpdateNotes }: any) {
             {existingNotes.map((note: any, index: number) => (
               <div key={index} className="p-2 bg-muted rounded text-sm">
                 <div className="flex justify-between items-start mb-1">
-                  <span className="font-medium">Judge {note.author}</span>
+                  <span className="font-medium text-sm">Judge {note.name}</span>
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className="text-xs">
                       {note.visibility}
@@ -963,11 +966,11 @@ function CollaborativeNotes({ debate, userId, onUpdateNotes }: any) {
                     </span>
                   </div>
                 </div>
-                <p>{note.content}</p>
+                <p className="text-xs">{note.content}</p>
               </div>
             ))}
             {existingNotes.length === 0 && (
-              <div className="text-center text-muted-foreground text-sm py-4">
+              <div className="text-center text-muted-foreground text-xs py-4">
                 No notes yet. Add the first note below.
               </div>
             )}
@@ -998,18 +1001,25 @@ function CollaborativeNotes({ debate, userId, onUpdateNotes }: any) {
   );
 }
 
-function SpeakerPositionManager({ speakers, positions, onUpdatePositions, tournament }: any) {
+function SpeakerPositionManager({ speakers, positions, onUpdatePositions, tournament, debate, teamId, teamName }: any) {
   const [speakerPositions, setSpeakerPositions] = useState<Record<string, string>>(positions || {});
 
   const availablePositions = useMemo(() => {
-    return getPositionsForFormat(tournament.format || "WorldSchools", tournament.team_size || 6);
-  }, [tournament.format, tournament.team_size]);
+    const basePositions = getPositionsForFormat(tournament.format || "WorldSchools", tournament.team_size || 6);
+    return basePositions.filter(pos => {
+      if (teamId === debate.proposition_team?._id) {
+        return pos.team === "prop";
+      } else {
+        return pos.team === "opp";
+      }
+    });
+  }, [tournament.format, tournament.team_size, teamId]);
 
   const handlePositionChange = (speakerId: string, newPosition: string) => {
     const newPositions = { ...speakerPositions };
 
     const currentSpeakerWithPosition = Object.keys(newPositions).find(
-      id => newPositions[id] === newPosition
+      id => newPositions[id] === newPosition && speakers.some((s: any) => s.id === id)
     );
 
     if (currentSpeakerWithPosition) {
@@ -1021,59 +1031,27 @@ function SpeakerPositionManager({ speakers, positions, onUpdatePositions, tourna
     onUpdatePositions(newPositions);
   };
 
-  const movePosition = (speakerId: string, direction: "up" | "down") => {
-    const currentPosition = speakerPositions[speakerId];
-    const currentIndex = availablePositions.findIndex(p => p.id === currentPosition);
-
-    if (currentIndex === -1) return;
-
-    const newIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
-    if (newIndex < 0 || newIndex >= availablePositions.length) return;
-
-    const newPosition = availablePositions[newIndex];
-    handlePositionChange(speakerId, newPosition.id);
-  };
-
   return (
-    <Card className="p-4">
-      <div className="space-y-4">
-        <h4 className="font-medium text-sm">Speaker Positions</h4>
+    <Card className="p-3">
+      <div className="space-y-3">
+        <h4 className="font-medium text-sm">{teamName} - Speaker Positions</h4>
 
         <div className="space-y-2">
           {speakers.map((speaker: any) => (
-            <div key={speaker.id} className="flex items-center gap-2 p-2 border rounded">
+            <div key={speaker.id} className="flex items-center gap-2 p-2 border rounded text-sm">
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm truncate">{speaker.name}</p>
+                <p className="font-medium truncate">{speaker.name}</p>
                 <p className="text-xs text-muted-foreground">
                   {availablePositions.find(p => p.id === speakerPositions[speaker.id])?.label || "Unassigned"}
                 </p>
-              </div>
-
-              <div className="hidden md:flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => movePosition(speaker.id, "up")}
-                  disabled={speakerPositions[speaker.id] === availablePositions[0]?.id}
-                >
-                  <ArrowUp className="h-3 w-3" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => movePosition(speaker.id, "down")}
-                  disabled={speakerPositions[speaker.id] === availablePositions[availablePositions.length - 1]?.id}
-                >
-                  <ArrowDown className="h-3 w-3" />
-                </Button>
               </div>
 
               <Select
                 value={speakerPositions[speaker.id] || ""}
                 onValueChange={(value) => handlePositionChange(speaker.id, value)}
               >
-                <SelectTrigger className="w-32 md:w-40">
-                  <SelectValue placeholder="Select position" />
+                <SelectTrigger className="w-28">
+                  <SelectValue placeholder="Position" />
                 </SelectTrigger>
                 <SelectContent>
                   {availablePositions.map((position) => (
@@ -1091,10 +1069,11 @@ function SpeakerPositionManager({ speakers, positions, onUpdatePositions, tourna
   );
 }
 
-export function useSpeakerNames(token: string, speakerIds: string[]) {
-  return useOffline(useQuery(api.functions.ballots.getSpeakerNames, {
+
+export function useNames(token: string, userIds: string[]) {
+  return useOffline(useQuery(api.functions.ballots.getUserNames, {
     token,
-    speaker_ids: speakerIds as Id<"users">[],
+    user_ids: userIds as Id<"users">[],
   }), "speaker names");
 }
 
@@ -1105,6 +1084,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
   const [winningPosition, setWinningPosition] = useState<"proposition" | "opposition" | "">("");
   const [notes, setNotes] = useState("");
   const [speakerComments, setSpeakerComments] = useState<Record<string, string>>({});
+  const [teamComments, setTeamComments] = useState<Record<string, string>>({});
   const [speakerPositions, setSpeakerPositions] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationResult, setValidationResult] = useState<any>(null);
@@ -1113,19 +1093,21 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
   const [argumentFlow, setArgumentFlow] = useState<any[]>(debate.argument_flow || []);
   const [factChecks, setFactChecks] = useState<any[]>(debate.fact_checks || []);
   const [sharedNotes, setSharedNotes] = useState<any[]>(debate.shared_notes || []);
+  const [selectedTeam, setSelectedTeam] = useState<string>("");
 
   const isHeadJudge = debate.head_judge_id === debate.my_submission?.judge_id;
   const canEdit = !ballot?.feedback_submitted;
+
   const allSpeakers = [
     ...(debate.proposition_team?.members || []),
     ...(debate.opposition_team?.members || [])
   ];
 
-  const speakerNamesQuery = useSpeakerNames(token, allSpeakers);
+  const speakerNamesQuery = useNames(token, allSpeakers);
   const speakerNamesMap = useMemo(() => {
     if (!speakerNamesQuery) return {};
     const map: Record<string, string> = {};
-    speakerNamesQuery.forEach((speaker) => {
+    speakerNamesQuery.forEach((speaker: any) => {
       map[speaker.id] = speaker.name || `Speaker ${speaker.id.slice(-4)}`;
     });
     return map;
@@ -1135,6 +1117,21 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
     return speakerNamesMap[speakerId] || `Speaker ${speakerId.slice(-4)}`;
   };
 
+  const getSelectedTeamSpeakers = () => {
+    if (!selectedTeam) return [];
+    if (selectedTeam === debate.proposition_team?._id) {
+      return debate.proposition_team?.members || [];
+    } else if (selectedTeam === debate.opposition_team?._id) {
+      return debate.opposition_team?.members || [];
+    }
+    return [];
+  };
+
+  useEffect(() => {
+    if (!selectedTeam && debate.proposition_team) {
+      setSelectedTeam(debate.proposition_team._id);
+    }
+  }, [debate, selectedTeam]);
 
   useEffect(() => {
     const checkIsMobile = () => setIsMobile(window.innerWidth < 768);
@@ -1168,7 +1165,6 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
 
   const updateScore = (speakerId: string, category: string, value: number) => {
     if (!canEdit) return;
-
     setScores(prev => ({
       ...prev,
       [speakerId]: {
@@ -1180,10 +1176,17 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
 
   const updateSpeakerComment = (speakerId: string, comment: string) => {
     if (!canEdit) return;
-
     setSpeakerComments(prev => ({
       ...prev,
       [speakerId]: comment
+    }));
+  };
+
+  const updateTeamComment = (teamId: string, comment: string) => {
+    if (!canEdit) return;
+    setTeamComments(prev => ({
+      ...prev,
+      [teamId]: comment
     }));
   };
 
@@ -1282,7 +1285,6 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
 
   const getAvailableTeams = () => {
     const teams = [];
-
     if (debate.proposition_team && (!debate.is_public_speaking || debate.proposition_team?.members?.length > 0)) {
       teams.push({
         id: debate.proposition_team._id,
@@ -1290,7 +1292,6 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
         position: "proposition"
       });
     }
-
     if (debate.opposition_team && (!debate.is_public_speaking || debate.opposition_team?.members?.length > 0)) {
       teams.push({
         id: debate.opposition_team._id,
@@ -1298,163 +1299,221 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
         position: "opposition"
       });
     }
-
     return teams;
   };
 
   const availableTeams = getAvailableTeams();
+  const selectedTeamSpeakers = getSelectedTeamSpeakers();
+  const selectedTeamData = availableTeams.find(t => t.id === selectedTeam);
 
   if (isMobile) {
     return (
-      <Drawer>
-        <DrawerTrigger asChild>
-          <Button className="w-full">
-            <Edit3 className="h-4 w-4 mr-2" />
-            Open Judging Interface
-          </Button>
-        </DrawerTrigger>
-        <DrawerContent className="max-h-[80vh]">
+      <DrawerContent>
+        <div className="flex flex-col h-[95vh]">
           <DrawerHeader>
             <DrawerTitle className="flex items-center justify-between gap-1">
               <div className="flex items-center gap-1">
-              <Edit3 className="h-3 w-3" />
-              <span className="text-sm"> Judge Ballot - {debate.room_name} </span>
-              {isHeadJudge && (
-                <Badge variant="default" className="ml-2">
-                  <Crown className="h-3 w-3 mr-1" />
-                  Head Judge
-                </Badge>
-              )}
+                <Edit3 className="h-3 w-3" />
+                <span className="text-sm">Judge Ballot - {debate.room_name}</span>
+                {isHeadJudge && (
+                  <Badge variant="default" className="ml-2">
+                    <Crown className="h-3 w-3 mr-1" />
+                    Head Judge
+                  </Badge>
+                )}
               </div>
               <DebateTimer debate={debate} onTimeUpdate={() => {}} compact={true} />
             </DrawerTitle>
           </DrawerHeader>
 
-
-            <div className="space-y-6 pb-4">
-              <Tabs defaultValue="scoring" className="w-full">
+          <div className="flex-1 overflow-hidden">
+            <Tabs defaultValue="scoring" className="w-full h-full flex flex-col">
+              <div className="px-4 pb-2">
                 <TabsList className="grid w-full grid-cols-4">
                   <TabsTrigger value="scoring">Scoring</TabsTrigger>
-                  <TabsTrigger value="winner">Winner</TabsTrigger>
                   <TabsTrigger value="arguments">Arguments</TabsTrigger>
                   <TabsTrigger value="notes">Notes</TabsTrigger>
+                  <TabsTrigger value="winner">Winner</TabsTrigger>
                 </TabsList>
-                <ScrollArea className="flex-1 px-4">
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-4">
                 <TabsContent value="scoring" className="space-y-4 mt-4">
                   
-                  <div className="grid grid-cols-2 gap-1">
-                    {debate.proposition_team && (
-                      <div className="p-2 border rounded-lg">
-                        <h4 className="font-medium text-green-700 text-xs mb-1">Proposition</h4>
-                        <p className="font-semibold text-sm">{debate.proposition_team?.name}</p>
-                      </div>
-                    )}
-                    {debate.opposition_team && (
-                      <div className="p-2 border rounded-lg">
-                        <h4 className="font-medium text-red-700 text-xs mb-1">Opposition</h4>
-                        <p className="font-semibold text-sm">{debate.opposition_team?.name}</p>
-                      </div>
-                    )}
+                  <div className="grid grid-cols-2 gap-2">
+                    {availableTeams.map((team) => (
+                      <Button
+                        key={team.id}
+                        variant={selectedTeam === team.id ? "default" : "outline"}
+                        onClick={() => setSelectedTeam(team.id)}
+                        className="p-3 h-auto"
+                      >
+                        <div className="text-center">
+                          <h4 className={`font-medium text-xs mb-1 ${
+                            team.position === "proposition" ? "text-green-700" : "text-red-700"
+                          }`}>
+                            {team.position === "proposition" ? "Proposition" : "Opposition"}
+                          </h4>
+                          <p className="font-semibold text-sm">{team.name}</p>
+                        </div>
+                      </Button>
+                    ))}
                   </div>
-                  <SpeakerPositionManager
-                    speakers={allSpeakers.map((id) => ({ id, name: getSpeakerName(id) }))}
-                    positions={speakerPositions}
-                    onUpdatePositions={setSpeakerPositions}
-                    tournament={tournament}
-                  />
 
                   
-                  {allSpeakers.map((speakerId) => {
-                    const speakerScores = scores[speakerId] || {};
-                    const finalScore = calculateFinalScore(speakerScores);
-                    const team = debate.proposition_team?.members.includes(speakerId)
-                      ? debate.proposition_team
-                      : debate.opposition_team;
-                    const biasResult = biasCheckResults[speakerId];
+                  {selectedTeam && selectedTeamData && (
+                    <>
+                      
+                      <SpeakerPositionManager
+                        speakers={selectedTeamSpeakers.map((id: string) => ({ id, name: getSpeakerName(id) }))}
+                        positions={speakerPositions}
+                        onUpdatePositions={setSpeakerPositions}
+                        tournament={tournament}
+                        debate={debate}
+                        teamId={selectedTeam}
+                        teamName={selectedTeamData.name}
+                      />
 
-                    return (
-                      <Card key={speakerId} className="p-3">
-                        <div className="space-y-3">
-                          
-                          <div className="flex justify-between items-center">
-                            <div>
-                              <h4 className="font-medium text-sm">{getSpeakerName(speakerId)}</h4>
-                              <p className="text-xs text-muted-foreground">{team?.name}</p>
-                            </div>
-                            <div className="text-right">
-                              <div className="font-bold text-primary">{finalScore}</div>
-                              <div className="text-xs text-muted-foreground">out of 30</div>
-                            </div>
-                          </div>
-
-                          
-                          <div className="grid grid-cols-2 gap-3">
-                            {SCORING_CATEGORIES.map((category) => {
-                              const CategoryIcon = category.icon;
-                              return (
-                                <div key={category.key} className="space-y-2">
-                                  <Label className="text-xs flex items-center gap-1">
-                                    <CategoryIcon className={`h-3 w-3 ${category.color}`} />
-                                    {category.label.split(' ')[0]}
-                                  </Label>
-                                  <div className="flex items-center gap-2">
-                                    <Input
-                                      type="number"
-                                      min="0"
-                                      max="10"
-                                      value={speakerScores[category.key] || 0}
-                                      onChange={(e) => updateScore(speakerId, category.key, parseInt(e.target.value) || 0)}
-                                      disabled={!canEdit}
-                                      className="w-16 text-center"
-                                    />
-                                    <span className="text-xs text-muted-foreground">/10</span>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-
-                          
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                              <Label className="text-xs">Feedback</Label>
-                              <div className="flex gap-1">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleBiasCheck(speakerId)}
-                                  disabled={!speakerComments[speakerId]?.trim() || isBiasChecking}
-                                  className="h-6 px-2"
-                                >
-                                  {isBiasChecking ? (
-                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                  ) : (
-                                    <Shield className="h-3 w-3" />
-                                  )}
-                                </Button>
-                              </div>
-                            </div>
-                            <Textarea
-                              placeholder="Quick feedback..."
-                              value={speakerComments[speakerId] || ""}
-                              onChange={(e) => updateSpeakerComment(speakerId, e.target.value)}
-                              disabled={!canEdit}
-                              rows={2}
-                              className="text-sm"
-                            />
-                            {biasResult && biasResult.hasBias && (
-                              <Alert variant="destructive" className="p-2">
-                                <AlertCircle className="h-3 w-3" />
-                                <AlertDescription className="text-xs">
-                                  Potential bias detected. {biasResult.suggestions?.[0]}
-                                </AlertDescription>
-                              </Alert>
-                            )}
-                          </div>
+                      
+                      <Card className="p-3">
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium">Team Feedback - {selectedTeamData.name}</Label>
+                          <Textarea
+                            placeholder="Overall team performance feedback..."
+                            value={teamComments[selectedTeam] || ""}
+                            onChange={(e) => updateTeamComment(selectedTeam, e.target.value)}
+                            disabled={!canEdit}
+                            rows={2}
+                            className="text-sm"
+                          />
                         </div>
                       </Card>
-                    );
-                  })}
+
+                      
+                      {selectedTeamSpeakers.map((speakerId: string) => {
+                        const speakerScores = scores[speakerId] || {};
+                        const finalScore = calculateFinalScore(speakerScores);
+                        const biasResult = biasCheckResults[speakerId];
+
+                        return (
+                          <Card key={speakerId} className="p-3">
+                            <div className="space-y-3">
+                              <div className="flex justify-between items-center">
+                                <div>
+                                  <h4 className="font-medium text-sm">{getSpeakerName(speakerId)}</h4>
+                                  <p className="text-xs text-muted-foreground">{selectedTeamData.name}</p>
+                                </div>
+                                <div className="text-right">
+                                  <div className="font-bold text-primary">{finalScore}</div>
+                                  <div className="text-xs text-muted-foreground">out of 30</div>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-3">
+                                {SCORING_CATEGORIES.map((category) => {
+                                  const CategoryIcon = category.icon;
+                                  return (
+                                    <div key={category.key} className="space-y-2">
+                                      <Label className="text-xs flex items-center gap-1">
+                                        <CategoryIcon className={`h-3 w-3 ${category.color}`} />
+                                        {category.label.split(' ')[0]}
+                                      </Label>
+                                      <div className="flex items-center gap-2">
+                                        <Input
+                                          type="number"
+                                          min="0"
+                                          max="10"
+                                          value={speakerScores[category.key] || 0}
+                                          onChange={(e) => updateScore(speakerId, category.key, parseInt(e.target.value) || 0)}
+                                          disabled={!canEdit}
+                                          className="w-16 text-center"
+                                        />
+                                        <span className="text-xs text-muted-foreground">/10</span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <Label className="text-xs">Individual Feedback</Label>
+                                  <div className="flex gap-1">
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => handleBiasCheck(speakerId)}
+                                      disabled={!speakerComments[speakerId]?.trim() || isBiasChecking}
+                                      className="h-6 px-2"
+                                    >
+                                      {isBiasChecking ? (
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                      ) : (
+                                        <Shield className="h-3 w-3" />
+                                      )}
+                                    </Button>
+                                  </div>
+                                </div>
+                                <Textarea
+                                  placeholder="Individual speaker feedback..."
+                                  value={speakerComments[speakerId] || ""}
+                                  onChange={(e) => updateSpeakerComment(speakerId, e.target.value)}
+                                  disabled={!canEdit}
+                                  rows={2}
+                                  className="text-sm"
+                                />
+                                {biasResult && biasResult.hasBias && (
+                                  <Alert variant="destructive" className="p-2">
+                                    <AlertCircle className="h-3 w-3" />
+                                    <AlertDescription className="text-xs">
+                                      Potential bias detected. {biasResult.suggestions?.[0]}
+                                    </AlertDescription>
+                                  </Alert>
+                                )}
+                              </div>
+                            </div>
+                          </Card>
+                        );
+                      })}
+                    </>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="arguments" className="space-y-4 mt-4">
+                  <div className="grid gap-4">
+                    <ArgumentFlow
+                      debate={{ ...debate, argument_flow: argumentFlow }}
+                      onAddArgument={handleAddArgument}
+                      onUpdateArgumentFlow={handleUpdateArgumentFlow}
+                    />
+                    <FactCheckingInterface
+                      debate={{ ...debate, fact_checks: factChecks }}
+                      onAddFactCheck={handleAddFactCheck}
+                      userId={userId}
+                    />
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="notes" className="space-y-4 mt-4">
+                  <div className="space-y-4">
+                    <CollaborativeNotes
+                      debate={{ ...debate, shared_notes: sharedNotes }}
+                      userId={userId}
+                      onUpdateNotes={handleUpdateNotes}
+                      token={token}
+                    />
+
+                    <div className="space-y-2">
+                      <Label className="text-base font-medium">Personal Judge Notes</Label>
+                      <Textarea
+                        placeholder="Additional notes about the debate..."
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        disabled={!canEdit}
+                        rows={4}
+                      />
+                    </div>
+                  </div>
                 </TabsContent>
 
                 <TabsContent value="winner" className="space-y-4 mt-4">
@@ -1488,99 +1547,59 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
                     </div>
                   )}
                 </TabsContent>
+              </div>
+            </Tabs>
+          </div>
 
-                <TabsContent value="arguments" className="space-y-4 mt-4">
-                  <div className="grid gap-4">
-                    <ArgumentFlow
-                      debate={{ ...debate, argument_flow: argumentFlow }}
-                      onAddArgument={handleAddArgument}
-                      onUpdateArgumentFlow={handleUpdateArgumentFlow}
-                    />
-                    <FactCheckingInterface
-                      debate={{ ...debate, fact_checks: factChecks }}
-                      onAddFactCheck={handleAddFactCheck}
-                      userId={userId}
-                    />
-                  </div>
-                </TabsContent>
+          
+          <div className="border-t bg-background p-4 space-y-3">
+            {validationResult && !validationResult.isAppropriate && (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  {validationResult.issues?.[0] || "Please review your feedback for appropriateness"}
+                </AlertDescription>
+              </Alert>
+            )}
 
-                <TabsContent value="notes" className="space-y-4 mt-4">
-                  <div className="space-y-4">
-                    <CollaborativeNotes
-                      debate={{ ...debate, shared_notes: sharedNotes }}
-                      userId={userId}
-                      onUpdateNotes={handleUpdateNotes}
-                    />
-
-                    <div className="space-y-2">
-                      <Label className="text-base font-medium">Personal Judge Notes</Label>
-                      <Textarea
-                        placeholder="Additional notes about the debate..."
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                        disabled={!canEdit}
-                        rows={4}
-                      />
-                    </div>
-                  </div>
-                </TabsContent>
-                </ScrollArea>
-              </Tabs>
-
-              
-              {validationResult && !validationResult.isAppropriate && (
-                <Alert variant="destructive">
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertDescription>
-                    {validationResult.issues?.[0] || "Please review your feedback for appropriateness"}
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              
-              {canEdit && (
-                <div className="flex flex-col gap-2 pt-4">
-                  <Button
-                    onClick={() => handleSubmit(false)}
-                    variant="outline"
-                    disabled={isSubmitting || isValidating}
-                    className="w-full"
-                  >
-                    {isValidating ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        Validating...
-                      </>
-                    ) : (
-                      "Save Draft"
-                    )}
-                  </Button>
-                  <Button
-                    onClick={() => handleSubmit(true)}
-                    disabled={isSubmitting || !teamWinner || isValidating || availableTeams.length === 0}
-                    className="w-full"
-                  >
-                    {isSubmitting ? "Submitting..." : "Submit Final Ballot"}
-                  </Button>
-                </div>
-              )}
-
-              {ballot?.feedback_submitted && (
-                <Alert>
-                  <CheckCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    Ballot has been submitted and cannot be edited.
-                  </AlertDescription>
-                </Alert>
-              )}
-
-            </div>
-
-        </DrawerContent>
-      </Drawer>
+            {ballot?.feedback_submitted ? (
+              <Alert>
+                <CheckCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Ballot has been submitted and cannot be edited.
+                </AlertDescription>
+              </Alert>
+            ) : canEdit ? (
+              <div className="flex flex-col gap-2">
+                <Button
+                  onClick={() => handleSubmit(false)}
+                  variant="outline"
+                  disabled={isSubmitting || isValidating}
+                  className="w-full"
+                >
+                  {isValidating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Validating...
+                    </>
+                  ) : (
+                    "Save Draft"
+                  )}
+                </Button>
+                <Button
+                  onClick={() => handleSubmit(true)}
+                  disabled={isSubmitting || !teamWinner || isValidating || availableTeams.length === 0}
+                  className="w-full"
+                >
+                  {isSubmitting ? "Submitting..." : "Submit Final Ballot"}
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </DrawerContent>
     );
   }
-
   return (
     <div className="space-y-6">
       <Card>
@@ -1602,21 +1621,156 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
             <div className="lg:col-span-2 space-y-6">
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {debate.proposition_team && (
-                  <div className="p-4 border rounded-lg">
-                    <h4 className="font-medium text-green-700 mb-2">Proposition</h4>
-                    <p className="font-semibold">{debate.proposition_team?.name}</p>
-                    <p className="text-sm text-muted-foreground">{debate.proposition_team?.school?.name}</p>
-                  </div>
-                )}
-                {debate.opposition_team && (
-                  <div className="p-4 border rounded-lg">
-                    <h4 className="font-medium text-red-700 mb-2">Opposition</h4>
-                    <p className="font-semibold">{debate.opposition_team?.name}</p>
-                    <p className="text-sm text-muted-foreground">{debate.opposition_team?.school?.name}</p>
-                  </div>
-                )}
+                {availableTeams.map((team) => (
+                  <Button
+                    key={team.id}
+                    variant={selectedTeam === team.id ? "default" : "outline"}
+                    onClick={() => setSelectedTeam(team.id)}
+                    className="p-4 h-auto"
+                  >
+                    <div className="text-center">
+                      <h4 className={`font-medium mb-2 ${
+                        team.position === "proposition" ? "text-green-700" : "text-red-700"
+                      }`}>
+                        {team.position === "proposition" ? "Proposition" : "Opposition"}
+                      </h4>
+                      <p className="font-semibold">{team.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {team.position === "proposition" ? debate.proposition_team?.school?.name : debate.opposition_team?.school?.name}
+                      </p>
+                    </div>
+                  </Button>
+                ))}
               </div>
+
+              
+              {selectedTeam && selectedTeamData && (
+                <>
+                  
+                  <Card className="p-4">
+                    <div className="space-y-3">
+                      <Label className="text-base font-medium">Team Feedback - {selectedTeamData.name}</Label>
+                      <Textarea
+                        placeholder="Overall team performance, strategy, and coordination..."
+                        value={teamComments[selectedTeam] || ""}
+                        onChange={(e) => updateTeamComment(selectedTeam, e.target.value)}
+                        disabled={!canEdit}
+                        rows={3}
+                      />
+                    </div>
+                  </Card>
+
+                  
+                  <div className="space-y-6">
+                    <Label className="text-base font-medium">Individual Speaker Scores - {selectedTeamData.name}</Label>
+
+                    {selectedTeamSpeakers.map((speakerId: string) => {
+                      const speakerScores = scores[speakerId] || {};
+                      const finalScore = calculateFinalScore(speakerScores);
+                      const biasResult = biasCheckResults[speakerId];
+
+                      return (
+                        <Card key={speakerId} className="p-6">
+                          <div className="space-y-4">
+                            <div className="flex justify-between items-center">
+                              <div>
+                                <h4 className="font-medium">{getSpeakerName(speakerId)}</h4>
+                                <p className="text-sm text-muted-foreground">{selectedTeamData.name}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  Position: {speakerPositions[speakerId] || "Unassigned"}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-3xl font-bold text-primary">{finalScore}</div>
+                                <div className="text-sm text-muted-foreground">out of 30</div>
+                                <Progress value={(finalScore / 30) * 100} className="w-20 mt-1" />
+                              </div>
+                            </div>
+
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                              {SCORING_CATEGORIES.map((category) => {
+                                const CategoryIcon = category.icon;
+                                const score = speakerScores[category.key] || 0;
+                                return (
+                                  <div key={category.key} className="space-y-2">
+                                    <Label className="text-sm flex items-center gap-2">
+                                      <CategoryIcon className={`h-4 w-4 ${category.color}`} />
+                                      {category.label}
+                                    </Label>
+                                    <div className="space-y-2">
+                                      <div className="flex items-center gap-2">
+                                        <Input
+                                          type="number"
+                                          min="0"
+                                          max="10"
+                                          value={score}
+                                          onChange={(e) => updateScore(speakerId, category.key, parseInt(e.target.value) || 0)}
+                                          disabled={!canEdit}
+                                          className="w-20"
+                                        />
+                                        <span className="text-sm text-muted-foreground">/ 10</span>
+                                      </div>
+                                      <Progress value={(score / 10) * 100} className="w-full" />
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">{category.description}</p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <Label className="text-sm">Individual Speaker Feedback</Label>
+                                <div className="flex gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => handleBiasCheck(speakerId)}
+                                    disabled={!speakerComments[speakerId]?.trim() || isBiasChecking}
+                                    title="Check for bias"
+                                  >
+                                    {isBiasChecking ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <Shield className="h-3 w-3" />
+                                    )}
+                                  </Button>
+                                </div>
+                              </div>
+                              <Textarea
+                                placeholder="Specific feedback for this speaker's performance..."
+                                value={speakerComments[speakerId] || ""}
+                                onChange={(e) => updateSpeakerComment(speakerId, e.target.value)}
+                                disabled={!canEdit}
+                                rows={3}
+                              />
+                              {biasResult && biasResult.hasBias && (
+                                <Alert variant="destructive">
+                                  <AlertCircle className="h-4 w-4" />
+                                  <AlertDescription>
+                                    <div className="space-y-1">
+                                      <p>Potential bias detected</p>
+                                      {biasResult.suggestions && (
+                                        <ul className="text-sm list-disc list-inside">
+                                          {biasResult.suggestions.map((suggestion: string, idx: number) => (
+                                            <li key={idx}>{suggestion}</li>
+                                          ))}
+                                        </ul>
+                                      )}
+                                    </div>
+                                  </AlertDescription>
+                                </Alert>
+                              )}
+                            </div>
+                          </div>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
 
               
               {canEdit && availableTeams.length > 0 && (
@@ -1644,132 +1798,14 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
               )}
 
               
-              <div className="space-y-6">
-                <Label className="text-base font-medium">Speaker Scores</Label>
-
-                {allSpeakers.map((speakerId) => {
-                  const speakerScores = scores[speakerId] || {};
-                  const finalScore = calculateFinalScore(speakerScores);
-                  const team = debate.proposition_team?.members.includes(speakerId)
-                    ? debate.proposition_team
-                    : debate.opposition_team;
-                  const biasResult = biasCheckResults[speakerId];
-
-                  return (
-                    <Card key={speakerId} className="p-6">
-                      <div className="space-y-4">
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <h4 className="font-medium">{getSpeakerName(speakerId)}</h4>
-                            <p className="text-sm text-muted-foreground">{team?.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              Position: {speakerPositions[speakerId] || "Unassigned"}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-3xl font-bold text-primary">{finalScore}</div>
-                            <div className="text-sm text-muted-foreground">out of 30</div>
-                            <Progress value={(finalScore / 30) * 100} className="w-20 mt-1" />
-                          </div>
-                        </div>
-
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {SCORING_CATEGORIES.map((category) => {
-                            const CategoryIcon = category.icon;
-                            const score = speakerScores[category.key] || 0;
-                            return (
-                              <div key={category.key} className="space-y-2">
-                                <Label className="text-sm flex items-center gap-2">
-                                  <CategoryIcon className={`h-4 w-4 ${category.color}`} />
-                                  {category.label}
-                                </Label>
-                                <div className="space-y-2">
-                                  <div className="flex items-center gap-2">
-                                    <Input
-                                      type="number"
-                                      min="0"
-                                      max="10"
-                                      value={score}
-                                      onChange={(e) => updateScore(speakerId, category.key, parseInt(e.target.value) || 0)}
-                                      disabled={!canEdit}
-                                      className="w-20"
-                                    />
-                                    <span className="text-sm text-muted-foreground">/ 10</span>
-                                  </div>
-                                  <Progress value={(score / 10) * 100} className="w-full" />
-                                </div>
-                                <p className="text-xs text-muted-foreground">{category.description}</p>
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <Label className="text-sm">Comments & Feedback</Label>
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleBiasCheck(speakerId)}
-                                disabled={!speakerComments[speakerId]?.trim() || isBiasChecking}
-                                title="Check for bias"
-                              >
-                                {isBiasChecking ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                ) : (
-                                  <Shield className="h-3 w-3" />
-                                )}
-                              </Button>
-                            </div>
-                          </div>
-                          <Textarea
-                            placeholder="Provide constructive feedback..."
-                            value={speakerComments[speakerId] || ""}
-                            onChange={(e) => updateSpeakerComment(speakerId, e.target.value)}
-                            disabled={!canEdit}
-                            rows={3}
-                          />
-                          {biasResult && biasResult.hasBias && (
-                            <Alert variant="destructive">
-                              <AlertCircle className="h-4 w-4" />
-                              <AlertDescription>
-                                <div className="space-y-1">
-                                  <p>Potential bias detected</p>
-                                  {biasResult.suggestions && (
-                                    <ul className="text-sm list-disc list-inside">
-                                      {biasResult.suggestions.map((suggestion: string, idx: number) => (
-                                        <li key={idx}>{suggestion}</li>
-                                      ))}
-                                    </ul>
-                                  )}
-                                </div>
-                              </AlertDescription>
-                            </Alert>
-                          )}
-                        </div>
-                      </div>
-                    </Card>
-                  );
-                })}
-              </div>
-
-              
               <div className="space-y-2">
-                <Label className="text-base font-medium">Judge Notes</Label>
+                <Label className="text-base font-medium">General Judge Notes</Label>
                 <Textarea
-                  placeholder="Additional notes about the debate..."
+                  placeholder="Overall observations about the debate, flow, and general comments..."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   disabled={!canEdit}
-                  rows={2}
-                />
-                <FactCheckingInterface
-                  debate={{ ...debate, fact_checks: factChecks }}
-                  onAddFactCheck={handleAddFactCheck}
-                  userId={userId}
+                  rows={4}
                 />
               </div>
             </div>
@@ -1777,12 +1813,19 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
             
             <div className="space-y-4">
               <DebateTimer debate={debate} onTimeUpdate={() => {}} />
-              <SpeakerPositionManager
-                speakers={allSpeakers.map((id) => ({ id, name: getSpeakerName(id) }))}
-                positions={speakerPositions}
-                onUpdatePositions={setSpeakerPositions}
-                tournament={tournament}
-              />
+
+              
+              {selectedTeam && selectedTeamData && (
+                <SpeakerPositionManager
+                  speakers={selectedTeamSpeakers.map((id: string) => ({ id, name: getSpeakerName(id) }))}
+                  positions={speakerPositions}
+                  onUpdatePositions={setSpeakerPositions}
+                  tournament={tournament}
+                  debate={debate}
+                  teamId={selectedTeam}
+                  teamName={selectedTeamData.name}
+                />
+              )}
 
               <ArgumentFlow
                 debate={{ ...debate, argument_flow: argumentFlow }}
@@ -1790,13 +1833,18 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
                 onUpdateArgumentFlow={handleUpdateArgumentFlow}
               />
 
+              <FactCheckingInterface
+                debate={{ ...debate, fact_checks: factChecks }}
+                onAddFactCheck={handleAddFactCheck}
+                userId={userId}
+              />
+
               <CollaborativeNotes
                 debate={{ ...debate, shared_notes: sharedNotes }}
                 userId={userId}
                 onUpdateNotes={handleUpdateNotes}
+                token={token}
               />
-
-
             </div>
           </div>
 
@@ -1893,6 +1941,22 @@ function BallotRow({ debate, userRole, userId, onViewDetails, onEditBallot, onFl
   const canSeeDetails = debate.can_see_full_details || userRole === "admin" || userRole === "volunteer";
   const canFlag = userRole === "admin" || (userRole === "volunteer" && debate.judges?.some((j: any) => j._id === userId));
   const hasFlaggedBallots = debate.has_flagged_ballots || debate.judges?.some((j: any) => j.is_flagged);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkIsMobile = () => setIsMobile(window.innerWidth < 768);
+    checkIsMobile();
+    window.addEventListener('resize', checkIsMobile);
+    return () => window.removeEventListener('resize', checkIsMobile);
+  }, []);
+
+  const handleEditClick = () => {
+    if (isMobile) {
+      onEditBallot(debate);
+    } else {
+      onEditBallot(debate);
+    }
+  };
 
   return (
     <TableRow className="hover:bg-muted/50">
@@ -2018,7 +2082,7 @@ function BallotRow({ debate, userRole, userId, onViewDetails, onEditBallot, onFl
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => onEditBallot(debate)}
+              onClick={handleEditClick}
               title="Edit Ballot"
               className="h-6 w-6 p-0"
             >
@@ -2049,6 +2113,22 @@ function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot, onF
   const canFlag = userRole === "admin" || (userRole === "volunteer" && debate.judges?.some((j: any) => j._id === userId));
   const hasFlaggedBallots = debate.has_flagged_ballots || debate.judges?.some((j: any) => j.is_flagged);
   const submissionProgress = debate.judges?.length > 0 ? (debate.final_submissions_count || 0) / debate.judges.length * 100 : 0;
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkIsMobile = () => setIsMobile(window.innerWidth < 768);
+    checkIsMobile();
+    window.addEventListener('resize', checkIsMobile);
+    return () => window.removeEventListener('resize', checkIsMobile);
+  }, []);
+
+  const handleEditClick = () => {
+    if (isMobile) {
+      onEditBallot(debate);
+    } else {
+      onEditBallot(debate);
+    }
+  };
 
   return (
     <Card className="hover:shadow-md transition-all duration-200">
@@ -2096,7 +2176,7 @@ function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot, onF
               </Button>
             )}
             {canEdit && (
-              <Button variant="ghost" size="sm" onClick={() => onEditBallot(debate)} title="Edit Ballot">
+              <Button variant="ghost" size="sm" onClick={handleEditClick} title="Edit Ballot">
                 <Edit3 className="h-4 w-4" />
               </Button>
             )}
@@ -2731,8 +2811,13 @@ export default function TournamentBallots({
   };
 
   const handleEditBallot = async (debate: any) => {
-    setJudgingDebate(debate);
-    setShowJudgingInterface(true);
+    if (window.innerWidth < 768) {
+      setJudgingDebate(debate);
+      setShowJudgingInterface(true);
+    } else {
+      setJudgingDebate(debate);
+      setShowJudgingInterface(true);
+    }
   };
 
   const handleFlagBallot = (debate: any) => {
@@ -2988,12 +3073,11 @@ export default function TournamentBallots({
           )}
         </div>
       </Card>
-
       
       {showJudgingInterface && judgingDebate && (
-        <Dialog open={showJudgingInterface} onOpenChange={setShowJudgingInterface}>
-          <DialogContent className="max-w-7xl max-h-[90vh] overflow-hidden">
-            <div className="overflow-y-auto max-h-[85vh]">
+        <>
+          {window.innerWidth < 768 ? (
+            <Drawer open={showJudgingInterface} onOpenChange={setShowJudgingInterface}>
               <JudgingInterface
                 debate={judgingDebate}
                 ballot={judgingDebate.my_submission}
@@ -3003,11 +3087,33 @@ export default function TournamentBallots({
                 userId={userId}
                 tournament={tournament}
               />
-            </div>
-          </DialogContent>
-        </Dialog>
+            </Drawer>
+          ) : (
+            <Dialog open={showJudgingInterface} onOpenChange={setShowJudgingInterface}>
+              <DialogContent className="max-w-7xl max-h-[95vh] overflow-hidden">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Edit3 className="h-5 w-5" />
+                    Judging Interface
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="overflow-y-auto max-h-[85vh]">
+                  <JudgingInterface
+                    debate={judgingDebate}
+                    ballot={judgingDebate.my_submission}
+                    userRole={userRole}
+                    token={token}
+                    onSubmitBallot={handleSubmitBallot}
+                    userId={userId}
+                    tournament={tournament}
+                  />
+                </div>
+              </DialogContent>
+            </Dialog>
+          )}
+        </>
       )}
-
+      
       <BallotDetailsDialog
         debate={selectedDebate}
         isOpen={showDetailsDialog}

@@ -102,7 +102,7 @@ export function useGemini() {
     }
 
     const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY);
-    return genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+    return genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" });
   }, []);
 
   const validateFeedback = useCallback(async (

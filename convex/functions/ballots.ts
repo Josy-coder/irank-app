@@ -181,10 +181,10 @@ export const updateRecording = mutation({
   },
 });
 
-export const getSpeakerNames = query({
+export const getUserNames = query({
   args: {
     token: v.string(),
-    speaker_ids: v.array(v.id("users")),
+    user_ids: v.array(v.id("users")),
   },
   handler: async (ctx, args) => {
     const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
@@ -196,10 +196,10 @@ export const getSpeakerNames = query({
     }
 
     return await Promise.all(
-      args.speaker_ids.map(async (speakerId) => {
-        const user = await ctx.db.get(speakerId);
+      args.user_ids.map(async (userId) => {
+        const user = await ctx.db.get(userId);
         return {
-          id: speakerId,
+          id: userId,
           name: user?.name ?? null,
         };
       })
