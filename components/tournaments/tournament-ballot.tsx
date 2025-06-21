@@ -1309,7 +1309,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
   if (isMobile) {
     return (
       <DrawerContent>
-        <div className="flex flex-col h-[95vh]">
+        <div className="flex flex-col h-[80vh]">
           <DrawerHeader>
             <DrawerTitle className="flex items-center justify-between gap-1">
               <div className="flex items-center gap-1">
