@@ -42,7 +42,7 @@ import {
   Smartphone,
   Laptop
 } from "lucide-react"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/hooks/use-auth"
 import { toast } from "sonner"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"

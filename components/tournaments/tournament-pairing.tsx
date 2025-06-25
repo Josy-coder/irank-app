@@ -47,7 +47,7 @@ import { toast } from "sonner";
 
 import { generateTournamentPairings, validatePairing } from "@/lib/pairing-algorithm";
 import { Id } from "@/convex/_generated/dataModel";
-import { useOffline } from "@/hooks/useOffline";
+import { useOffline } from "@/hooks/use-offline";
 
 interface Team {
   _id: Id<"teams">;

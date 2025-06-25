@@ -4,7 +4,7 @@ import React, { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Building } from "lucide-react"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/hooks/use-auth"
 import { TournamentList } from "@/components/tournaments/tournament-list"
 import { LeagueList } from "@/components/tournaments/league-list"
 import { Id } from "@/convex/_generated/dataModel";

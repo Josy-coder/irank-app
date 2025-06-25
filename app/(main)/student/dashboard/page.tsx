@@ -29,7 +29,7 @@ import {
   BarChart3,
   Trophy,
 } from "lucide-react"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/hooks/use-auth"
 import { cn } from "@/lib/utils"
 import getGreeting from "@/lib/greeting";
 

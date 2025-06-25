@@ -28,7 +28,7 @@ import { Eye, EyeOff, Loader2, CheckCircle, AlertCircle, UserCog, FileText, Shie
 import Link from "next/link"
 import Image from "next/image"
 import { motion } from "framer-motion"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/hooks/use-auth"
 import AppLoader from "@/components/app-loader";
 import { useMutation } from "convex/react"
 import { api } from "@/convex/_generated/api"

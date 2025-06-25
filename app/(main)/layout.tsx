@@ -1,7 +1,7 @@
 "use client"
 
-import { useRequireAuth, useOfflineSync } from "@/hooks/useAuth"
-import { useAuth } from "@/hooks/useAuth"
+import { useRequireAuth, useOfflineSync } from "@/hooks/use-auth"
+import { useAuth } from "@/hooks/use-auth"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
 import AppLoader from "@/components/app-loader"

@@ -39,7 +39,7 @@ import {
   Shield,
   Loader2
 } from "lucide-react"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/hooks/use-auth"
 import { toast } from "sonner"
 import { FileUpload } from "@/components/file-upload"
 import { Id } from "@/convex/_generated/dataModel"

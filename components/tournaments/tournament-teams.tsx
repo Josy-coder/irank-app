@@ -57,7 +57,7 @@ import { TeamManagementDialog } from "@/components/tournaments/team-management-d
 import { JoinTeamDialog } from "@/components/tournaments/join-team-dialog"
 import { ShareTeamDialog } from "@/components/tournaments/share-team-dialog"
 import { WaiverCodeDialog } from "@/components/tournaments/waiver-code-dialog";
-import { useOffline } from "@/hooks/useOffline";
+import { useOffline } from "@/hooks/use-offline";
 
 interface TournamentTeamsProps {
   tournament: any;

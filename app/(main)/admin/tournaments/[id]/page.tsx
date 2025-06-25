@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation";
 import { useQuery } from "convex/react"
 import { api } from "@/convex/_generated/api"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/hooks/use-auth"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import {

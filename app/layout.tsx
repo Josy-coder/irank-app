@@ -2,9 +2,9 @@ import './globals.css'
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import { Toaster } from '@/components/ui/sonner'
-import { ConvexOfflineProvider } from "@/components/ConvexOfflineProvider";
+import { ConvexOfflineProvider } from "@/components/convex-offline-provider";
 import { ThemeProvider } from "@/components/theme-provider";
-import { AuthProvider } from "@/hooks/useAuth";
+import { AuthProvider } from "@/hooks/use-auth";
 import React from "react";
 import { PWAProvider } from '@/components/pwa/pwa-provider';
 

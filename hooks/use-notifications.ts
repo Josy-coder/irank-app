@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { useAuth } from "./useAuth";
+import { useAuth } from "./use-auth";
 import { useEffect, useState } from "react";
 
 export function useNotifications() {

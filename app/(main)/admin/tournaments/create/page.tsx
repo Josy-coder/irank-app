@@ -4,7 +4,7 @@ import React, { useState, useEffect} from "react"
 import { useRouter } from "next/navigation"
 import { useQuery, useMutation } from "convex/react"
 import { api } from "@/convex/_generated/api"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/hooks/use-auth"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -454,7 +454,7 @@ export default function CreateTournamentPage() {
       }
     }
 
-    router.push("/tournaments")
+    router.push("/admin/tournaments")
   }
 
   const today = new Date()

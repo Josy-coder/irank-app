@@ -3,7 +3,7 @@
 import { ConvexProvider, ConvexReactClient } from "convex/react";
 import { ReactNode, useState, useEffect } from "react";
 import { useConvexOfflineDetector } from "@/lib/pwa/offline-detector";
-import { useOfflineSync } from "@/hooks/useOffline";
+import { useOfflineSync } from "@/hooks/use-offline";
 import { WifiOff, Clock } from "lucide-react";
 
 interface ConvexOfflineProviderProps {

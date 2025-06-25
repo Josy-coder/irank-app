@@ -31,7 +31,7 @@ import { Id } from "@/convex/_generated/dataModel"
 import { useDebounce } from "@/hooks/use-debounce"
 import { AddLeagueDialog } from "./add-league-dialog"
 import { ViewLeagueDetailsDialog } from "./view-league-details-dialog"
-import { useOffline } from "@/hooks/useOffline";
+import { useOffline } from "@/hooks/use-offline";
 
 interface League {
   _id: Id<"leagues">

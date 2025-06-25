@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Bell, X, Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { useNotifications } from "@/hooks/useNotifications"
+import { useNotifications } from "@/hooks/use-notifications"
 
 export function NotificationPermissionBanner() {
   const { isSupported, permission, requestPermission } = useNotifications()

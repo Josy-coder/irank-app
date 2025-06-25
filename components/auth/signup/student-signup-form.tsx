@@ -29,7 +29,7 @@ import { toast } from "sonner"
 import { motion } from "framer-motion"
 import Image from "next/image"
 import { Label } from "@/components/ui/label"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/hooks/use-auth"
 import { SchoolSelector } from "@/components/school-selector"
 import { Id } from "@/convex/_generated/dataModel"
 

@@ -21,7 +21,7 @@ import { Mail, Loader2, CheckCircle, ArrowLeft, AlertCircle, ChevronLeft } from 
 import Link from "next/link"
 import Image from "next/image"
 import { motion } from "framer-motion"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/hooks/use-auth"
 import AppLoader from "@/components/app-loader";
 
 const forgotPasswordSchema = z.object({

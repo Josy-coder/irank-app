@@ -55,8 +55,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Id } from "@/convex/_generated/dataModel";
-import { useGemini } from "@/hooks/useGemini";
-import { useOffline } from "@/hooks/useOffline";
+import { useGemini } from "@/hooks/use-gemini";
+import { useOffline } from "@/hooks/use-offline";
 
 interface TournamentBallotsProps {
   tournament: any;

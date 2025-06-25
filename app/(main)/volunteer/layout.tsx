@@ -1,6 +1,6 @@
 "use client"
 
-import { useRequireAuth } from "@/hooks/useAuth";
+import { useRequireAuth } from "@/hooks/use-auth";
 
 export default function VolunteerDashboardLayout({
                                                    children,

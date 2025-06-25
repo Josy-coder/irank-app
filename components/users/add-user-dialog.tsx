@@ -34,7 +34,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Loader2, Copy, Check, Eye, EyeOff } from "lucide-react"
 import { toast } from "sonner"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/hooks/use-auth"
 import { SchoolSelector, VolunteerSchoolSelector } from "@/components/school-selector";
 import { LocationSelector } from "@/components/location-selector"
 import { Id } from "@/convex/_generated/dataModel"

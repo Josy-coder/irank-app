@@ -42,7 +42,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { motion } from "framer-motion"
 import Image from "next/image"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/hooks/use-auth"
 import { useQuery } from "convex/react"
 import { api } from "@/convex/_generated/api"
 import { useDebounce } from "@/hooks/use-debounce"
@@ -834,13 +834,14 @@ const SignInForm = ({ role }: SignInFormProps) => {
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-
+          {role !== "admin" && (
           <div className="text-center text-sm">
             <span className="text-muted-foreground">Don&apos;t have an account? </span>
             <Link href={`/signup/${role}`} className="text-primary hover:underline">
               Sign up
             </Link>
           </div>
+            )}
 
           <div className="text-center">
             <Link

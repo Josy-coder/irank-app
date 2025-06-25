@@ -95,7 +95,7 @@ export default function TermsPage() {
               <div className="text-gray-700 dark:text-gray-300 leading-relaxed space-y-3">
                 <p>To use iRankHub, you must:</p>
                 <ul className="list-disc list-inside space-y-2 ml-4">
-                  <li>Be at least 13 years old (or the minimum age in your jurisdiction)</li>
+                  <li>Be at least 12 years old (or the minimum age in your jurisdiction)</li>
                   <li>Provide accurate and complete registration information</li>
                   <li>Maintain the security of your account credentials</li>
                   <li>Be affiliated with a recognized educational institution (for students and school admins)</li>
@@ -145,7 +145,7 @@ export default function TermsPage() {
               </p>
               <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
                 <p className="text-amber-800 dark:text-amber-200 text-sm">
-                  <strong>Special Note for Minors:</strong> If you are under 18, your parent or guardian must review and agree to these Terms on your behalf.
+                  <strong>Special Note for Minors:</strong> If you are under 18, your parent or guardian or teacher must review and agree to these Terms on your behalf.
                 </p>
               </div>
             </section>
@@ -199,7 +199,7 @@ export default function TermsPage() {
                 9. Limitation of Liability
               </h3>
               <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-4">
-                iRankHub provides the platform &#34;as is&#34; without warranties. We are not liable for indirect, incidental, or consequential damages arising from your use of the platform. Our total liability is limited to the amount you have paid us in the preceding 12 months.
+                iRankHub provides the platform &#34;as is&#34; without warranties. We are not liable for indirect, incidental, or consequential damages arising from your use of the platform.
               </p>
             </section>
 
@@ -230,7 +230,7 @@ export default function TermsPage() {
                   If you have questions about these Terms or need support, please contact us:
                 </p>
                 <div className="space-y-2 text-gray-700 dark:text-gray-300">
-                  <p><strong>Email:</strong> infp@debaterwanda.org</p>
+                  <p><strong>Email:</strong> info@debaterwanda.org</p>
                   <p><strong>Address:</strong> Kigali, Rwanda</p>
                   <p><strong>Platform:</strong> Use the in-app support feature for fastest response</p>
                 </div>

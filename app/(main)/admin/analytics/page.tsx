@@ -37,7 +37,7 @@ import {
   YAxis
 } from "recharts"
 import DateRangePicker from "@/components/date-range-picker"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/hooks/use-auth"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import {

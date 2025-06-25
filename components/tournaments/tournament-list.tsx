@@ -41,7 +41,7 @@ import { Id } from "@/convex/_generated/dataModel"
 import { CardLayoutWithToolbar } from "@/components/shared/card-layout-with-toolbar"
 import { format } from "date-fns"
 import { useRouter } from "next/navigation";
-import { useOffline } from "@/hooks/useOffline";
+import { useOffline } from "@/hooks/use-offline";
 
 interface TournamentListProps {
   userRole: "admin" | "school_admin" | "volunteer" | "student"

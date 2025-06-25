@@ -46,7 +46,7 @@ import {
   GraduationCap,
   Zap
 } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/hooks/use-auth"
 import { useDebounce } from "@/hooks/use-debounce"
 import { DataToolbar } from "@/components/shared/data-toolbar"
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter"

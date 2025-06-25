@@ -7,7 +7,7 @@ import { Undo2 } from "lucide-react"
 import Image from "next/image"
 import { Inter } from "next/font/google"
 import { cn } from "@/lib/utils"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/hooks/use-auth"
 import AppLoader from "@/components/app-loader";
 
 const inter = Inter({ subsets: ['latin'] })

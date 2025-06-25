@@ -34,7 +34,7 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
-import { useNotifications } from "@/hooks/useNotifications"
+import { useNotifications } from "@/hooks/use-notifications"
 import { useRouter } from "next/navigation"
 
 interface Notification {
