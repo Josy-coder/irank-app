@@ -36,25 +36,41 @@ const loadingMessages = [
 ]
 
 export default function AppLoader() {
-  const [message, setMessage] = useState("Just a moment while we set things up...")
-  const messageRef = useRef(message)
+  const [message, setMessage] = useState("")
+  const [isAnimating, setIsAnimating] = useState(false)
+  const messageRef = useRef("")
+  const intervalRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
+
+    setIsAnimating(true)
+
     const firstMessage = loadingMessages[Math.floor(Math.random() * loadingMessages.length)]
     setMessage(firstMessage)
     messageRef.current = firstMessage
 
-    const interval = setInterval(() => {
-      let newMessage
-      do {
-        newMessage = loadingMessages[Math.floor(Math.random() * loadingMessages.length)]
-      } while (newMessage === messageRef.current)
+    const startRotation = () => {
+      intervalRef.current = setInterval(() => {
+        let newMessage
+        let attempts = 0
+        do {
+          newMessage = loadingMessages[Math.floor(Math.random() * loadingMessages.length)]
+          attempts++
+        } while (newMessage === messageRef.current && attempts < 5)
 
-      messageRef.current = newMessage
-      setMessage(newMessage)
-    }, 800)
+        messageRef.current = newMessage
+        setMessage(newMessage)
+      }, 1500)
+    }
 
-    return () => clearInterval(interval)
+    const timeout = setTimeout(startRotation, 1000)
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+      }
+      clearTimeout(timeout)
+    }
   }, [])
 
   return (
@@ -63,7 +79,10 @@ export default function AppLoader() {
         <svg
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 53 53"
-          className="w-full h-full"
+          className={`w-full h-full ${isAnimating ? 'animate-pulse' : ''}`}
+          style={{
+            animation: isAnimating ? 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none'
+          }}
         >
           <g>
             <path
@@ -75,6 +94,7 @@ export default function AppLoader() {
                 values="#F5AE73;#EF5F00;#F5AE73"
                 dur="2s"
                 repeatCount="indefinite"
+                begin="0s"
               />
             </path>
             <path
@@ -114,7 +134,7 @@ export default function AppLoader() {
               />
             </path>
             <path
-              d="M19.2597961,30.9257202c-0.4205933-0.5097046-0.7536011-1.1066895-0.9990845-1.6239014   c-0.0594482-0.1252441-0.02948-0.2680054,0.0643311-0.3701172c1.0306396-1.1218872,1.6432495-2.5062256,1.6432495-4.0073242   c0-3.7399292-3.7880859-6.7720337-8.4610596-6.7720337c-4.6809082,0-8.4690552,3.0321045-8.4690552,6.7720337   s3.788147,6.7639771,8.4690552,6.7639771c1.5054321,0,2.9219971-0.3112183,4.1428833-0.8696899   c0.0969238-0.0443726,0.204895-0.0362549,0.2972412,0.0170898c1.0349121,0.5977173,2.2929688,0.6714478,3.0668945,0.6467285   C19.2964783,31.4734497,19.4395447,31.1435547,19.2597961,30.9257202z M11.1392517,28.0234375H6.0122986   c-0.2763672,0-0.5-0.2236328-0.5-0.5s0.2236328-0.5,0.5-0.5h5.1269531c0.2763672,0,0.5,0.2236328,0.5,0.5   S11.4156189,28.0234375,11.1392517,28.0234375z M16.2662048,25.421875H6.0122986c-0.2763672,0-0.5-0.2236328-0.5-0.5   s0.2236328-0.5,0.5-0.5h10.2539063c0.2763672,0,0.5,0.2236328,0.5,0.5S16.542572,25.421875,16.2662048,25.421875z    M16.2662048,22.8203125H6.0122986c-0.2763672,0-0.5-0.2236328-0.5-0.5s0.2236328-0.5,0.5-0.5h10.2539063   c0.2763672,0,0.5,0.2236328,0.5,0.5S16.542572,22.8203125,16.2662048,22.8203125z"
+              d="M19.2597961,30.9257202c-0.4205933-0.5097046-0.7536011-1.1066895-0.9990845-1.6239014   c-0.0594482-0.1252441-0.02948-0.2680054,0.0643311-0.3701172c1.0306396-1.1218872,1.6432495-2.5062256,1.6432495-4.0073242   c0-3.7399292-3.7880859-6.7720337-8.4610596-6.7720337c-4.6809082,0-8.4690552,3.0321045-8.4690552,6.7720337   s3.788147,6.7639771,8.4690552,6.7639771c1.5054321,0,2.9219971-0.3112183,4.1428833-0.8696899   c0.0969238-0.0443726,0.204895-0.0362549,0.2972412,0.0170898   c1.0349121,0.5977173,2.2929688,0.6714478,3.0668945,0.6467285   C19.2964783,31.4734497,19.4395447,31.1435547,19.2597961,30.9257202z M11.1392517,28.0234375H6.0122986   c-0.2763672,0-0.5-0.2236328-0.5-0.5s0.2236328-0.5,0.5-0.5h5.1269531c0.2763672,0,0.5,0.2236328,0.5,0.5   S11.4156189,28.0234375,11.1392517,28.0234375z M16.2662048,25.421875H6.0122986c-0.2763672,0-0.5-0.2236328-0.5-0.5   s0.2236328-0.5,0.5-0.5h10.2539063c0.2763672,0,0.5,0.2236328,0.5,0.5S16.542572,25.421875,16.2662048,25.421875z    M16.2662048,22.8203125H6.0122986c-0.2763672,0-0.5-0.2236328-0.5-0.5s0.2236328-0.5,0.5-0.5h10.2539063   c0.2763672,0,0.5,0.2236328,0.5,0.5S16.542572,22.8203125,16.2662048,22.8203125z"
               className="fill-[#F5AE73]"
             >
               <animate
@@ -128,7 +148,13 @@ export default function AppLoader() {
           </g>
         </svg>
       </div>
-      <p className={`text-md font-semibold mt-4 text-muted-foreground`}>{message}</p>
+      <div className="mt-4 min-h-[2rem] flex items-center justify-center">
+        <p
+          className="text-md font-semibold text-foreground transition-opacity duration-300 text-center max-w-md"
+        >
+          {message || "Just a moment while we set things up..."}
+        </p>
+      </div>
     </div>
   );
 }

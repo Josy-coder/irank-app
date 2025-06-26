@@ -1,7 +1,7 @@
 "use client"
 
-import React, { useMemo, useEffect, Suspense, useState } from "react";
-import { useParams, useSearchParams } from "next/navigation"
+import React, { useMemo, useEffect, Suspense, useState, useRef } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation } from "convex/react"
 import { api } from "@/convex/_generated/api"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -42,7 +42,6 @@ import {
   BarChart3,
   Activity,
   Building,
-  Loader2,
   AlertTriangle,
   Eye,
   Clock,
@@ -199,11 +198,64 @@ function AccessInfoBanner({ accessInfo }: { accessInfo: any }) {
   )
 }
 
+function ErrorDisplay({ error }: { error: string }) {
+  const router = useRouter();
+  const getErrorDetails = (errorMessage: string) => {
+    if (errorMessage.includes("Maximum views exceeded")) {
+      return {
+        title: "Maximum Views Reached",
+        description: "This report has reached its maximum view limit. Please contact the report owner for a new link.",
+        icon: Eye,
+      }
+    }
+
+    if (errorMessage.includes("expired") || errorMessage.includes("Report access has expired")) {
+      return {
+        title: "Report Expired",
+        description: "This report link has expired. Please request a new report link from the owner.",
+        icon: Clock,
+      }
+    }
+
+    if (errorMessage.includes("Invalid access token")) {
+      return {
+        title: "Invalid Report Link",
+        description: "This report link is invalid or malformed. Please check the URL and try again.",
+        icon: AlertTriangle,
+      }
+    }
+
+    return {
+      title: "Unable to Load Report",
+      description: "There was an error loading this report. Please try again or contact support if the issue persists.",
+      icon: AlertTriangle,
+    }
+  }
+
+  const { title, description, icon: Icon } = getErrorDetails(error)
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-6">
+      <div className="text-center max-w-md">
+        <Icon className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+        <h1 className="text-xl font-semibold mb-2">{title}</h1>
+        <p className="text-muted-foreground mb-4">{description}</p>
+        <div className="flex gap-2 justify-center">
+          <Button variant="outline" onClick={() => router.push('/')}>
+            Go Back
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function PublicReports() {
   const params = useParams()
   const searchParams = useSearchParams()
   const token = params.token as string
-  const [hasIncrementedView, setHasIncrementedView] = useState(false)
+  const viewIncrementedRef = useRef(false)
+  const [reportError, setReportError] = useState<string | null>(null)
 
   const sections = useMemo(() => {
     const sectionsParam = searchParams.get('sections')
@@ -218,13 +270,24 @@ function PublicReports() {
   const incrementViewCount = useMutation(api.functions.admin.analytics.incrementViewCount)
 
   useEffect(() => {
-    if (token && reportData && !hasIncrementedView) {
-      incrementViewCount({ access_token: token }).catch(() => {
-
-      })
-      setHasIncrementedView(true)
+    if (reportData && !reportData.success) {
+      setReportError(reportData.error || "Unknown error occurred")
+      return
     }
-  }, [token, reportData, hasIncrementedView, incrementViewCount])
+
+    if (reportData?.success && reportError) {
+      setReportError(null)
+    }
+  }, [reportData, reportError])
+
+  useEffect(() => {
+    if (token && reportData?.success && !viewIncrementedRef.current) {
+      viewIncrementedRef.current = true
+      incrementViewCount({ access_token: token }).catch((error) => {
+        console.error("Failed to increment view count:", error)
+      })
+    }
+  }, [token, reportData, incrementViewCount])
 
   const tournamentTrendsConfig = {
     total: { label: "Total", color: "hsl(var(--chart-1))" },
@@ -257,48 +320,28 @@ function PublicReports() {
     transactions: { label: "Transactions", color: "hsl(var(--chart-2))" },
   } satisfies ChartConfig
 
+
   if (!token) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-6">
-        <div className="text-center">
-          <AlertTriangle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <h1 className="text-xl font-semibold mb-2">Invalid Report Link</h1>
-          <p className="text-muted-foreground">This report link is invalid or malformed.</p>
-        </div>
-      </div>
-    )
+    return <ErrorDisplay error="Invalid access token" />
+  }
+
+  if (reportError) {
+    return <ErrorDisplay error={reportError} />
   }
 
   if (!reportData) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-6">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-          <h1 className="text-xl font-semibold mb-2">Loading Report</h1>
-          <p className="text-muted-foreground">Please wait while we load your analytics report...</p>
-        </div>
-      </div>
-    )
+    return <AppLoader />
+  }
+
+  if (!reportData.success) {
+    return <ErrorDisplay error={reportData.error || "Unknown error"} />
   }
 
   if (!reportData.title) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-6">
-        <div className="text-center">
-          <AlertTriangle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <h1 className="text-xl font-semibold mb-2">Report Not Found</h1>
-          <p className="text-muted-foreground">
-            This report may have expired or been removed.
-          </p>
-          <Button variant="outline" className="mt-4" onClick={() => window.close()}>
-            Close
-          </Button>
-        </div>
-      </div>
-    )
+    return <ErrorDisplay error="Report not found" />
   }
 
-  const { overview, tournaments, users, financial, performance } = reportData.sections
+  const { overview, tournaments, users, financial, performance } = reportData.sections || {}
 
   return (
     <div className="min-h-screen bg-background">
@@ -315,7 +358,7 @@ function PublicReports() {
               </Badge>
               <Badge variant="outline" className="gap-1">
                 <Clock className="h-3 w-3" />
-                {new Date(reportData.generated_at).toLocaleTimeString()}
+                {reportData.generated_at ? new Date(reportData.generated_at).toLocaleTimeString() : "N/A"}
               </Badge>
             </div>
           </div>
@@ -1141,7 +1184,7 @@ function PublicReports() {
               <span>iRankHub Analytics — a product by iDebate Rwanda</span>
             </div>
             <div className="flex items-center gap-4 text-sm text-muted-foreground">
-              <span>Generated: {new Date(reportData.generated_at).toLocaleDateString()}</span>
+              <span>Generated: {reportData.generated_at ? new Date(reportData.generated_at).toLocaleDateString() : "N/A"}</span>
               <Button
                 variant="ghost"
                 size="sm"
