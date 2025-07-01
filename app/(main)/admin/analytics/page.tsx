@@ -27,8 +27,6 @@ import {
   AreaChart,
   Bar,
   BarChart,
-  Line,
-  LineChart,
   Pie,
   PieChart,
   Cell,
@@ -282,139 +280,139 @@ function ShareReportDialog({
 
   return (
     <>
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Share className="h-5 w-5" />
-            Share Analytics Report
-          </DialogTitle>
-          <DialogDescription>
-            Create a shareable link for this analytics report that can be accessed without login
-          </DialogDescription>
-        </DialogHeader>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Share className="h-5 w-5" />
+              Share Analytics Report
+            </DialogTitle>
+            <DialogDescription>
+              Create a shareable link for this analytics report that can be accessed without login
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="report-title">Report Title</Label>
-            <Input
-              id="report-title"
-              value={reportTitle}
-              onChange={(e) => setReportTitle(e.target.value)}
-              placeholder="e.g., Q1 2024 Tournament Analytics"
-            />
-          </div>
-
-          <div className="space-y-3">
-            <Label>Sections to Include</Label>
-            <div className="grid grid-cols-2 gap-3">
-              {sections.map((section) => (
-                <div key={section.id} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={section.id}
-                    checked={reportSections.includes(section.id)}
-                    onCheckedChange={() => handleSectionToggle(section.id)}
-                  />
-                  <Label htmlFor={section.id} className="text-sm">
-                    {section.label}
-                  </Label>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="expiration">Expires in (days)</Label>
-              <Select value={expirationDays} onValueChange={setExpirationDays}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="7">7 days</SelectItem>
-                  <SelectItem value="30">30 days</SelectItem>
-                  <SelectItem value="90">90 days</SelectItem>
-                  <SelectItem value="365">1 year</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="max-views">Max Views (optional)</Label>
+              <Label htmlFor="report-title">Report Title</Label>
               <Input
-                id="max-views"
-                type="number"
-                min="1"
-                value={maxViews}
-                onChange={(e) => setMaxViews(e.target.value)}
-                placeholder="Unlimited"
+                id="report-title"
+                value={reportTitle}
+                onChange={(e) => setReportTitle(e.target.value)}
+                placeholder="e.g., Q1 2024 Tournament Analytics"
               />
             </div>
+
+            <div className="space-y-3">
+              <Label>Sections to Include</Label>
+              <div className="grid grid-cols-2 gap-3">
+                {sections.map((section) => (
+                  <div key={section.id} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={section.id}
+                      checked={reportSections.includes(section.id)}
+                      onCheckedChange={() => handleSectionToggle(section.id)}
+                    />
+                    <Label htmlFor={section.id} className="text-sm">
+                      {section.label}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="expiration">Expires in (days)</Label>
+                <Select value={expirationDays} onValueChange={setExpirationDays}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="7">7 days</SelectItem>
+                    <SelectItem value="30">30 days</SelectItem>
+                    <SelectItem value="90">90 days</SelectItem>
+                    <SelectItem value="365">1 year</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="max-views">Max Views (optional)</Label>
+                <Input
+                  id="max-views"
+                  type="number"
+                  min="1"
+                  value={maxViews}
+                  onChange={(e) => setMaxViews(e.target.value)}
+                  placeholder="Unlimited"
+                />
+              </div>
+            </div>
           </div>
-        </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={handleGenerateReport} disabled={isGenerating}>
-            {isGenerating ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                Generating...
-              </>
-            ) : (
-              <>
-                <Share className="h-4 w-4 mr-2" />
-                Generate Report
-              </>
-            )}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  <Dialog open={showLinkDialog} onOpenChange={setShowLinkDialog}>
-    <DialogContent className="sm:max-w-xl">
-      <DialogHeader>
-        <DialogTitle>Shareable Report Link</DialogTitle>
-        <DialogDescription>
-          This link can be shared with others to access the report. It is viewable without login.
-        </DialogDescription>
-      </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleGenerateReport} disabled={isGenerating}>
+              {isGenerating ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Share className="h-4 w-4 mr-2" />
+                  Generate Report
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={showLinkDialog} onOpenChange={setShowLinkDialog}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Shareable Report Link</DialogTitle>
+            <DialogDescription>
+              This link can be shared with others to access the report. It is viewable without login.
+            </DialogDescription>
+          </DialogHeader>
 
-      <div className="space-y-3">
-        <Label className="text-sm">Link</Label>
-        <div className="flex items-center gap-2">
-          <Input
-            value={shareLink ?? ""}
-            readOnly
-            className="flex-1 text-sm"
-          />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleCopy}
-          >
-            {copied ? (
-              <Check className="h-4 w-4 text-green-600" />
-            ) : (
-              <Copy className="h-4 w-4" />
-            )}
-          </Button>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Anyone with this link can view the report until it expires or the view limit is reached.
-        </p>
-      </div>
+          <div className="space-y-3">
+            <Label className="text-sm">Link</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                value={shareLink ?? ""}
+                readOnly
+                className="flex-1 text-sm"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCopy}
+              >
+                {copied ? (
+                  <Check className="h-4 w-4 text-green-600" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Anyone with this link can view the report until it expires or the view limit is reached.
+            </p>
+          </div>
 
-      <div className="flex justify-end">
-        <Button onClick={() => setShowLinkDialog(false)}>Done</Button>
-      </div>
-    </DialogContent>
-  </Dialog>
+          <div className="flex justify-end">
+            <Button onClick={() => setShowLinkDialog(false)}>Done</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
 
-)
+  )
 }
 
 export default function AdminAnalyticsPage() {
@@ -602,7 +600,6 @@ export default function AdminAnalyticsPage() {
           { Metric: "Total Users", Value: exportData.overview.total_users },
           { Metric: "Total Schools", Value: exportData.overview.total_schools },
           { Metric: "Total Debates", Value: exportData.overview.total_debates },
-          { Metric: "Completion Rate (%)", Value: exportData.overview.completion_rate },
         ])
         XLSX.utils.book_append_sheet(workbook, overviewWS, "Overview")
       }
@@ -645,14 +642,20 @@ export default function AdminAnalyticsPage() {
       }
 
       if (exportData.performance) {
-        if (exportData.performance.team_performance) {
-          const teamPerfWS = XLSX.utils.json_to_sheet(exportData.performance.team_performance)
-          XLSX.utils.book_append_sheet(workbook, teamPerfWS, "Team Performance")
+        if (exportData.performance.tournament_rankings) {
+          const rankingsWS = XLSX.utils.json_to_sheet(exportData.performance.tournament_rankings.map((t: { tournament_name: any; format: any; date: string | number | Date; team_rankings: string | any[]; speaker_rankings: string | any[] }) => ({
+            tournament: t.tournament_name,
+            format: t.format,
+            date: new Date(t.date).toLocaleDateString(),
+            teams_count: t.team_rankings.length,
+            speakers_count: t.speaker_rankings.length
+          })))
+          XLSX.utils.book_append_sheet(workbook, rankingsWS, "Tournament Rankings")
         }
 
-        if (exportData.performance.judge_performance?.feedback_trends) {
-          const judgeFeedbackWS = XLSX.utils.json_to_sheet(exportData.performance.judge_performance.feedback_trends)
-          XLSX.utils.book_append_sheet(workbook, judgeFeedbackWS, "Judge Feedback")
+        if (exportData.performance.judge_performance?.consistency_scores) {
+          const judgeConsistencyWS = XLSX.utils.json_to_sheet(exportData.performance.judge_performance.consistency_scores)
+          XLSX.utils.book_append_sheet(workbook, judgeConsistencyWS, "Judge Consistency")
         }
       }
 
@@ -745,7 +748,6 @@ export default function AdminAnalyticsPage() {
           [`Total Users`, `${exportData.overview.total_users}`],
           [`Total Schools`, `${exportData.overview.total_schools}`],
           [`Total Debates`, `${exportData.overview.total_debates}`],
-          [`Completion Rate`, `${exportData.overview.completion_rate}%`],
         ]
 
         overviewDataItems.forEach(([label, value]) => {
@@ -781,8 +783,7 @@ export default function AdminAnalyticsPage() {
         csvContent += `Active Tournaments,${exportData.overview.active_tournaments}\n`
         csvContent += `Total Users,${exportData.overview.total_users}\n`
         csvContent += `Total Schools,${exportData.overview.total_schools}\n`
-        csvContent += `Total Debates,${exportData.overview.total_debates}\n`
-        csvContent += `Completion Rate,${exportData.overview.completion_rate}%\n\n`
+        csvContent += `Total Debates,${exportData.overview.total_debates}\n\n`
       }
 
       if (exportData.tournaments?.tournament_trends) {
@@ -976,7 +977,7 @@ export default function AdminAnalyticsPage() {
                   title="Total Tournaments"
                   value={overviewData?.total_tournaments?.toLocaleString() || "0"}
                   subtitle="All time"
-                  trend={overviewData?.growth_metrics.tournaments}
+                  trend={overviewData?.growth_metrics?.tournaments}
                   icon={Trophy}
                   loading={!overviewData}
                 />
@@ -991,7 +992,7 @@ export default function AdminAnalyticsPage() {
                   title="Total Users"
                   value={overviewData?.total_users?.toLocaleString() || "0"}
                   subtitle="Platform users"
-                  trend={overviewData?.growth_metrics.users}
+                  trend={overviewData?.growth_metrics?.users}
                   icon={Users}
                   loading={!overviewData}
                 />
@@ -999,7 +1000,7 @@ export default function AdminAnalyticsPage() {
                   title="Total Schools"
                   value={overviewData?.total_schools?.toLocaleString() || "0"}
                   subtitle="Registered schools"
-                  trend={overviewData?.growth_metrics.schools}
+                  trend={overviewData?.growth_metrics?.schools}
                   icon={Building}
                   loading={!overviewData}
                 />
@@ -1024,19 +1025,39 @@ export default function AdminAnalyticsPage() {
                 </ChartCard>
 
                 <ChartCard
-                  title="Completion Rate"
-                  description="Tournament completion percentage"
-                  chartId="completion-rate-chart"
+                  title="Platform Growth"
+                  description="Growth metrics overview"
+                  chartId="growth-metrics-chart"
                   onCopyImage={handleCopyChartImage}
                   loading={!overviewData}
                 >
-                  <div className="text-center py-8">
-                    <div className="text-4xl font-bold text-primary">
-                      {overviewData?.completion_rate || 0}%
+                  <div className="space-y-4 py-4">
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div>
+                        <div className="text-2xl font-bold text-green-600">
+                          {overviewData?.growth_metrics?.tournaments != null
+                            ? `${overviewData.growth_metrics.tournaments > 0 ? '+' : ''}${overviewData.growth_metrics.tournaments.toFixed(1)}%`
+                            : '0%'}
+                        </div>
+                        <p className="text-xs text-muted-foreground">Tournaments</p>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-bold text-blue-600">
+                          {overviewData?.growth_metrics?.users != null
+                           ? `${overviewData?.growth_metrics?.users > 0 ? '+' : ''}${overviewData?.growth_metrics?.users?.toFixed(1) || '0'}%`
+                            : '0%'}
+                        </div>
+                        <p className="text-xs text-muted-foreground">Users</p>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-bold text-purple-600">
+                          {overviewData?.growth_metrics?.schools != null
+                            ? `${overviewData?.growth_metrics?.schools > 0 ? '+' : ''}${overviewData?.growth_metrics?.schools?.toFixed(1) || '0'}%`
+                            : '0%'}
+                        </div>
+                        <p className="text-xs text-muted-foreground">Schools</p>
+                      </div>
                     </div>
-                    <p className="text-sm text-muted-foreground mt-2">
-                      Average tournament completion rate
-                    </p>
                   </div>
                 </ChartCard>
               </div>
@@ -1100,7 +1121,6 @@ export default function AdminAnalyticsPage() {
                     </Command>
                   </PopoverContent>
                 </Popover>
-
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1177,40 +1197,9 @@ export default function AdminAnalyticsPage() {
                             <Cell key={`cell-${entry}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                           ))}
                         </Pie>
-                        <ChartTooltip
-                          content={<ChartTooltipContent />}
-                        />
+                        <ChartTooltip content={<ChartTooltipContent />} />
                         <ChartLegend content={<ChartLegendContent />} />
                       </PieChart>
-                    </ChartContainer>
-                  )}
-                </ChartCard>
-
-                <ChartCard
-                  title="Completion Rates"
-                  description="Monthly tournament completion trends"
-                  chartId="completion-rates-chart"
-                  onCopyImage={handleCopyChartImage}
-                  loading={!tournamentData}
-                >
-                  {tournamentData?.completion_rates && (
-                    <ChartContainer config={{ rate: { label: "Completion Rate", color: "hsl(var(--chart-1))" } }} className="min-h-[300px] w-full">
-                      <LineChart data={tournamentData.completion_rates}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="month" />
-                        <YAxis />
-                        <ChartTooltip
-                          content={<ChartTooltipContent />}
-                          formatter={(value) => [`${value}%`, "Completion Rate"]}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="rate"
-                          stroke="var(--color-rate)"
-                          strokeWidth={2}
-                          dot={{ fill: "var(--color-rate)" }}
-                        />
-                      </LineChart>
                     </ChartContainer>
                   )}
                 </ChartCard>
@@ -1252,35 +1241,46 @@ export default function AdminAnalyticsPage() {
                     </ChartContainer>
                   )}
                 </ChartCard>
-              </div>
 
-              <ChartCard
-                title="Geographic Distribution"
-                description="Tournament distribution by country"
-                chartId="geographic-chart"
-                onCopyImage={handleCopyChartImage}
-                loading={!tournamentData}
-              >
-                {tournamentData?.geographic_distribution && (
-                  <ChartContainer
-                    config={{
-                      tournaments: { label: "Tournaments", color: "hsl(var(--chart-1))" },
-                      schools: { label: "Schools", color: "hsl(var(--chart-2))" }
-                    }}
-                    className="min-h-[300px] w-full"
-                  >
-                    <BarChart data={tournamentData.geographic_distribution}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="country" />
-                      <YAxis />
-                      <ChartTooltip content={<ChartTooltipContent />} />
-                      <ChartLegend content={<ChartLegendContent />} />
-                      <Bar dataKey="tournaments" fill="var(--color-tournaments)" />
-                      <Bar dataKey="schools" fill="var(--color-schools)" />
-                    </BarChart>
-                  </ChartContainer>
-                )}
-              </ChartCard>
+                <ChartCard
+                  title="Participation Metrics"
+                  description="Schools and students participation"
+                  chartId="participation-chart"
+                  onCopyImage={handleCopyChartImage}
+                  loading={!tournamentData}
+                >
+                  {tournamentData?.participation_metrics && (
+                    <div className="space-y-6 py-4">
+                      <div className="grid grid-cols-2 gap-4 text-center">
+                        <div>
+                          <div className="text-3xl font-bold text-primary">
+                            {tournamentData.participation_metrics.schools_participated}
+                          </div>
+                          <p className="text-sm text-muted-foreground">Schools Participated</p>
+                        </div>
+                        <div>
+                          <div className="text-3xl font-bold text-primary">
+                            {tournamentData.participation_metrics.total_students}
+                          </div>
+                          <p className="text-sm text-muted-foreground">Total Students</p>
+                        </div>
+                      </div>
+
+                      {tournamentData.participation_metrics.school_participation_breakdown?.length > 0 && (
+                        <div className="space-y-2">
+                          <h4 className="text-sm font-medium">Top Participating Schools</h4>
+                          {tournamentData.participation_metrics.school_participation_breakdown.slice(0, 5).map((school: any, index: number) => (
+                            <div key={index} className="flex justify-between items-center text-sm">
+                              <span className="truncate">{school.school_name}</span>
+                              <Badge variant="outline">{school.students_count} students</Badge>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </ChartCard>
+              </div>
             </TabsContent>
 
             <TabsContent value="users" className="space-y-6">
@@ -1383,56 +1383,56 @@ export default function AdminAnalyticsPage() {
                 </ChartCard>
 
                 <ChartCard
-                  title="Geographic Distribution"
-                  description="User distribution by country"
-                  chartId="user-geographic-chart"
+                  title="Engagement Metrics"
+                  description="User activity and participation"
+                  chartId="engagement-chart"
                   onCopyImage={handleCopyChartImage}
                   loading={!userData}
                 >
-                  {userData?.geographic_distribution && (
-                    <ChartContainer
-                      config={{
-                        users: { label: "Users", color: "hsl(var(--chart-1))" },
-                        schools: { label: "Schools", color: "hsl(var(--chart-2))" }
-                      }}
-                      className="min-h-[300px] w-full"
-                    >
-                      <BarChart data={userData.geographic_distribution}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="country" />
-                        <YAxis />
-                        <ChartTooltip content={<ChartTooltipContent />} />
-                        <ChartLegend content={<ChartLegendContent />} />
-                        <Bar dataKey="users" fill="var(--color-users)" />
-                        <Bar dataKey="schools" fill="var(--color-schools)" />
-                      </BarChart>
-                    </ChartContainer>
+                  {userData?.engagement_metrics && (
+                    <div className="space-y-6 py-4">
+                      <div className="text-center">
+                        <div className="text-3xl font-bold text-primary">
+                          {userData.engagement_metrics.active_users?.toLocaleString() || '0'}
+                        </div>
+                        <p className="text-sm text-muted-foreground">Active Users (Last 30 days)</p>
+                      </div>
+
+                      {userData.engagement_metrics.tournament_participation?.length > 0 && (
+                        <div className="space-y-3">
+                          <h4 className="text-sm font-medium">Tournament Participation by Role</h4>
+                          {userData.engagement_metrics.tournament_participation.map((item: any, index: number) => (
+                            <div key={index} className="flex justify-between items-center">
+                              <span className="text-sm capitalize">{item.role.replace('_', ' ')}</span>
+                              <Badge variant="outline">{item.participation_rate}%</Badge>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </ChartCard>
 
                 <ChartCard
-                  title="Retention Rates"
-                  description="User retention by cohort"
-                  chartId="retention-rates-chart"
+                  title="Login Activity"
+                  description="User login frequency"
+                  chartId="login-activity-chart"
                   onCopyImage={handleCopyChartImage}
                   loading={!userData}
                 >
-                  {userData?.retention_rates && (
+                  {userData?.engagement_metrics?.login_frequency && (
                     <ChartContainer
                       config={{
-                        retention_rate: { label: "Retention Rate", color: "hsl(var(--chart-1))" }
+                        logins: { label: "Logins", color: "hsl(var(--chart-1))" }
                       }}
                       className="min-h-[300px] w-full"
                     >
-                      <BarChart data={userData.retention_rates}>
+                      <BarChart data={userData.engagement_metrics.login_frequency}>
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="cohort" />
+                        <XAxis dataKey="period" />
                         <YAxis />
-                        <ChartTooltip
-                          content={<ChartTooltipContent />}
-                          formatter={(value) => [`${value}%`, "Retention Rate"]}
-                        />
-                        <Bar dataKey="retention_rate" fill="var(--color-retention_rate)" />
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <Bar dataKey="logins" fill="var(--color-logins)" />
                       </BarChart>
                     </ChartContainer>
                   )}
@@ -1581,317 +1581,270 @@ export default function AdminAnalyticsPage() {
                   )}
                 </ChartCard>
               </div>
+
+              {financialData && (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Outstanding Payments</CardTitle>
+                      <CardDescription>Pending payment analysis</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-orange-600">
+                            {financialData.outstanding_payments?.total_amount?.toLocaleString() || 0} {selectedCurrency}
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            {financialData.outstanding_payments?.count || 0} pending payments
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Waiver Usage</CardTitle>
+                      <CardDescription>Fee waivers granted</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-blue-600">
+                            {financialData.waiver_usage?.total_waivers || 0}
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            {financialData.waiver_usage?.total_amount_waived?.toLocaleString() || 0} {selectedCurrency} waived
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Payment Summary</CardTitle>
+                      <CardDescription>Financial overview</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Total Revenue</span>
+                          <span className="text-sm font-medium">
+                            {financialData.revenue_trends?.reduce((sum: number, day: any) => sum + day.revenue, 0)?.toLocaleString() || 0} {selectedCurrency}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Total Transactions</span>
+                          <span className="text-sm font-medium">
+                            {financialData.revenue_trends?.reduce((sum: number, day: any) => sum + day.transactions, 0)?.toLocaleString() || 0}
+                          </span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="performance" className="space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <ChartCard
-                  title="Judge Feedback Trends"
-                  description="Average judge ratings over time"
+                  title="Top Schools Performance"
+                  description="Cross-tournament school rankings"
+                  chartId="top-schools-chart"
+                  onCopyImage={handleCopyChartImage}
+                  loading={!performanceData}
+                >
+                  {performanceData?.cross_tournament_rankings?.top_schools && (
+                    <div className="space-y-3">
+                      {performanceData.cross_tournament_rankings.top_schools.slice(0, 10).map((school: any, index: number) => (
+                        <div key={index} className="flex justify-between items-center p-3 border rounded">
+                          <div>
+                            <p className="font-medium">{school.school_name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {school.tournaments_participated} tournaments • Avg rank: {school.average_rank}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <Badge variant="outline">#{index + 1}</Badge>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {school.consistency_score.toFixed(1)}% consistency
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </ChartCard>
+
+                <ChartCard
+                  title="Top Speakers Performance"
+                  description="Cross-tournament speaker rankings"
+                  chartId="top-speakers-chart"
+                  onCopyImage={handleCopyChartImage}
+                  loading={!performanceData}
+                >
+                  {performanceData?.cross_tournament_rankings?.top_speakers && (
+                    <div className="space-y-3">
+                      {performanceData.cross_tournament_rankings.top_speakers.slice(0, 10).map((speaker: any, index: number) => (
+                        <div key={index} className="flex justify-between items-center p-3 border rounded">
+                          <div>
+                            <p className="font-medium">{speaker.speaker_name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {speaker.school_name} • {speaker.tournaments_participated} tournaments
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <Badge variant="outline">#{index + 1}</Badge>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Best: #{speaker.best_rank} • Avg: {speaker.average_rank}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </ChartCard>
+
+                <ChartCard
+                  title="Judge Consistency"
+                  description="Top performing judges"
+                  chartId="judge-consistency-chart"
+                  onCopyImage={handleCopyChartImage}
+                  loading={!performanceData}
+                >
+                  {performanceData?.judge_performance?.consistency_scores && (
+                    <div className="space-y-3">
+                      {performanceData.judge_performance.consistency_scores.slice(0, 10).map((judge: any, index: number) => (
+                        <div key={index} className="flex justify-between items-center p-3 border rounded">
+                          <div>
+                            <p className="font-medium">{judge.judge_name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {judge.debates_judged} debates • {judge.tournaments_participated} tournaments
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <Badge variant="outline">{judge.consistency.toFixed(1)}%</Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </ChartCard>
+
+                <ChartCard
+                  title="Judge Feedback Quality"
+                  description="Judge performance based on feedback"
                   chartId="judge-feedback-chart"
                   onCopyImage={handleCopyChartImage}
                   loading={!performanceData}
                 >
-                  {performanceData?.judge_performance?.feedback_trends && (
-                    <ChartContainer
-                      config={{
-                        average_rating: { label: "Average Rating", color: "hsl(var(--chart-1))" }
-                      }}
-                      className="min-h-[300px] w-full"
-                    >
-                      <LineChart data={performanceData.judge_performance.feedback_trends}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="period" />
-                        <YAxis domain={[0, 5]} />
-                        <ChartTooltip content={<ChartTooltipContent />} />
-                        <Line
-                          type="monotone"
-                          dataKey="average_rating"
-                          stroke="var(--color-average_rating)"
-                          strokeWidth={2}
-                          dot={{ fill: "var(--color-average_rating)" }}
-                        />
-                      </LineChart>
-                    </ChartContainer>
-                  )}
-                </ChartCard>
-
-                <ChartCard
-                  title="Team Performance"
-                  description="School performance metrics"
-                  chartId="team-performance-chart"
-                  onCopyImage={handleCopyChartImage}
-                  loading={!performanceData}
-                >
-                  {performanceData?.team_performance && (
-                    <ChartContainer
-                      config={{
-                        win_rate: { label: "Win Rate", color: "hsl(var(--chart-1))" },
-                        avg_speaker_score: { label: "Avg Speaker Score", color: "hsl(var(--chart-2))" }
-                      }}
-                      className="min-h-[300px] w-full"
-                    >
-                      <BarChart data={performanceData.team_performance.slice(0, 10)}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis
-                          dataKey="school_name"
-                          angle={-45}
-                          textAnchor="end"
-                          height={100}
-                        />
-                        <YAxis />
-                        <ChartTooltip content={<ChartTooltipContent />} />
-                        <ChartLegend content={<ChartLegendContent />} />
-                        <Bar dataKey="win_rate" fill="var(--color-win_rate)" />
-                      </BarChart>
-                    </ChartContainer>
-                  )}
-                </ChartCard>
-
-                <ChartCard
-                  title="Speaker Rankings"
-                  description="Speaker performance distribution"
-                  chartId="speaker-rankings-chart"
-                  onCopyImage={handleCopyChartImage}
-                  loading={!performanceData}
-                >
-                  {performanceData?.speaker_performance && (
-                    <ChartContainer
-                      config={performanceData.speaker_performance.reduce((acc: ChartConfig, rank: any, index: number) => {
-                        acc[rank.speaker_rank_range] = {
-                          label: rank.speaker_rank_range,
-                          color: CHART_COLORS[index % CHART_COLORS.length]
-                        }
-                        return acc
-                      }, {})}
-                      className="min-h-[300px] w-full"
-                    >
-                      <PieChart>
-                        <Pie
-                          data={performanceData.speaker_performance}
-                          dataKey="count"
-                          nameKey="speaker_rank_range"
-                          cx="50%"
-                          cy="50%"
-                          outerRadius={100}
-                          label={({ speaker_rank_range, percentage }) => `${speaker_rank_range}: ${percentage}%`}
-                        >
-                          {performanceData.speaker_performance.map((item: any, index: number) => (
-                            <Cell key={`cell-${item}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <ChartTooltip content={<ChartTooltipContent />} />
-                        <ChartLegend content={<ChartLegendContent />} />
-                      </PieChart>
-                    </ChartContainer>
-                  )}
-                </ChartCard>
-
-                <ChartCard
-                  title="Fact Check Usage"
-                  description="AI fact-checking utilization by tournament"
-                  chartId="fact-check-usage-chart"
-                  onCopyImage={handleCopyChartImage}
-                  loading={!performanceData}
-                >
-                  {performanceData?.debate_quality?.fact_check_usage && (
-                    <ChartContainer
-                      config={{
-                        usage_rate: { label: "Usage Rate", color: "hsl(var(--chart-1))" }
-                      }}
-                      className="min-h-[300px] w-full"
-                    >
-                      <BarChart data={performanceData.debate_quality.fact_check_usage.slice(0, 10)}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis
-                          dataKey="tournament"
-                          angle={-45}
-                          textAnchor="end"
-                          height={100}
-                        />
-                        <YAxis />
-                        <ChartTooltip
-                          content={<ChartTooltipContent />}
-                          formatter={(value) => [`${value}`, "Fact Checks per Debate"]}
-                        />
-                        <Bar dataKey="usage_rate" fill="var(--color-usage_rate)" />
-                      </BarChart>
-                    </ChartContainer>
-                  )}
-                </ChartCard>
-
-                <ChartCard
-                  title="Judge Response Times"
-                  description="Average time for judges to submit ballots"
-                  chartId="judge-response-times-chart"
-                  onCopyImage={handleCopyChartImage}
-                  loading={!performanceData}
-                >
-                  {performanceData?.efficiency_metrics?.judge_response_times && (
-                    <ChartContainer
-                      config={{
-                        avg_response_time: { label: "Response Time (hours)", color: "hsl(var(--chart-1))" }
-                      }}
-                      className="min-h-[300px] w-full"
-                    >
-                      <LineChart data={performanceData.efficiency_metrics.judge_response_times}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="period" />
-                        <YAxis />
-                        <ChartTooltip
-                          content={<ChartTooltipContent />}
-                          formatter={(value) => [`${value} hours`, "Avg Response Time"]}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="avg_response_time"
-                          stroke="var(--color-avg_response_time)"
-                          strokeWidth={2}
-                          dot={{ fill: "var(--color-avg_response_time)" }}
-                        />
-                      </LineChart>
-                    </ChartContainer>
-                  )}
-                </ChartCard>
-
-                <ChartCard
-                  title="Bias Detection"
-                  description="Judge bias detection rates"
-                  chartId="bias-detection-chart"
-                  onCopyImage={handleCopyChartImage}
-                  loading={!performanceData}
-                >
-                  {performanceData?.judge_performance?.bias_detection && (
-                    <ChartContainer
-                      config={{
-                        bias_rate: { label: "Bias Rate (%)", color: "hsl(var(--chart-1))" }
-                      }}
-                      className="min-h-[300px] w-full"
-                    >
-                      <BarChart data={performanceData.judge_performance.bias_detection.filter((judge: any) => judge.bias_rate > 0).slice(0, 10)}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis
-                          dataKey="judge_name"
-                          angle={-45}
-                          textAnchor="end"
-                          height={100}
-                        />
-                        <YAxis />
-                        <ChartTooltip
-                          content={<ChartTooltipContent />}
-                          formatter={(value) => [`${value}%`, "Bias Rate"]}
-                        />
-                        <Bar dataKey="bias_rate" fill="var(--color-bias_rate)" />
-                      </BarChart>
-                    </ChartContainer>
+                  {performanceData?.judge_performance?.feedback_quality && (
+                    <div className="space-y-3">
+                      {performanceData.judge_performance.feedback_quality.slice(0, 10).map((judge: any, index: number) => (
+                        <div key={index} className="flex justify-between items-center p-3 border rounded">
+                          <div>
+                            <p className="font-medium">{judge.judge_name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {judge.total_feedback_received} reviews • {judge.response_time_avg}h avg response
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <Badge variant="outline">{judge.avg_feedback_score.toFixed(1)}/5</Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </ChartCard>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Tournament Efficiency</CardTitle>
-                    <CardDescription>Average duration metrics</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {!performanceData ? (
-                      <ChartSkeleton height="h-[150px]" />
-                    ) : (
-                      <div className="space-y-4">
-                        <div className="text-center">
-                          <div className="text-2xl font-bold text-primary">
-                            {performanceData.efficiency_metrics?.avg_tournament_duration || 0}
+              {performanceData?.tournament_rankings && (
+                <ChartCard
+                  title="Recent Tournament Results"
+                  description="Latest tournament rankings and outcomes"
+                  chartId="recent-tournaments-chart"
+                  onCopyImage={handleCopyChartImage}
+                  loading={!performanceData}
+                >
+                  <div className="space-y-4">
+                    {performanceData.tournament_rankings.slice(0, 5).map((tournament: any, index: number) => (
+                      <div key={index} className="border rounded p-4">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <h4 className="font-medium">{tournament.tournament_name}</h4>
+                            <p className="text-sm text-muted-foreground">
+                              {tournament.format} • {new Date(tournament.date).toLocaleDateString()}
+                            </p>
                           </div>
-                          <p className="text-sm text-muted-foreground">
-                            Average tournament duration (days)
+                          <div className="text-right text-sm">
+                            <span>{tournament.team_rankings.length} teams</span>
+                            <br />
+                            <span className="text-muted-foreground">{tournament.speaker_rankings.length} speakers</span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <h5 className="text-sm font-medium mb-2">Top Teams</h5>
+                            <div className="space-y-1">
+                              {tournament.team_rankings.slice(0, 3).map((team: any, teamIndex: number) => (
+                                <div key={teamIndex} className="flex justify-between text-xs">
+                                  <span>#{team.rank} {team.team_name}</span>
+                                  <span>{team.wins}W {team.total_points}pts</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div>
+                            <h5 className="text-sm font-medium mb-2">Top Speakers</h5>
+                            <div className="space-y-1">
+                              {tournament.speaker_rankings.slice(0, 3).map((speaker: any, speakerIndex: number) => (
+                                <div key={speakerIndex} className="flex justify-between text-xs">
+                                  <span>#{speaker.rank} {speaker.speaker_name}</span>
+                                  <span>{speaker.total_points}pts</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ChartCard>
+              )}
+
+              {performanceData?.cross_tournament_rankings?.top_teams && (
+                <ChartCard
+                  title="Top Team Combinations"
+                  description="Most successful team partnerships"
+                  chartId="top-teams-chart"
+                  onCopyImage={handleCopyChartImage}
+                  loading={!performanceData}
+                >
+                  <div className="space-y-3">
+                    {performanceData.cross_tournament_rankings.top_teams.slice(0, 10).map((team: any, index: number) => (
+                      <div key={index} className="flex justify-between items-center p-3 border rounded">
+                        <div>
+                          <p className="font-medium">{team.team_composition}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {team.school_name} • {team.tournaments_together} tournaments together
                           </p>
                         </div>
-                        {performanceData.efficiency_metrics?.round_completion_times && (
-                          <div className="space-y-2">
-                            {performanceData.efficiency_metrics.round_completion_times.map((round: any, index: number) => (
-                              <div key={index} className="flex justify-between items-center">
-                                <span className="text-sm text-muted-foreground capitalize">
-                                  {round.round_type}
-                                </span>
-                                <span className="text-sm font-medium">
-                                  {round.avg_duration.toFixed(1)}h
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                        <div className="text-right">
+                          <Badge variant="outline">{team.win_rate}% wins</Badge>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {team.combined_points} total points
+                          </p>
+                        </div>
                       </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Judge Consistency</CardTitle>
-                    <CardDescription>Top performing judges</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {!performanceData ? (
-                      <ChartSkeleton height="h-[150px]" />
-                    ) : (
-                      <div className="space-y-3">
-                        {performanceData.judge_performance?.consistency_scores?.slice(0, 5).map((judge: any, index: number) => (
-                          <div key={index} className="flex justify-between items-center">
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{judge.judge_name}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {judge.debates_judged} debates
-                              </p>
-                            </div>
-                            <Badge variant="outline">
-                              {judge.consistency.toFixed(1)}%
-                            </Badge>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Argument Quality</CardTitle>
-                    <CardDescription>Debate complexity metrics</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {!performanceData ? (
-                      <ChartSkeleton height="h-[150px]" />
-                    ) : (
-                      <div className="space-y-4">
-                        {performanceData.debate_quality?.argument_complexity?.slice(0, 3).map((tournament: any, index: number) => (
-                          <div key={index} className="space-y-2">
-                            <p className="text-sm font-medium truncate" title={tournament.tournament}>
-                              {tournament.tournament}
-                            </p>
-                            <div className="grid grid-cols-2 gap-2 text-xs">
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Args:</span>
-                                <span>{tournament.avg_arguments}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Rebuttals:</span>
-                                <span>{tournament.avg_rebuttals}</span>
-                              </div>
-                            </div>
-                            <div className="w-full bg-muted rounded-full h-2">
-                              <div
-                                className="bg-primary h-2 rounded-full"
-                                style={{ width: `${Math.min(tournament.quality_score, 100)}%` }}
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
+                    ))}
+                  </div>
+                </ChartCard>
+              )}
             </TabsContent>
           </Tabs>
         </div>

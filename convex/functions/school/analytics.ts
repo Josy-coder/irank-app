@@ -1,4 +1,4 @@
-import { mutation, query } from "../../_generated/server";
+import { query } from "../../_generated/server";
 import { v } from "convex/values";
 import { api, internal } from "../../_generated/api";
 import { Doc, Id } from "../../_generated/dataModel";
@@ -162,18 +162,6 @@ export const getSchoolPerformanceAnalytics = query({
       tournaments.some(t => t._id === team.tournament_id)
     );
 
-    const teamResults = await Promise.all(
-      relevantTeams.map(async (team) => {
-        const results = await ctx.db
-          .query("tournament_results")
-          .withIndex("by_tournament_id_team_id", (q) =>
-            q.eq("tournament_id", team.tournament_id).eq("team_id", team._id)
-          )
-          .first();
-        return { team, results };
-      })
-    );
-
     const schoolStudents = await ctx.db
       .query("users")
       .withIndex("by_school_id_role", (q) =>
@@ -181,18 +169,68 @@ export const getSchoolPerformanceAnalytics = query({
       )
       .collect();
 
-    const speakerResults = await Promise.all(
-      schoolStudents.map(async (student) => {
-        const results = await ctx.db
-          .query("tournament_results")
-          .withIndex("by_speaker_id", (q) => q.eq("speaker_id", student._id))
-          .collect();
+    const debates = await ctx.db.query("debates").collect();
+    const judgingScores = await ctx.db.query("judging_scores").collect();
 
-        const tournamentResults = results.filter(result =>
-          tournaments.some(t => t._id === result.tournament_id)
+    const teamResults = await Promise.all(
+      relevantTeams.map(async (team) => {
+        const teamDebates = debates.filter(d =>
+          d.tournament_id === team.tournament_id &&
+          (d.proposition_team_id === team._id || d.opposition_team_id === team._id)
         );
 
-        return { student, results: tournamentResults };
+        let wins = 0;
+        let losses = 0;
+        let totalPoints = 0;
+
+        teamDebates.forEach(debate => {
+          if (debate.status === "completed") {
+            if (debate.winning_team_id === team._id) {
+              wins++;
+            } else if (debate.winning_team_id) {
+              losses++;
+            }
+
+            if (debate.proposition_team_id === team._id && debate.proposition_team_points) {
+              totalPoints += debate.proposition_team_points;
+            } else if (debate.opposition_team_id === team._id && debate.opposition_team_points) {
+              totalPoints += debate.opposition_team_points;
+            }
+          }
+        });
+
+        return {
+          team,
+          results: {
+            wins,
+            losses,
+            team_points: totalPoints,
+            debates_count: teamDebates.length,
+          }
+        };
+      })
+    );
+
+    const speakerResults = await Promise.all(
+      schoolStudents.map(async (student) => {
+        const studentJudgingScores = judgingScores.filter(score =>
+          score.speaker_scores?.some(s => s.speaker_id === student._id) &&
+          tournaments.some(t => debates.some(d => d._id === score.debate_id && d.tournament_id === t._id))
+        );
+
+        const results = studentJudgingScores.map(score => {
+          const speakerScore = score.speaker_scores?.find(s => s.speaker_id === student._id);
+          const debate = debates.find(d => d._id === score.debate_id);
+          const tournament = tournaments.find(t => t._id === debate?.tournament_id);
+
+          return {
+            tournament_id: tournament?._id,
+            speaker_score: speakerScore?.score || 0,
+            debate_date: debate?.start_time || tournament?.start_date || now,
+          };
+        });
+
+        return { student, results };
       })
     );
 
@@ -225,18 +263,6 @@ export const getSchoolPerformanceAnalytics = query({
         prevTournaments.some(t => t._id === team.tournament_id)
       );
 
-      const prevTeamResults = await Promise.all(
-        prevSchoolTeams.map(async (team) => {
-          const results = await ctx.db
-            .query("tournament_results")
-            .withIndex("by_tournament_id_team_id", (q) =>
-              q.eq("tournament_id", team.tournament_id).eq("team_id", team._id)
-            )
-            .first();
-          return { team, results };
-        })
-      );
-
       if (prevStudentsCount.length > 0) {
         trends.students = ((schoolStudents.length - prevStudentsCount.length) / prevStudentsCount.length) * 100;
       }
@@ -245,17 +271,34 @@ export const getSchoolPerformanceAnalytics = query({
         trends.tournaments = ((tournaments.length - prevTournaments.length) / prevTournaments.length) * 100;
       }
 
-      const currentAvgRank = teamResults.length > 0
-        ? teamResults.reduce((sum, tr) => sum + (tr.results?.team_rank || 999), 0) / teamResults.length
-        : 999;
+      const currentAvgWins = teamResults.length > 0
+        ? teamResults.reduce((sum, tr) => sum + tr.results.wins, 0) / teamResults.length
+        : 0;
 
-      const prevAvgRank = prevTeamResults.length > 0
-        ? prevTeamResults.reduce((sum, tr) => sum + (tr.results?.team_rank || 999), 0) / prevTeamResults.length
-        : 999;
+      const prevTeamResults = await Promise.all(
+        prevSchoolTeams.map(async (team) => {
+          const teamDebates = debates.filter(d =>
+            d.tournament_id === team.tournament_id &&
+            (d.proposition_team_id === team._id || d.opposition_team_id === team._id)
+          );
 
-      if (prevAvgRank !== 999 && currentAvgRank !== 999) {
+          let wins = 0;
+          teamDebates.forEach(debate => {
+            if (debate.status === "completed" && debate.winning_team_id === team._id) {
+              wins++;
+            }
+          });
 
-        trends.performance = ((prevAvgRank - currentAvgRank) / prevAvgRank) * 100;
+          return wins;
+        })
+      );
+
+      const prevAvgWins = prevTeamResults.length > 0
+        ? prevTeamResults.reduce((sum, wins) => sum + wins, 0) / prevTeamResults.length
+        : 0;
+
+      if (prevAvgWins > 0) {
+        trends.performance = ((currentAvgWins - prevAvgWins) / prevAvgWins) * 100;
       }
     }
 
@@ -283,18 +326,24 @@ export const getSchoolPerformanceAnalytics = query({
       );
 
       const avgTeamRank = periodTeamResults.length > 0
-        ? periodTeamResults.reduce((sum, { results }) => sum + (results?.team_rank || 999), 0) / periodTeamResults.length
+        ? periodTeamResults.reduce((sum, { results }) => {
+        const totalGames = results.wins + results.losses;
+        const winRate = totalGames > 0 ? results.wins / totalGames : 0;
+
+        const approximateRank = Math.max(1, Math.ceil((1 - winRate) * 50));
+        return sum + approximateRank;
+      }, 0) / periodTeamResults.length
         : 0;
 
       const avgSpeakerScore = periodSpeakerResults.length > 0
-        ? periodSpeakerResults.reduce((sum, result) => sum + (result.average_speaker_score || 0), 0) / periodSpeakerResults.length
+        ? periodSpeakerResults.reduce((sum, result) => sum + result.speaker_score, 0) / periodSpeakerResults.length
         : 0;
 
-      const totalWins = periodTeamResults.reduce((sum, { results }) => sum + (results?.wins || 0), 0);
-      const totalGames = periodTeamResults.reduce((sum, { results }) => sum + ((results?.wins || 0) + (results?.losses || 0)), 0);
+      const totalWins = periodTeamResults.reduce((sum, { results }) => sum + results.wins, 0);
+      const totalGames = periodTeamResults.reduce((sum, { results }) => sum + (results.wins + results.losses), 0);
       const winRate = totalGames > 0 ? (totalWins / totalGames) * 100 : 0;
 
-      const totalPoints = periodSpeakerResults.reduce((sum, result) => sum + (result.total_speaker_points || 0), 0);
+      const totalPoints = periodTeamResults.reduce((sum, { results }) => sum + results.team_points, 0);
 
       performanceTrends.push({
         period: `Q${i + 1} ${new Date(periodStart).getFullYear()}`,
@@ -337,15 +386,18 @@ export const getSchoolPerformanceAnalytics = query({
           studentResults.map(async (result) => {
             const tournament = tournaments.find(t => t._id === result.tournament_id);
             const teamResult = teamResults.find(tr =>
-              tr.results && tr.team.members.includes(student._id) && tr.team.tournament_id === result.tournament_id
+              tr.team.members.includes(student._id) && tr.team.tournament_id === result.tournament_id
             );
+
+            const maxScore = 30;
+            const approximateRank = Math.max(1, Math.ceil((1 - (result.speaker_score / maxScore)) * 100));
 
             return {
               tournament_name: tournament?.name || "Unknown",
-              date: tournament?.start_date || 0,
-              speaker_rank: result.speaker_rank || 999,
-              speaker_points: result.total_speaker_points || 0,
-              team_rank: teamResult?.results?.team_rank || 999,
+              date: result.debate_date,
+              speaker_rank: approximateRank,
+              speaker_points: result.speaker_score,
+              team_rank: teamResult ? Math.ceil((1 - (teamResult.results.wins / Math.max(1, teamResult.results.wins + teamResult.results.losses))) * 50) : 999,
             };
           })
         );
@@ -372,10 +424,10 @@ export const getSchoolPerformanceAnalytics = query({
           }
         }
 
-        const avgScore = studentResults.reduce((sum, r) => sum + (r.average_speaker_score || 0), 0) / studentResults.length;
-        const bestRank = Math.min(...studentResults.map(r => r.speaker_rank || 999));
+        const avgScore = studentResults.reduce((sum, r) => sum + r.speaker_score, 0) / studentResults.length;
+        const bestRank = Math.min(...tournamentPerformances.map(p => p.speaker_rank));
 
-        const ranks = studentResults.map(r => r.speaker_rank || 999);
+        const ranks = tournamentPerformances.map(p => p.speaker_rank);
         const avgRank = ranks.reduce((sum, rank) => sum + rank, 0) / ranks.length;
         const variance = ranks.reduce((sum, rank) => sum + Math.pow(rank - avgRank, 2), 0) / ranks.length;
         const consistency = Math.max(0, 100 - Math.sqrt(variance));
@@ -440,41 +492,56 @@ export const getSchoolPerformanceAnalytics = query({
         const memberPerformances = await Promise.all(
           team.members.map(async (memberId) => {
             const member = await ctx.db.get(memberId);
-            const memberResult = await ctx.db
-              .query("tournament_results")
-              .withIndex("by_tournament_id_speaker_id", (q) =>
-                q.eq("tournament_id", team.tournament_id).eq("speaker_id", memberId)
-              )
-              .first();
+            const memberJudgingScores = judgingScores.filter(score =>
+              score.speaker_scores?.some(s => s.speaker_id === memberId) &&
+              debates.some(d => d._id === score.debate_id && d.tournament_id === team.tournament_id)
+            );
 
-            const previousResults = await ctx.db
-              .query("tournament_results")
-              .withIndex("by_speaker_id", (q) => q.eq("speaker_id", memberId))
-              .collect();
+            const memberScore = memberJudgingScores.length > 0
+              ? memberJudgingScores.reduce((sum, score) => {
+              const speakerScore = score.speaker_scores?.find(s => s.speaker_id === memberId);
+              return sum + (speakerScore?.score || 0);
+            }, 0) / memberJudgingScores.length
+              : 0;
 
-            const sortedResults = previousResults
-              .filter(r => tournaments.find(t => t._id === r.tournament_id && t.start_date < tournament!.start_date))
+            const allMemberScores = judgingScores.filter(score =>
+              score.speaker_scores?.some(s => s.speaker_id === memberId)
+            );
+
+            const previousScores = allMemberScores
+              .filter(score => {
+                const debate = debates.find(d => d._id === score.debate_id);
+                const debateTournament = tournaments.find(t => t._id === debate?.tournament_id);
+                return debateTournament && debateTournament.start_date < (tournament?.start_date || 0);
+              })
               .sort((a, b) => {
-                const tournamentA = tournaments.find(t => t._id === a.tournament_id);
-                const tournamentB = tournaments.find(t => t._id === b.tournament_id);
+                const debateA = debates.find(d => d._id === a.debate_id);
+                const debateB = debates.find(d => d._id === b.debate_id);
+                const tournamentA = tournaments.find(t => t._id === debateA?.tournament_id);
+                const tournamentB = tournaments.find(t => t._id === debateB?.tournament_id);
                 return (tournamentB?.start_date || 0) - (tournamentA?.start_date || 0);
               });
 
-            const previousResult = sortedResults[0];
-            const improvementFromLast = previousResult
-              ? (previousResult.speaker_rank || 999) - (memberResult?.speaker_rank || 999)
+            const previousScore = previousScores.length > 0
+              ? previousScores[0].speaker_scores?.find(s => s.speaker_id === memberId)?.score || 0
               : 0;
+
+            const improvementFromLast = memberScore - previousScore;
+
+            const approximateRank = Math.max(1, Math.ceil((1 - (memberScore / 30)) * 100));
 
             return {
               student_id: memberId,
               student_name: member?.name || "Unknown",
-              speaker_rank: memberResult?.speaker_rank || 999,
-              speaker_points: memberResult?.total_speaker_points || 0,
-              avg_score: memberResult?.average_speaker_score || 0,
-              improvement_from_last: improvementFromLast,
+              speaker_rank: approximateRank,
+              speaker_points: memberScore,
+              avg_score: memberScore,
+              improvement_from_last: Math.round(improvementFromLast * 10) / 10,
             };
           })
         );
+
+        const teamRank = results ? Math.ceil((1 - (results.wins / Math.max(1, results.wins + results.losses))) * 50) : 999;
 
         return {
           team_id: team._id,
@@ -482,11 +549,11 @@ export const getSchoolPerformanceAnalytics = query({
           tournament_id: team.tournament_id,
           tournament_name: tournament?.name || "Unknown",
           performance: {
-            rank: results?.team_rank || 999,
+            rank: teamRank,
             wins: results?.wins || 0,
             total_points: results?.team_points || 0,
             avg_speaker_score: memberPerformances.reduce((sum, m) => sum + m.avg_score, 0) / memberPerformances.length,
-            debates_count: (results?.wins || 0) + (results?.losses || 0),
+            debates_count: results?.debates_count || 0,
           },
           member_performances: memberPerformances.sort((a, b) => a.speaker_rank - b.speaker_rank),
         };
@@ -508,19 +575,24 @@ export const getSchoolPerformanceAnalytics = query({
           .withIndex("by_school_id", (q) => q.eq("school_id", similarSchool._id))
           .collect();
 
-        const similarSchoolResults = await Promise.all(
-          similarSchoolTeams.map(async (team) => {
-            return await ctx.db
-              .query("tournament_results")
-              .withIndex("by_team_id", (q) => q.eq("team_id", team._id))
-              .first();
-          })
+        const similarSchoolDebates = debates.filter(debate =>
+          similarSchoolTeams.some(team =>
+            team._id === debate.proposition_team_id || team._id === debate.opposition_team_id
+          )
         );
 
-        const validResults = similarSchoolResults.filter(Boolean);
-        const avgPerformance = validResults.length > 0
-          ? validResults.reduce((sum, result) => sum + (1000 - (result!.team_rank || 999)), 0) / validResults.length
-          : 0;
+        let schoolWins = 0;
+        let schoolTotal = 0;
+
+        similarSchoolDebates.forEach(debate => {
+          if (debate.status === "completed") {
+            const isSchoolTeam = similarSchoolTeams.some(team => team._id === debate.winning_team_id);
+            if (isSchoolTeam) schoolWins++;
+            schoolTotal++;
+          }
+        });
+
+        const avgPerformance = schoolTotal > 0 ? (schoolWins / schoolTotal) * 1000 : 0;
 
         const studentCount = await ctx.db
           .query("users")
@@ -540,9 +612,9 @@ export const getSchoolPerformanceAnalytics = query({
 
     const similarSchools = similarSchoolsData.filter(Boolean) as any[];
 
-    const schoolAvgPerformance = teamResults.length > 0
-      ? teamResults.reduce((sum, { results }) => sum + (1000 - (results?.team_rank || 999)), 0) / teamResults.length
-      : 0;
+    const schoolWins = teamResults.reduce((sum, { results }) => sum + results.wins, 0);
+    const schoolTotal = teamResults.reduce((sum, { results }) => sum + (results.wins + results.losses), 0);
+    const schoolAvgPerformance = schoolTotal > 0 ? (schoolWins / schoolTotal) * 1000 : 0;
 
     const schoolsBetter = similarSchools.filter(s => s.avg_performance > schoolAvgPerformance).length;
     const performancePercentile = similarSchools.length > 0
@@ -709,7 +781,11 @@ export const getSchoolPerformanceAnalytics = query({
         active_students: activeStudentIds.size,
         total_tournaments: tournaments.length,
         avg_team_rank: teamResults.length > 0
-          ? teamResults.reduce((sum, { results }) => sum + (results?.team_rank || 999), 0) / teamResults.length
+          ? teamResults.reduce((sum, { results }) => {
+          const totalGames = results.wins + results.losses;
+          const winRate = totalGames > 0 ? results.wins / totalGames : 0;
+          return sum + Math.max(1, Math.ceil((1 - winRate) * 50));
+        }, 0) / teamResults.length
           : 0,
         trends: trends,
       },
@@ -754,12 +830,6 @@ export const getSchoolOperationalAnalytics = query({
         students_participated: number;
         formation_efficiency: number;
       }>;
-      geographic_reach: Array<{
-        tournament_location: string;
-        distance_km: number;
-        participation_count: number;
-        travel_cost_estimate: number;
-      }>;
     };
     seasonal_trends: {
       performance_by_season: Array<{
@@ -776,20 +846,6 @@ export const getSchoolOperationalAnalytics = query({
         avg_performance: number;
         preference_score: number;
       }>;
-    };
-    coaching_effectiveness: {
-      student_improvement_correlation: Array<{
-        coaching_period: string;
-        students_improved: number;
-        students_declined: number;
-        avg_improvement_rate: number;
-        coaching_roi: number;
-      }>;
-      feedback_analysis: {
-        common_strengths: Array<{ strength: string; frequency: number }>;
-        common_weaknesses: Array<{ weakness: string; frequency: number }>;
-        improvement_suggestions: Array<{ suggestion: string; effectiveness_score: number }>;
-      };
     };
   }> => {
     const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
@@ -950,24 +1006,10 @@ export const getSchoolOperationalAnalytics = query({
       })
     );
 
-    const geographicReach = await Promise.all(
-      validTournaments.map(async (tournament) => {
-        const participationCount = relevantTeams.filter(team => team.tournament_id === tournament._id).length;
-        const estimatedDistance = tournament.location ? 50 : 0;
-        const travelCostEstimate = estimatedDistance * participationCount * 500;
-
-        return {
-          tournament_location: tournament.location || "Virtual",
-          distance_km: estimatedDistance,
-          participation_count: participationCount,
-          travel_cost_estimate: travelCostEstimate,
-        };
-      })
-    );
-
     const seasonalPerformance = [];
     const currentYear = new Date().getFullYear();
     const years = [currentYear - 1, currentYear];
+    const debates = await ctx.db.query("debates").collect();
 
     for (const year of years) {
       for (let quarter = 1; quarter <= 4; quarter++) {
@@ -984,19 +1026,26 @@ export const getSchoolOperationalAnalytics = query({
           quarterTournaments.some(t => t._id === team.tournament_id)
         );
 
-        const quarterResults = await Promise.all(
-          quarterTeams.map(async (team) => {
-            return await ctx.db
-              .query("tournament_results")
-              .withIndex("by_team_id", (q) => q.eq("team_id", team._id))
-              .first();
-          })
-        );
+        let quarterWins = 0;
+        let quarterTotal = 0;
 
-        const validResults = quarterResults.filter(Boolean);
-        const avgPerformance = validResults.length > 0
-          ? validResults.reduce((sum, result) => sum + (1000 - (result!.team_rank || 999)), 0) / validResults.length
-          : 0;
+        quarterTeams.forEach(team => {
+          const teamDebates = debates.filter(d =>
+            d.tournament_id === team.tournament_id &&
+            (d.proposition_team_id === team._id || d.opposition_team_id === team._id)
+          );
+
+          teamDebates.forEach(debate => {
+            if (debate.status === "completed") {
+              if (debate.winning_team_id === team._id) {
+                quarterWins++;
+              }
+              quarterTotal++;
+            }
+          });
+        });
+
+        const avgPerformance = quarterTotal > 0 ? (quarterWins / quarterTotal) * 100 : 0;
 
         const uniqueStudents = new Set();
         quarterTeams.forEach(team => {
@@ -1013,19 +1062,26 @@ export const getSchoolOperationalAnalytics = query({
           prevQuarterTournaments.some(t => t._id === team.tournament_id)
         );
 
-        const prevQuarterResults = await Promise.all(
-          prevQuarterTeams.map(async (team) => {
-            return await ctx.db
-              .query("tournament_results")
-              .withIndex("by_team_id", (q) => q.eq("team_id", team._id))
-              .first();
-          })
-        );
+        let prevQuarterWins = 0;
+        let prevQuarterTotal = 0;
 
-        const prevValidResults = prevQuarterResults.filter(Boolean);
-        const prevAvgPerformance = prevValidResults.length > 0
-          ? prevValidResults.reduce((sum, result) => sum + (1000 - (result!.team_rank || 999)), 0) / prevValidResults.length
-          : 0;
+        prevQuarterTeams.forEach(team => {
+          const teamDebates = debates.filter(d =>
+            d.tournament_id === team.tournament_id &&
+            (d.proposition_team_id === team._id || d.opposition_team_id === team._id)
+          );
+
+          teamDebates.forEach(debate => {
+            if (debate.status === "completed") {
+              if (debate.winning_team_id === team._id) {
+                prevQuarterWins++;
+              }
+              prevQuarterTotal++;
+            }
+          });
+        });
+
+        const prevAvgPerformance = prevQuarterTotal > 0 ? (prevQuarterWins / prevQuarterTotal) * 100 : 0;
 
         const improvementRate = prevAvgPerformance > 0
           ? ((avgPerformance - prevAvgPerformance) / prevAvgPerformance) * 100
@@ -1054,18 +1110,27 @@ export const getSchoolOperationalAnalytics = query({
       const formatData = formatPreferences.get(tournament.format)!;
       formatData.count += tournamentTeams.length;
 
-      const tournamentResults = await Promise.all(
-        tournamentTeams.map(async (team) => {
-          return await ctx.db
-            .query("tournament_results")
-            .withIndex("by_team_id", (q) => q.eq("team_id", team._id))
-            .first();
-        })
-      );
+      let tournamentWins = 0;
+      let tournamentTotal = 0;
 
-      const validResults = tournamentResults.filter(Boolean);
-      const performances = validResults.map(result => 1000 - (result!.team_rank || 999));
-      formatData.performance.push(...performances);
+      tournamentTeams.forEach(team => {
+        const teamDebates = debates.filter(d =>
+          d.tournament_id === team.tournament_id &&
+          (d.proposition_team_id === team._id || d.opposition_team_id === team._id)
+        );
+
+        teamDebates.forEach(debate => {
+          if (debate.status === "completed") {
+            if (debate.winning_team_id === team._id) {
+              tournamentWins++;
+            }
+            tournamentTotal++;
+          }
+        });
+      });
+
+      const tournamentPerformance = tournamentTotal > 0 ? (tournamentWins / tournamentTotal) * 100 : 0;
+      formatData.performance.push(tournamentPerformance);
     }
 
     const tournamentPreferences = Array.from(formatPreferences.entries()).map(([format, data]) => {
@@ -1082,142 +1147,6 @@ export const getSchoolOperationalAnalytics = query({
         preference_score: Math.round(preferenceScore * 10) / 10,
       };
     }).sort((a, b) => b.preference_score - a.preference_score);
-
-    const coachingPeriods = [];
-    const sixMonthPeriods = Math.ceil((dateRange.end - dateRange.start) / (180 * 24 * 60 * 60 * 1000));
-
-    for (let i = 0; i < sixMonthPeriods; i++) {
-      const periodStart = dateRange.start + (i * 180 * 24 * 60 * 60 * 1000);
-      const periodEnd = Math.min(periodStart + (180 * 24 * 60 * 60 * 1000), dateRange.end);
-
-      const periodTournaments = validTournaments.filter(t =>
-        t.start_date >= periodStart && t.start_date < periodEnd
-      );
-
-      if (periodTournaments.length === 0) continue;
-
-      let studentsImproved = 0;
-      let studentsDeclined = 0;
-      let totalImprovementRate = 0;
-      let studentsWithData = 0;
-
-      for (const student of schoolStudents) {
-        const studentResults = await ctx.db
-          .query("tournament_results")
-          .withIndex("by_speaker_id", (q) => q.eq("speaker_id", student._id))
-          .collect();
-
-        const periodResults = studentResults.filter(result =>
-          periodTournaments.some(t => t._id === result.tournament_id)
-        ).sort((a, b) => {
-          const tournamentA = validTournaments.find(t => t._id === a.tournament_id);
-          const tournamentB = validTournaments.find(t => t._id === b.tournament_id);
-          return (tournamentA?.start_date || 0) - (tournamentB?.start_date || 0);
-        });
-
-        if (periodResults.length < 2) continue;
-
-        const firstResult = periodResults[0];
-        const lastResult = periodResults[periodResults.length - 1];
-
-        const improvementRate = ((firstResult.speaker_rank || 999) - (lastResult.speaker_rank || 999)) / (firstResult.speaker_rank || 999) * 100;
-
-        if (improvementRate > 5) {
-          studentsImproved++;
-        } else if (improvementRate < -5) {
-          studentsDeclined++;
-        }
-
-        totalImprovementRate += improvementRate;
-        studentsWithData++;
-      }
-
-      const avgImprovementRate = studentsWithData > 0 ? totalImprovementRate / studentsWithData : 0;
-      const coachingROI = avgImprovementRate > 0 ? avgImprovementRate * 10 : 0;
-
-      coachingPeriods.push({
-        coaching_period: `${new Date(periodStart).toISOString().slice(0, 7)} to ${new Date(periodEnd).toISOString().slice(0, 7)}`,
-        students_improved: studentsImproved,
-        students_declined: studentsDeclined,
-        avg_improvement_rate: Math.round(avgImprovementRate * 10) / 10,
-        coaching_roi: Math.round(coachingROI * 10) / 10,
-      });
-    }
-
-    const judgingScores = await ctx.db.query("judging_scores").collect();
-    const schoolDebates = await Promise.all(
-      relevantTeams.map(async (team) => {
-        const debates = await ctx.db
-          .query("debates")
-          .withIndex("by_tournament_id", (q) => q.eq("tournament_id", team.tournament_id))
-          .collect();
-        return debates.filter(d =>
-          d.proposition_team_id === team._id || d.opposition_team_id === team._id
-        );
-      })
-    );
-
-    const allSchoolDebates = schoolDebates.flat();
-    const schoolJudgingScores = judgingScores.filter(score =>
-      allSchoolDebates.some(debate => debate._id === score.debate_id)
-    );
-
-    const strengthsMap = new Map<string, number>();
-    const weaknessesMap = new Map<string, number>();
-    const suggestionsMap = new Map<string, number>();
-
-    schoolJudgingScores.forEach(score => {
-      score.speaker_scores.forEach(speakerScore => {
-        if (schoolStudents.some(student => student._id === speakerScore.speaker_id)) {
-          if (speakerScore.comments) {
-            const words = speakerScore.comments.toLowerCase().split(/\s+/);
-
-            const positiveWords = ['excellent', 'strong', 'good', 'clear', 'confident', 'logical', 'persuasive'];
-            const negativeWords = ['weak', 'unclear', 'nervous', 'confused', 'poor', 'needs improvement'];
-
-            positiveWords.forEach(word => {
-              if (words.includes(word)) {
-                strengthsMap.set(word, (strengthsMap.get(word) || 0) + 1);
-              }
-            });
-
-            negativeWords.forEach(word => {
-              if (words.includes(word)) {
-                weaknessesMap.set(word, (weaknessesMap.get(word) || 0) + 1);
-              }
-            });
-
-            if (words.includes('practice') || words.includes('work on') || words.includes('improve')) {
-              suggestionsMap.set('practice more', (suggestionsMap.get('practice more') || 0) + 1);
-            }
-            if (words.includes('evidence') || words.includes('research')) {
-              suggestionsMap.set('strengthen evidence', (suggestionsMap.get('strengthen evidence') || 0) + 1);
-            }
-            if (words.includes('speaking') || words.includes('delivery')) {
-              suggestionsMap.set('improve delivery', (suggestionsMap.get('improve delivery') || 0) + 1);
-            }
-          }
-        }
-      });
-    });
-
-    const commonStrengths = Array.from(strengthsMap.entries())
-      .map(([strength, frequency]) => ({ strength, frequency }))
-      .sort((a, b) => b.frequency - a.frequency)
-      .slice(0, 5);
-
-    const commonWeaknesses = Array.from(weaknessesMap.entries())
-      .map(([weakness, frequency]) => ({ weakness, frequency }))
-      .sort((a, b) => b.frequency - a.frequency)
-      .slice(0, 5);
-
-    const improvementSuggestions = Array.from(suggestionsMap.entries())
-      .map(([suggestion, frequency]) => ({
-        suggestion,
-        effectiveness_score: Math.min(100, frequency * 10)
-      }))
-      .sort((a, b) => b.effectiveness_score - a.effectiveness_score)
-      .slice(0, 5);
 
     return {
       student_engagement: {
@@ -1236,19 +1165,10 @@ export const getSchoolOperationalAnalytics = query({
           ? Math.round((relevantTeams.reduce((sum, team) => sum + team.members.length, 0) / relevantTeams.length) * 10) / 10
           : 0,
         team_formation_patterns: teamFormationPatterns,
-        geographic_reach: geographicReach,
       },
       seasonal_trends: {
         performance_by_season: seasonalPerformance,
         tournament_preferences: tournamentPreferences,
-      },
-      coaching_effectiveness: {
-        student_improvement_correlation: coachingPeriods,
-        feedback_analysis: {
-          common_strengths: commonStrengths,
-          common_weaknesses: commonWeaknesses,
-          improvement_suggestions: improvementSuggestions,
-        },
       },
     };
   },
@@ -1326,7 +1246,6 @@ export const exportSchoolAnalyticsData = query({
       exportData.resource_utilization = operationalData.resource_utilization;
       exportData.seasonal_performance = operationalData.seasonal_trends.performance_by_season;
       exportData.tournament_preferences = operationalData.seasonal_trends.tournament_preferences;
-      exportData.coaching_effectiveness = operationalData.coaching_effectiveness.student_improvement_correlation;
     }
 
     return exportData;
@@ -1393,15 +1312,33 @@ export const getSchoolAchievementsAndBadges = query({
       .withIndex("by_school_id", (q) => q.eq("school_id", user.school_id!))
       .collect();
 
-    const teamResults = await Promise.all(
-      schoolTeams.map(async (team) => {
-        const result = await ctx.db
-          .query("tournament_results")
-          .withIndex("by_team_id", (q) => q.eq("team_id", team._id))
-          .first();
-        return { team, result };
-      })
-    );
+    const debates = await ctx.db.query("debates").collect();
+
+    let totalWins = 0;
+    let totalDebates = 0;
+    const topRanks: number[] = [];
+
+    schoolTeams.forEach(team => {
+      const teamDebates = debates.filter(d =>
+        (d.proposition_team_id === team._id || d.opposition_team_id === team._id) &&
+        d.status === "completed"
+      );
+
+      teamDebates.forEach(debate => {
+        totalDebates++;
+        if (debate.winning_team_id === team._id) {
+          totalWins++;
+        }
+      });
+
+      const teamWins = teamDebates.filter(d => d.winning_team_id === team._id).length;
+      const teamTotal = teamDebates.length;
+      if (teamTotal > 0) {
+        const winRate = teamWins / teamTotal;
+        const approximateRank = Math.max(1, Math.ceil((1 - winRate) * 50));
+        topRanks.push(approximateRank);
+      }
+    });
 
     const schoolStudents = await ctx.db
       .query("users")
@@ -1410,21 +1347,11 @@ export const getSchoolAchievementsAndBadges = query({
       )
       .collect();
 
-    const speakerResults = await Promise.all(
-      schoolStudents.map(async (student) => {
-        const results = await ctx.db
-          .query("tournament_results")
-          .withIndex("by_speaker_id", (q) => q.eq("speaker_id", student._id))
-          .collect();
-        return { student, results };
-      })
-    );
-
     const achievements = [];
     const now = Date.now();
 
-    const topRanks = teamResults.filter(tr => tr.result && tr.result.team_rank && tr.result.team_rank <= 3);
-    if (topRanks.length >= 1) {
+    const bestRanks = topRanks.filter(rank => rank <= 3);
+    if (bestRanks.length >= 1) {
       achievements.push({
         id: "first_podium",
         title: "First Podium Finish",
@@ -1438,14 +1365,19 @@ export const getSchoolAchievementsAndBadges = query({
       });
     }
 
-    const topSpeakers = speakerResults.filter(sr =>
-      sr.results.some(result => result.speaker_rank && result.speaker_rank <= 10)
+    const judgingScores = await ctx.db.query("judging_scores").collect();
+    const topSpeakers = judgingScores.filter(score =>
+      score.speaker_scores?.some(s =>
+        schoolStudents.some(student => student._id === s.speaker_id) &&
+        s.score >= 25
+      )
     );
+
     if (topSpeakers.length >= 1) {
       achievements.push({
         id: "top_speaker",
         title: "Rising Star",
-        description: "Had a student achieve top 10 speaker ranking",
+        description: "Had a student achieve excellent speaker performance",
         type: "performance" as const,
         earned_date: now,
         criteria_met: true,
@@ -1503,21 +1435,16 @@ export const getSchoolAchievementsAndBadges = query({
         id: "consistency_king",
         title: "Consistency King",
         description: "Maintain consistent performance across tournaments",
-        criteria: "Average team rank variance < 3 positions across 5+ tournaments",
+        criteria: "Average team performance variance < 20% across 5+ tournaments",
         progress: Math.min(100, totalTournaments * 20),
         max_progress: 100,
         locked: totalTournaments < 5,
       },
     ];
 
-    const totalWins = teamResults.reduce((sum, tr) => sum + (tr.result?.wins || 0), 0);
-    const totalPoints = speakerResults.reduce((sum, sr) =>
-      sum + sr.results.reduce((subSum, result) => subSum + (result.total_speaker_points || 0), 0), 0
-    );
-
-    const experiencePoints = (totalWins * 100) + (totalPoints * 2) + (totalTournaments * 50);
-    const currentLevel = Math.floor(experiencePoints / 1000) + 1;
-    const pointsToNextLevel = ((currentLevel) * 1000) - experiencePoints;
+    const totalPoints = totalWins * 100 + totalDebates * 10 + totalTournaments * 50;
+    const currentLevel = Math.floor(totalPoints / 1000) + 1;
+    const pointsToNextLevel = ((currentLevel) * 1000) - totalPoints;
 
     const allSchools = await ctx.db.query("schools")
       .filter((q) => q.eq(q.field("country"), school.country))
@@ -1530,29 +1457,30 @@ export const getSchoolAchievementsAndBadges = query({
           .withIndex("by_school_id", (q) => q.eq("school_id", sch._id))
           .collect();
 
-        const results = await Promise.all(
-          teams.map(async (team) => {
-            return await ctx.db
-              .query("tournament_results")
-              .withIndex("by_team_id", (q) => q.eq("team_id", team._id))
-              .first();
-          })
-        );
+        let schoolWins = 0;
+        let schoolTotal = 0;
 
-        const validResults = results.filter(Boolean);
-        const avgRank = validResults.length > 0
-          ? validResults.reduce((sum, result) => sum + (result!.team_rank || 999), 0) / validResults.length
-          : 999;
+        teams.forEach(team => {
+          const teamDebates = debates.filter(d =>
+            (d.proposition_team_id === team._id || d.opposition_team_id === team._id) &&
+            d.status === "completed"
+          );
 
-        return { school: sch, avgRank, totalTeams: teams.length };
+          teamDebates.forEach(debate => {
+            schoolTotal++;
+            if (debate.winning_team_id === team._id) {
+              schoolWins++;
+            }
+          });
+        });
+
+        const winRate = schoolTotal > 0 ? schoolWins / schoolTotal : 0;
+        return { school: sch, winRate, totalTeams: teams.length };
       })
     );
 
-    const schoolAvgRank = teamResults.length > 0
-      ? teamResults.reduce((sum, tr) => sum + (tr.result?.team_rank || 999), 0) / teamResults.length
-      : 999;
-
-    const betterSchools = schoolPerformances.filter(sp => sp.avgRank < schoolAvgRank && sp.totalTeams > 0);
+    const schoolWinRate = totalDebates > 0 ? totalWins / totalDebates : 0;
+    const betterSchools = schoolPerformances.filter(sp => sp.winRate > schoolWinRate && sp.totalTeams > 0);
     const regionalRank = betterSchools.length + 1;
 
     return {
@@ -1560,7 +1488,7 @@ export const getSchoolAchievementsAndBadges = query({
       available_badges: availableBadges,
       school_level: {
         current_level: currentLevel,
-        experience_points: experiencePoints,
+        experience_points: totalPoints,
         points_to_next_level: pointsToNextLevel,
         level_benefits: [
           "Access to advanced analytics",
@@ -1574,506 +1502,6 @@ export const getSchoolAchievementsAndBadges = query({
         national_rank: regionalRank,
         improvement_rank: regionalRank,
       },
-    };
-  },
-});
-
-export const getSchoolCompetitiveIntelligence = query({
-  args: {
-    token: v.string(),
-    competitor_school_ids: v.optional(v.array(v.id("schools"))),
-    analysis_depth: v.optional(v.union(v.literal("basic"), v.literal("detailed"), v.literal("comprehensive"))),
-  },
-  handler: async (ctx, args): Promise<{
-    competitor_analysis: Array<{
-      school_id: Id<"schools">;
-      school_name: string;
-      school_type: string;
-      competitive_metrics: {
-        avg_team_rank: number;
-        win_rate: number;
-        total_tournaments: number;
-        top_performers: number;
-        consistency_score: number;
-      };
-      strengths: string[];
-      weaknesses: string[];
-      threat_level: "low" | "medium" | "high" | "critical";
-      recommendations: string[];
-    }>;
-    market_positioning: {
-      our_rank_in_region: number;
-      our_rank_by_type: number;
-      market_share: number;
-      growth_trajectory: "declining" | "stable" | "growing" | "accelerating";
-      competitive_advantages: string[];
-      areas_for_improvement: string[];
-    };
-    tournament_intelligence: Array<{
-      tournament_name: string;
-      our_performance: number;
-      competitor_performances: Array<{
-        school_name: string;
-        rank: number;
-        teams_sent: number;
-      }>;
-      opportunities: string[];
-      threats: string[];
-    }>;
-    recruitment_insights: {
-      top_feeder_schools: Array<{
-        school_name: string;
-        students_transferred: number;
-        retention_rate: number;
-      }>;
-      talent_pipeline_strength: number;
-      recruitment_effectiveness: number;
-      recommended_targets: string[];
-    };
-  }> => {
-    const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
-      token: args.token,
-    });
-
-    if (!sessionResult.valid || !sessionResult.user || sessionResult.user.role !== "school_admin") {
-      throw new Error("School admin access required");
-    }
-
-    const user = sessionResult.user;
-    if (!user.school_id) {
-      throw new Error("User not associated with a school");
-    }
-
-    const school = await ctx.db.get(user.school_id);
-    if (!school) {
-      throw new Error("School not found");
-    }
-    let competitorSchools: Doc<"schools">[];
-    if (args.competitor_school_ids && args.competitor_school_ids.length > 0) {
-      competitorSchools = await Promise.all(
-        args.competitor_school_ids.map(id => ctx.db.get(id))
-      ).then(schools => schools.filter(Boolean) as Doc<"schools">[]);
-    } else {
-      competitorSchools = await ctx.db.query("schools")
-        .filter((q) =>
-          q.and(
-            q.eq(q.field("country"), school.country),
-            q.eq(q.field("type"), school.type),
-            q.neq(q.field("_id"), user.school_id!)
-          )
-        )
-        .collect();
-
-      competitorSchools = competitorSchools.slice(0, 10);
-    }
-
-    const ourTeams = await ctx.db
-      .query("teams")
-      .withIndex("by_school_id", (q) => q.eq("school_id", user.school_id!))
-      .collect();
-
-    const ourResults = await Promise.all(
-      ourTeams.map(async (team) => {
-        const result = await ctx.db
-          .query("tournament_results")
-          .withIndex("by_team_id", (q) => q.eq("team_id", team._id))
-          .first();
-        return { team, result };
-      })
-    );
-
-    const competitorAnalysis = await Promise.all(
-      competitorSchools.map(async (competitor) => {
-        const competitorTeams = await ctx.db
-          .query("teams")
-          .withIndex("by_school_id", (q) => q.eq("school_id", competitor._id))
-          .collect();
-
-        const competitorResults = await Promise.all(
-          competitorTeams.map(async (team) => {
-            const result = await ctx.db
-              .query("tournament_results")
-              .withIndex("by_team_id", (q) => q.eq("team_id", team._id))
-              .first();
-            return { team, result };
-          })
-        );
-
-        const validResults = competitorResults.filter(cr => cr.result);
-        const avgTeamRank = validResults.length > 0
-          ? validResults.reduce((sum, cr) => sum + (cr.result!.team_rank || 999), 0) / validResults.length
-          : 999;
-
-        const totalWins = validResults.reduce((sum, cr) => sum + (cr.result!.wins || 0), 0);
-        const totalGames = validResults.reduce((sum, cr) => sum + ((cr.result!.wins || 0) + (cr.result!.losses || 0)), 0);
-        const winRate = totalGames > 0 ? (totalWins / totalGames) * 100 : 0;
-
-        const topPerformers = validResults.filter(cr => cr.result!.team_rank && cr.result!.team_rank <= 10).length;
-
-        const ranks = validResults.map(cr => cr.result!.team_rank || 999);
-        const avgRank = ranks.reduce((sum, rank) => sum + rank, 0) / ranks.length;
-        const variance = ranks.reduce((sum, rank) => sum + Math.pow(rank - avgRank, 2), 0) / ranks.length;
-        const consistencyScore = Math.max(0, 100 - Math.sqrt(variance));
-
-        const strengths: string[] = [];
-        const weaknesses: string[] = [];
-
-        if (avgTeamRank < 50) strengths.push("Consistently high team rankings");
-        if (winRate > 70) strengths.push("High win rate");
-        if (topPerformers > 2) strengths.push("Multiple top-performing teams");
-        if (consistencyScore > 80) strengths.push("Consistent performance");
-        if (competitorTeams.length > ourTeams.length) strengths.push("Large program size");
-
-        if (avgTeamRank > 200) weaknesses.push("Lower average rankings");
-        if (winRate < 40) weaknesses.push("Below-average win rate");
-        if (topPerformers === 0) weaknesses.push("No top-tier teams");
-        if (consistencyScore < 50) weaknesses.push("Inconsistent performance");
-        if (competitorTeams.length < 3) weaknesses.push("Limited program size");
-
-        let threatLevel: "low" | "medium" | "high" | "critical" = "low";
-        if (avgTeamRank < 100 && winRate > 60) threatLevel = "high";
-        else if (avgTeamRank < 200 && winRate > 50) threatLevel = "medium";
-        if (topPerformers > 3) threatLevel = "critical";
-
-        const recommendations: string[] = [];
-        if (threatLevel === "high" || threatLevel === "critical") {
-          recommendations.push("Monitor their recruitment and coaching strategies");
-          recommendations.push("Analyze their tournament selection patterns");
-        }
-        if (strengths.includes("High win rate")) {
-          recommendations.push("Study their debate preparation methods");
-        }
-        if (weaknesses.includes("Inconsistent performance")) {
-          recommendations.push("Opportunity to recruit their underperforming students");
-        }
-
-        return {
-          school_id: competitor._id,
-          school_name: competitor.name,
-          school_type: competitor.type,
-          competitive_metrics: {
-            avg_team_rank: Math.round(avgTeamRank),
-            win_rate: Math.round(winRate * 10) / 10,
-            total_tournaments: new Set(competitorTeams.map(team => team.tournament_id)).size,
-            top_performers: topPerformers,
-            consistency_score: Math.round(consistencyScore),
-          },
-          strengths,
-          weaknesses,
-          threat_level: threatLevel,
-          recommendations,
-        };
-      })
-    );
-
-    const allSchoolsInRegion = await ctx.db.query("schools")
-      .filter((q) => q.eq(q.field("country"), school.country))
-      .collect();
-    allSchoolsInRegion.filter(s => s.type === school.type);
-
-    const ourAvgRank = ourResults.length > 0
-      ? ourResults.reduce((sum, or) => sum + (or.result?.team_rank || 999), 0) / ourResults.length
-      : 999;
-
-    const betterSchoolsInRegion = competitorAnalysis.filter(ca => ca.competitive_metrics.avg_team_rank < ourAvgRank).length;
-    const betterSchoolsByType = competitorAnalysis.filter(ca =>
-      ca.school_type === school.type && ca.competitive_metrics.avg_team_rank < ourAvgRank
-    ).length;
-
-    const totalActiveSchools = competitorAnalysis.filter(ca => ca.competitive_metrics.total_tournaments > 0).length + 1;
-    const marketShare = totalActiveSchools > 0 ? (1 / totalActiveSchools) * 100 : 0;
-
-    const recentResults = ourResults.filter(or => {
-      const sixMonthsAgo = Date.now() - (180 * 24 * 60 * 60 * 1000);
-      return or.team && or.team.created_at >= sixMonthsAgo;
-    });
-
-    const olderResults = ourResults.filter(or => {
-      const sixMonthsAgo = Date.now() - (180 * 24 * 60 * 60 * 1000);
-      return or.team && or.team.created_at < sixMonthsAgo;
-    });
-
-    let growthTrajectory: "declining" | "stable" | "growing" | "accelerating" = "stable";
-    if (recentResults.length > olderResults.length) {
-      const recentAvg = recentResults.length > 0
-        ? recentResults.reduce((sum, rr) => sum + (rr.result?.team_rank || 999), 0) / recentResults.length
-        : 999;
-      const olderAvg = olderResults.length > 0
-        ? olderResults.reduce((sum, or) => sum + (or.result?.team_rank || 999), 0) / olderResults.length
-        : 999;
-
-      const improvement = ((olderAvg - recentAvg) / olderAvg) * 100;
-      if (improvement > 20) growthTrajectory = "accelerating";
-      else if (improvement > 5) growthTrajectory = "growing";
-      else if (improvement < -10) growthTrajectory = "declining";
-    }
-
-    const competitiveAdvantages: string[] = [];
-    const areasForImprovement: string[] = [];
-
-    const ourWinRate = ourResults.length > 0
-      ? (ourResults.reduce((sum, or) => sum + (or.result?.wins || 0), 0) /
-      ourResults.reduce((sum, or) => sum + ((or.result?.wins || 0) + (or.result?.losses || 0)), 0)) * 100
-      : 0;
-
-    const avgCompetitorWinRate = competitorAnalysis.length > 0
-      ? competitorAnalysis.reduce((sum, ca) => sum + ca.competitive_metrics.win_rate, 0) / competitorAnalysis.length
-      : 0;
-
-    if (ourWinRate > avgCompetitorWinRate) {
-      competitiveAdvantages.push("Above-average win rate");
-    } else {
-      areasForImprovement.push("Improve win rate");
-    }
-
-    if (ourAvgRank < 100) {
-      competitiveAdvantages.push("Strong tournament performance");
-    } else if (ourAvgRank > 200) {
-      areasForImprovement.push("Improve tournament rankings");
-    }
-
-    const ourTournamentCount = new Set(ourTeams.map(team => team.tournament_id)).size;
-    const avgCompetitorTournaments = competitorAnalysis.length > 0
-      ? competitorAnalysis.reduce((sum, ca) => sum + ca.competitive_metrics.total_tournaments, 0) / competitorAnalysis.length
-      : 0;
-
-    if (ourTournamentCount > avgCompetitorTournaments) {
-      competitiveAdvantages.push("High tournament participation");
-    } else {
-      areasForImprovement.push("Increase tournament participation");
-    }
-
-    const tournamentIntelligence = [];
-    const allTournaments = await ctx.db.query("tournaments")
-      .filter((q) => q.eq(q.field("status"), "completed"))
-      .collect();
-
-    const recentTournaments = allTournaments
-      .filter(t => t.start_date >= Date.now() - (365 * 24 * 60 * 60 * 1000))
-      .slice(0, 10);
-
-    for (const tournament of recentTournaments) {
-      const ourTeamInTournament = ourTeams.find(team => team.tournament_id === tournament._id);
-      if (!ourTeamInTournament) continue;
-
-      const ourResult = await ctx.db
-        .query("tournament_results")
-        .withIndex("by_team_id", (q) => q.eq("team_id", ourTeamInTournament._id))
-        .first();
-
-      const allTeamsInTournament = await ctx.db
-        .query("teams")
-        .withIndex("by_tournament_id", (q) => q.eq("tournament_id", tournament._id))
-        .collect();
-
-      const competitorPerformances = [];
-      for (const team of allTeamsInTournament) {
-        if (!team.school_id || team.school_id === user.school_id) continue;
-
-        const teamSchool = await ctx.db.get(team.school_id);
-        if (!teamSchool || !competitorSchools.some(cs => cs._id === teamSchool._id)) continue;
-
-        const teamResult = await ctx.db
-          .query("tournament_results")
-          .withIndex("by_team_id", (q) => q.eq("team_id", team._id))
-          .first();
-
-        if (teamResult) {
-          competitorPerformances.push({
-            school_name: teamSchool.name,
-            rank: teamResult.team_rank || 999,
-            teams_sent: 1,
-          });
-        }
-      }
-
-      const opportunities: string[] = [];
-      const threats: string[] = [];
-
-      const ourRank = ourResult?.team_rank || 999;
-      const betterCompetitors = competitorPerformances.filter(cp => cp.rank < ourRank);
-      const worseCompetitors = competitorPerformances.filter(cp => cp.rank > ourRank);
-
-      if (worseCompetitors.length > betterCompetitors.length) {
-        opportunities.push("Strong performance relative to competitors");
-      }
-      if (betterCompetitors.length > 2) {
-        threats.push("Multiple competitors performing better");
-      }
-      if (competitorPerformances.some(cp => cp.rank <= 5)) {
-        threats.push("Competitors achieving top-tier results");
-      }
-
-      tournamentIntelligence.push({
-        tournament_name: tournament.name,
-        our_performance: ourRank,
-        competitor_performances: competitorPerformances.sort((a, b) => a.rank - b.rank),
-        opportunities,
-        threats,
-      });
-    }
-
-    const ourStudents = await ctx.db
-      .query("users")
-      .withIndex("by_school_id_role", (q) =>
-        q.eq("school_id", user.school_id!).eq("role", "student")
-      )
-      .collect();
-
-    const studentTransfers = [];
-    const oneYearAgo = Date.now() - (365 * 24 * 60 * 60 * 1000);
-
-    for (const student of ourStudents) {
-      if (student.created_at >= oneYearAgo) {
-        studentTransfers.push({
-          student_id: student._id,
-          transfer_date: student.created_at,
-        });
-      }
-    }
-
-    const retainedStudents = ourStudents.filter(student => {
-      return ourTeams.some(team =>
-        team.members.includes(student._id) && team.created_at >= oneYearAgo
-      );
-    });
-
-    const retentionRate = ourStudents.length > 0
-      ? (retainedStudents.length / ourStudents.length) * 100
-      : 0;
-
-    const topFeederSchools = [
-      {
-        school_name: "Various High Schools",
-        students_transferred: studentTransfers.length,
-        retention_rate: retentionRate,
-      }
-    ];
-
-    const talentPipelineStrength = Math.min(100, (ourStudents.length * 10) + (retentionRate * 0.5));
-    const recruitmentEffectiveness = Math.min(100, (studentTransfers.length * 20) + retentionRate);
-
-    const recommendedTargets = [
-      "High schools with strong academic programs",
-      "Schools in nearby regions with debate interest",
-      "International schools seeking debate opportunities"
-    ];
-
-    if (areasForImprovement.includes("Improve tournament rankings")) {
-      recommendedTargets.push("Experienced debaters from competitive schools");
-    }
-
-    return {
-      competitor_analysis: competitorAnalysis.sort((a, b) =>
-        (b.threat_level === "critical" ? 4 : b.threat_level === "high" ? 3 : b.threat_level === "medium" ? 2 : 1) -
-        (a.threat_level === "critical" ? 4 : a.threat_level === "high" ? 3 : a.threat_level === "medium" ? 2 : 1)
-      ),
-      market_positioning: {
-        our_rank_in_region: betterSchoolsInRegion + 1,
-        our_rank_by_type: betterSchoolsByType + 1,
-        market_share: Math.round(marketShare * 10) / 10,
-        growth_trajectory: growthTrajectory,
-        competitive_advantages: competitiveAdvantages,
-        areas_for_improvement: areasForImprovement,
-      },
-      tournament_intelligence: tournamentIntelligence,
-      recruitment_insights: {
-        top_feeder_schools: topFeederSchools,
-        talent_pipeline_strength: Math.round(talentPipelineStrength),
-        recruitment_effectiveness: Math.round(recruitmentEffectiveness),
-        recommended_targets: recommendedTargets,
-      },
-    };
-  },
-});
-
-export const generateSchoolAnalyticsReport = mutation({
-  args: {
-    token: v.string(),
-    report_config: v.object({
-      title: v.string(),
-      sections: v.array(v.string()),
-      date_range: v.optional(v.object({
-        start: v.number(),
-        end: v.number(),
-      })),
-      include_predictions: v.optional(v.boolean()),
-      include_recommendations: v.optional(v.boolean()),
-    }),
-  },
-  handler: async (ctx, args): Promise<{
-    report_id: string;
-    report_url: string;
-    generated_at: number;
-    expires_at: number;
-  }> => {
-    const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
-      token: args.token,
-    });
-
-    if (!sessionResult.valid || !sessionResult.user || sessionResult.user.role !== "school_admin") {
-      throw new Error("School admin access required");
-    }
-
-    const reportId = `school_report_${sessionResult.user.id}_${Date.now()}`;
-    const expiresAt = Date.now() + (7 * 24 * 60 * 60 * 1000);
-
-    const reportData: any = {};
-
-    if (args.report_config.sections.includes("performance")) {
-      reportData.performance = await ctx.runQuery(api.functions.school.analytics.getSchoolPerformanceAnalytics, {
-        token: args.token,
-        date_range: args.report_config.date_range,
-      });
-    }
-
-    if (args.report_config.sections.includes("operational")) {
-      reportData.operational = await ctx.runQuery(api.functions.school.analytics.getSchoolOperationalAnalytics, {
-        token: args.token,
-        date_range: args.report_config.date_range,
-      });
-    }
-
-    if (args.report_config.sections.includes("achievements")) {
-      reportData.achievements = await ctx.runQuery(api.functions.school.analytics.getSchoolAchievementsAndBadges, {
-        token: args.token,
-      });
-    }
-
-    if (args.report_config.sections.includes("competitive_intelligence")) {
-      reportData.competitive = await ctx.runQuery(api.functions.school.analytics.getSchoolCompetitiveIntelligence, {
-        token: args.token,
-        analysis_depth: "comprehensive",
-      });
-    }
-
-    await ctx.db.insert("report_shares", {
-      report_type: "tournament",
-      report_id: JSON.stringify({
-        config: args.report_config,
-        data: reportData,
-        school_id: sessionResult.user.school_id,
-      }),
-      access_token: reportId,
-      created_by: sessionResult.user.id,
-      expires_at: expiresAt,
-      view_count: 0,
-      created_at: Date.now(),
-    });
-
-    await ctx.runMutation(internal.functions.audit.createAuditLog, {
-      user_id: sessionResult.user.id,
-      action: "system_setting_changed",
-      resource_type: "report_shares",
-      resource_id: reportId,
-      description: `Generated school analytics report: ${args.report_config.title}`,
-    });
-
-    return {
-      report_id: reportId,
-      report_url: `${process.env.FRONTEND_SITE_URL}/reports/school/${reportId}`,
-      generated_at: Date.now(),
-      expires_at: expiresAt,
     };
   },
 });

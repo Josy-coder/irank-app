@@ -65,7 +65,10 @@ import {
   Zap,
   Eye,
   EyeOff,
-  Info, SquareChartGantt, NotebookTabs, CloudCog
+  Info,
+  SquareChartGantt,
+  NotebookTabs,
+  CloudCog
 } from "lucide-react";
 import * as XLSX from 'xlsx'
 import html2canvas from 'html2canvas'
@@ -502,14 +505,6 @@ export default function SchoolAnalyticsPage() {
     } : "skip"
   )
 
-  const competitiveData = useQuery(
-    api.functions.school.analytics.getSchoolCompetitiveIntelligence,
-    token && user?.role === "school_admin" && activeTab === "competitive" ? {
-      token,
-      analysis_depth: "comprehensive",
-    } : "skip"
-  )
-
   const performanceTrendsConfig = useMemo(() => ({
     avg_team_rank: { label: "Avg Team Rank", color: "hsl(var(--chart-1))" },
     avg_speaker_score: { label: "Avg Speaker Score", color: "hsl(var(--chart-2))" },
@@ -571,6 +566,8 @@ export default function SchoolAnalyticsPage() {
           total_tournaments: student.current_performance.total_tournaments,
           best_rank: student.current_performance.best_rank,
           trend: student.improvement_trajectory.trend,
+          improvement_rate: student.improvement_trajectory.improvement_rate,
+          consistency_score: student.current_performance.consistency_score,
         })))
         XLSX.utils.book_append_sheet(workbook, studentsWS, "Student Development")
       }
@@ -581,7 +578,9 @@ export default function SchoolAnalyticsPage() {
           tournament_name: team.tournament_name,
           rank: team.performance.rank,
           wins: team.performance.wins,
+          total_points: team.performance.total_points,
           avg_speaker_score: team.performance.avg_speaker_score,
+          debates_count: team.performance.debates_count,
         })))
         XLSX.utils.book_append_sheet(workbook, teamPerfWS, "Team Performance")
       }
@@ -687,9 +686,9 @@ export default function SchoolAnalyticsPage() {
 
       if (performanceData.student_development) {
         csvContent += "Student Performance\n"
-        csvContent += "Student,Avg Score,Tournaments,Best Rank,Trend\n"
+        csvContent += "Student,Avg Score,Tournaments,Best Rank,Trend,Improvement Rate,Consistency\n"
         performanceData.student_development.forEach((student: any) => {
-          csvContent += `${student.student_name},${student.current_performance?.avg_speaker_score || 0},${student.current_performance?.total_tournaments || 0},${student.current_performance?.best_rank || 0},${student.improvement_trajectory?.trend || 'stable'}\n`
+          csvContent += `${student.student_name},${student.current_performance?.avg_speaker_score || 0},${student.current_performance?.total_tournaments || 0},${student.current_performance?.best_rank || 0},${student.improvement_trajectory?.trend || 'stable'},${student.improvement_trajectory?.improvement_rate || 0},${student.current_performance?.consistency_score || 0}\n`
         })
         csvContent += "\n"
       }
@@ -725,9 +724,12 @@ export default function SchoolAnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      <p className="text-muted-foreground">
-        Comprehensive insights into your school&#39;s debate performance
-      </p>
+      <div>
+        <h1 className="text-2xl font-bold">School Analytics</h1>
+        <p className="text-muted-foreground">
+          Comprehensive insights into your school's debate performance
+        </p>
+      </div>
 
       <Card>
         <div className="flex bg-brown rounded-t-md flex-col lg:flex-row lg:items-center lg:justify-between gap-4 p-6">
@@ -769,11 +771,10 @@ export default function SchoolAnalyticsPage() {
 
         <div className="p-6 space-y-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className="hidden md:grid w-full grid-cols-4">
+            <TabsList className="hidden md:grid w-full grid-cols-3">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="operational">Operations</TabsTrigger>
               <TabsTrigger value="achievements">Achievements</TabsTrigger>
-              <TabsTrigger value="competitive">Intelligence</TabsTrigger>
             </TabsList>
 
             <div className="md:hidden fixed bottom-0 left-0 right-0 bg-background border-t z-50">
@@ -816,22 +817,8 @@ export default function SchoolAnalyticsPage() {
                   <Medal className="h-4 w-4 shrink-0" />
                   <span className="truncate text-[10px]">Achievements</span>
                 </button>
-
-                <button
-                  onClick={() => setActiveTab("competitive")}
-                  className={cn(
-                    "flex-1 min-w-0 flex flex-col items-center gap-1 py-2 px-1 text-xs transition-colors",
-                    activeTab === "competitive"
-                      ? "text-primary font-medium"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <CloudCog className="h-4 w-4 shrink-0" />
-                  <span className="truncate text-[10px]">Intelligence</span>
-                </button>
               </div>
             </div>
-
 
             <TabsContent value="overview" className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1010,7 +997,7 @@ export default function SchoolAnalyticsPage() {
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">Recent Tournament Performance</CardTitle>
-                  <CardDescription>Your teams&#39; performance in recent tournaments</CardDescription>
+                  <CardDescription>Your teams' performance in recent tournaments</CardDescription>
                 </CardHeader>
                 <CardContent>
                   {isLoading ? (
@@ -1054,6 +1041,51 @@ export default function SchoolAnalyticsPage() {
                       <Trophy className="h-12 w-12 mx-auto mb-3" />
                       <p>No recent tournament data available</p>
                       <p className="text-xs">Participate in tournaments to see performance metrics</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Benchmarking Section */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">School Performance Benchmarking</CardTitle>
+                  <CardDescription>How your school compares to similar institutions</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {isLoading ? (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <div key={i} className="space-y-2">
+                          <Skeleton className="h-4 w-20" />
+                          <Skeleton className="h-8 w-12" />
+                          <Skeleton className="h-3 w-24" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <div className="text-center">
+                        <p className="text-sm font-medium text-muted-foreground">Regional Rank</p>
+                        <p className="text-2xl font-bold text-primary">
+                          #{performanceData?.benchmarking?.school_rank_in_region || "N/A"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Among regional schools</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm font-medium text-muted-foreground">School Type Rank</p>
+                        <p className="text-2xl font-bold text-primary">
+                          #{performanceData?.benchmarking?.school_rank_by_type || "N/A"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Among similar schools</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm font-medium text-muted-foreground">Performance Percentile</p>
+                        <p className="text-2xl font-bold text-primary">
+                          {performanceData?.benchmarking?.performance_percentile || 0}th
+                        </p>
+                        <p className="text-xs text-muted-foreground">Percentile</p>
+                      </div>
                     </div>
                   )}
                 </CardContent>
@@ -1152,7 +1184,7 @@ export default function SchoolAnalyticsPage() {
                           label={({ activity_level, percentage }) => `${activity_level}: ${percentage}%`}
                         >
                           {operationalData.student_engagement.student_activity_distribution.map((entry, index) => (
-                            <Cell key={`cell-${entry}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                            <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                           ))}
                         </Pie>
                         <ChartTooltip content={<ChartTooltipContent />} />
@@ -1197,8 +1229,8 @@ export default function SchoolAnalyticsPage() {
 
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg">Coaching Effectiveness</CardTitle>
-                    <CardDescription>Impact of coaching on student improvement</CardDescription>
+                    <CardTitle className="text-lg">Team Formation Patterns</CardTitle>
+                    <CardDescription>Efficiency of team formation across tournaments</CardDescription>
                   </CardHeader>
                   <CardContent>
                     {!operationalData ? (
@@ -1207,26 +1239,26 @@ export default function SchoolAnalyticsPage() {
                         <Skeleton className="h-4 w-3/4" />
                         <Skeleton className="h-4 w-1/2" />
                       </div>
-                    ) : operationalData.coaching_effectiveness.student_improvement_correlation.length > 0 ? (
-                      <div className="space-y-4">
-                        {operationalData.coaching_effectiveness.student_improvement_correlation.slice(0, 2).map((period, index) => (
+                    ) : operationalData.resource_utilization.team_formation_patterns?.length > 0 ? (
+                      <div className="space-y-3">
+                        {operationalData.resource_utilization.team_formation_patterns.slice(0, 3).map((pattern, index) => (
                           <div key={index} className="space-y-2">
-                            <p className="text-xs font-medium">{period.coaching_period}</p>
                             <div className="flex justify-between text-sm">
-                              <span className="text-green-600">Improved: {period.students_improved}</span>
-                              <span className="text-red-600">Declined: {period.students_declined}</span>
+                              <span className="truncate font-medium">{pattern.tournament_name}</span>
+                              <span className="text-muted-foreground">{pattern.teams_registered} teams</span>
                             </div>
-                            <div className="flex justify-between text-sm">
-                              <span className="text-muted-foreground">Avg Improvement</span>
-                              <span className="font-semibold">{period.avg_improvement_rate.toFixed(1)}%</span>
+                            <div className="flex justify-between text-xs text-muted-foreground">
+                              <span>{pattern.students_participated} students</span>
+                              <span>{pattern.formation_efficiency}% efficiency</span>
                             </div>
+                            <Progress value={pattern.formation_efficiency} className="h-1" />
                           </div>
                         ))}
                       </div>
                     ) : (
                       <div className="text-center py-6 text-muted-foreground">
                         <BarChart2 className="h-8 w-8 mx-auto mb-2" />
-                        <p className="text-sm">No coaching data available</p>
+                        <p className="text-sm">No team formation data available</p>
                       </div>
                     )}
                   </CardContent>
@@ -1234,8 +1266,8 @@ export default function SchoolAnalyticsPage() {
 
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg">Feedback Analysis</CardTitle>
-                    <CardDescription>Common strengths and areas for improvement</CardDescription>
+                    <CardTitle className="text-lg">Tournament Preferences</CardTitle>
+                    <CardDescription>Most popular tournament formats and performance</CardDescription>
                   </CardHeader>
                   <CardContent>
                     {!operationalData ? (
@@ -1244,26 +1276,26 @@ export default function SchoolAnalyticsPage() {
                         <Skeleton className="h-4 w-3/4" />
                         <Skeleton className="h-4 w-1/2" />
                       </div>
+                    ) : operationalData.seasonal_trends?.tournament_preferences?.length > 0 ? (
+                      <div className="space-y-3">
+                        {operationalData.seasonal_trends.tournament_preferences.slice(0, 3).map((pref, index) => (
+                          <div key={index} className="space-y-2">
+                            <div className="flex justify-between text-sm">
+                              <span className="font-medium capitalize">{pref.tournament_format}</span>
+                              <span className="text-muted-foreground">{pref.participation_count} entries</span>
+                            </div>
+                            <div className="flex justify-between text-xs text-muted-foreground">
+                              <span>Avg Performance: {pref.avg_performance}%</span>
+                              <span>Score: {pref.preference_score}</span>
+                            </div>
+                            <Progress value={pref.preference_score} className="h-1" />
+                          </div>
+                        ))}
+                      </div>
                     ) : (
-                      <div className="space-y-4">
-                        <div>
-                          <p className="text-xs font-medium text-green-600 mb-2">Top Strengths</p>
-                          {operationalData.coaching_effectiveness.feedback_analysis.common_strengths.slice(0, 3).map((strength, index) => (
-                            <div key={index} className="flex justify-between text-sm">
-                              <span className="capitalize">{strength.strength}</span>
-                              <span className="text-muted-foreground">{strength.frequency}</span>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="border-t pt-3">
-                          <p className="text-xs font-medium text-orange-600 mb-2">Areas to Improve</p>
-                          {operationalData.coaching_effectiveness.feedback_analysis.common_weaknesses.slice(0, 3).map((weakness, index) => (
-                            <div key={index} className="flex justify-between text-sm">
-                              <span className="capitalize">{weakness.weakness}</span>
-                              <span className="text-muted-foreground">{weakness.frequency}</span>
-                            </div>
-                          ))}
-                        </div>
+                      <div className="text-center py-6 text-muted-foreground">
+                        <Target className="h-8 w-8 mx-auto mb-2" />
+                        <p className="text-sm">No tournament preference data</p>
                       </div>
                     )}
                   </CardContent>
@@ -1306,7 +1338,7 @@ export default function SchoolAnalyticsPage() {
                       <Crown className="h-5 w-5 text-yellow-500" />
                       School Level Progress
                     </CardTitle>
-                    <CardDescription>Your school&#39;s achievement level and experience points</CardDescription>
+                    <CardDescription>Your school's achievement level and experience points</CardDescription>
                   </CardHeader>
                   <CardContent>
                     {!achievementsData ? (
@@ -1466,318 +1498,49 @@ export default function SchoolAnalyticsPage() {
                   </CardContent>
                 </Card>
               </div>
-            </TabsContent>
 
-            <TabsContent value="competitive" className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard
-                  title="Regional Rank"
-                  value={`#${competitiveData?.market_positioning?.our_rank_in_region || "N/A"}`}
-                  subtitle="Among schools in region"
-                  icon={Building}
-                  loading={!competitiveData}
-                />
-                <StatCard
-                  title="Market Share"
-                  value={`${competitiveData?.market_positioning?.market_share?.toFixed(1) || 0}%`}
-                  subtitle="Of regional debate activity"
-                  icon={BarChart2}
-                  loading={!competitiveData}
-                />
-                <StatCard
-                  title="Growth Trajectory"
-                  value={competitiveData?.market_positioning?.growth_trajectory || "stable"}
-                  subtitle="Performance trend"
-                  icon={TrendingUp}
-                  loading={!competitiveData}
-                  className="capitalize"
-                />
-                <StatCard
-                  title="Threat Level"
-                  value={competitiveData?.competitor_analysis?.filter(c => c.threat_level === "high" || c.threat_level === "critical")?.length || 0}
-                  subtitle="High-threat competitors"
-                  icon={Shield}
-                  loading={!competitiveData}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Top Competitors</CardTitle>
-                    <CardDescription>Schools that pose the highest competitive threat</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {!competitiveData ? (
-                        Array.from({ length: 3 }).map((_, i) => (
-                          <div key={i} className="flex items-center gap-3 p-3 border rounded">
-                            <Skeleton className="h-8 w-8 rounded-full" />
-                            <div className="flex-1 space-y-2">
-                              <Skeleton className="h-4 w-24" />
-                              <Skeleton className="h-3 w-32" />
-                            </div>
-                            <Skeleton className="h-6 w-16" />
-                          </div>
-                        ))
-                      ) : competitiveData.competitor_analysis.length > 0 ? (
-                        competitiveData.competitor_analysis.slice(0, 5).map((competitor) => {
-                          const getThreatColor = (level: string) => {
-                            switch (level) {
-                              case "critical": return "bg-red-100 text-red-800 border-red-200"
-                              case "high": return "bg-orange-100 text-orange-800 border-orange-200"
-                              case "medium": return "bg-yellow-100 text-yellow-800 border-yellow-200"
-                              default: return "bg-green-100 text-green-800 border-green-200"
-                            }
-                          }
-
-                          return (
-                            <div key={competitor.school_id} className="flex items-center gap-3 p-3 border rounded hover:bg-muted/50">
-                              <Avatar>
-                                <AvatarFallback>
-                                  {competitor.school_name.slice(0, 2).toUpperCase()}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="flex-1 min-w-0">
-                                <h4 className="font-semibold text-sm truncate">{competitor.school_name}</h4>
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                  <span>Rank: #{competitor.competitive_metrics.avg_team_rank}</span>
-                                  <span>•</span>
-                                  <span>Win Rate: {competitor.competitive_metrics.win_rate}%</span>
-                                </div>
-                              </div>
-                              <Badge className={cn("capitalize", getThreatColor(competitor.threat_level))}>
-                                {competitor.threat_level}
-                              </Badge>
-                            </div>
-                          )
-                        })
-                      ) : (
-                        <div className="text-center py-6 text-muted-foreground">
-                          <Building className="h-8 w-8 mx-auto mb-2" />
-                          <p className="text-sm">No competitor data available</p>
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Competitive Advantages</CardTitle>
-                    <CardDescription>Your school&#39;s strengths and improvement areas</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {!competitiveData ? (
-                      <div className="space-y-4">
-                        <Skeleton className="h-4 w-full" />
-                        <Skeleton className="h-4 w-3/4" />
-                        <Skeleton className="h-4 w-1/2" />
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        <div>
-                          <p className="text-sm font-medium text-green-600 mb-2 flex items-center gap-1">
-                            <Zap className="h-4 w-4" />
-                            Competitive Advantages
-                          </p>
-                          {competitiveData.market_positioning.competitive_advantages.length > 0 ? (
-                            <ul className="space-y-1">
-                              {competitiveData.market_positioning.competitive_advantages.slice(0, 3).map((advantage, index) => (
-                                <li key={index} className="text-sm text-muted-foreground flex items-start gap-2">
-                                  <span className="text-green-600 mt-1">•</span>
-                                  {advantage}
-                                </li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="text-sm text-muted-foreground">No significant advantages identified</p>
-                          )}
-                        </div>
-
-                        <div className="border-t pt-3">
-                          <p className="text-sm font-medium text-orange-600 mb-2 flex items-center gap-1">
-                            <Target className="h-4 w-4" />
-                            Areas for Improvement
-                          </p>
-                          {competitiveData.market_positioning.areas_for_improvement.length > 0 ? (
-                            <ul className="space-y-1">
-                              {competitiveData.market_positioning.areas_for_improvement.slice(0, 3).map((area, index) => (
-                                <li key={index} className="text-sm text-muted-foreground flex items-start gap-2">
-                                  <span className="text-orange-600 mt-1">•</span>
-                                  {area}
-                                </li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="text-sm text-muted-foreground">No improvement areas identified</p>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-
+              {/* Additional Achievement Stats */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Tournament Intelligence</CardTitle>
-                  <CardDescription>Performance analysis in head-to-head competitions</CardDescription>
+                  <CardTitle className="text-lg">Achievement Progress Overview</CardTitle>
+                  <CardDescription>Track your progress across different achievement categories</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {!competitiveData ? (
-                    <div className="space-y-4">
-                      {Array.from({ length: 3 }).map((_, i) => (
-                        <div key={i} className="p-4 border rounded">
-                          <Skeleton className="h-4 w-32 mb-2" />
-                          <Skeleton className="h-3 w-24 mb-3" />
-                          <div className="space-y-2">
-                            <Skeleton className="h-3 w-full" />
-                            <Skeleton className="h-3 w-3/4" />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : competitiveData.tournament_intelligence.length > 0 ? (
-                    <div className="space-y-4">
-                      {competitiveData.tournament_intelligence.slice(0, 3).map((tournament, index) => (
-                        <div key={index} className="p-4 border rounded hover:bg-muted/50">
-                          <div className="flex justify-between items-start mb-3">
-                            <div>
-                              <h4 className="font-semibold text-sm">{tournament.tournament_name}</h4>
-                              <p className="text-xs text-muted-foreground">Your Rank: #{tournament.our_performance}</p>
-                            </div>
-                            <Badge variant="outline">
-                              {tournament.competitor_performances.length} competitors
-                            </Badge>
-                          </div>
-
-                          {tournament.competitor_performances.length > 0 && (
-                            <div className="mb-3">
-                              <p className="text-xs font-medium mb-2">Top Competitor Performances:</p>
-                              <div className="space-y-1">
-                                {tournament.competitor_performances.slice(0, 2).map((perf, perfIndex) => (
-                                  <div key={perfIndex} className="flex justify-between text-xs">
-                                    <span className="truncate">{perf.school_name}</span>
-                                    <span className="font-medium">#{perf.rank}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                            {tournament.opportunities.length > 0 && (
-                              <div>
-                                <p className="font-medium text-green-600 mb-1">Opportunities:</p>
-                                <ul className="space-y-1">
-                                  {tournament.opportunities.slice(0, 2).map((opp, oppIndex) => (
-                                    <li key={oppIndex} className="text-muted-foreground">• {opp}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-
-                            {tournament.threats.length > 0 && (
-                              <div>
-                                <p className="font-medium text-red-600 mb-1">Threats:</p>
-                                <ul className="space-y-1">
-                                  {tournament.threats.slice(0, 2).map((threat, threatIndex) => (
-                                    <li key={threatIndex} className="text-muted-foreground">• {threat}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                          </div>
+                  {!achievementsData ? (
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      {Array.from({ length: 4 }).map((_, i) => (
+                        <div key={i} className="space-y-2">
+                          <Skeleton className="h-4 w-20" />
+                          <Skeleton className="h-8 w-12" />
+                          <Skeleton className="h-2 w-full" />
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <Trophy className="h-12 w-12 mx-auto mb-3" />
-                      <p>No tournament intelligence data available</p>
-                      <p className="text-xs">Participate in more tournaments to see competitive insights</p>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                      {["performance", "participation", "improvement", "milestone"].map((type) => {
+                        const typeAchievements = achievementsData.achievements.filter(a => a.type === type);
+                        const earnedCount = typeAchievements.filter(a => a.criteria_met).length;
+                        const totalCount = typeAchievements.length;
+                        const percentage = totalCount > 0 ? (earnedCount / totalCount) * 100 : 0;
+
+                        return (
+                          <div key={type} className="text-center space-y-2">
+                            <h4 className="text-sm font-medium capitalize">{type}</h4>
+                            <div className="text-2xl font-bold">
+                              {earnedCount}/{totalCount}
+                            </div>
+                            <Progress value={percentage} className="h-2" />
+                            <p className="text-xs text-muted-foreground">
+                              {percentage.toFixed(0)}% Complete
+                            </p>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </CardContent>
               </Card>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Recruitment Pipeline</CardTitle>
-                    <CardDescription>Analysis of talent acquisition and retention</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {!competitiveData ? (
-                      <div className="space-y-4">
-                        <Skeleton className="h-8 w-24" />
-                        <Skeleton className="h-4 w-full" />
-                        <Skeleton className="h-4 w-3/4" />
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4 text-center">
-                          <div>
-                            <div className="text-2xl font-bold text-primary">
-                              {competitiveData.recruitment_insights.talent_pipeline_strength}
-                            </div>
-                            <p className="text-xs text-muted-foreground">Pipeline Strength</p>
-                          </div>
-                          <div>
-                            <div className="text-2xl font-bold text-primary">
-                              {competitiveData.recruitment_insights.recruitment_effectiveness}
-                            </div>
-                            <p className="text-xs text-muted-foreground">Recruitment Score</p>
-                          </div>
-                        </div>
-
-                        <div className="space-y-3">
-                          <p className="text-sm font-medium">Top Feeder Sources:</p>
-                          {competitiveData.recruitment_insights.top_feeder_schools.map((feeder, index) => (
-                            <div key={index} className="flex justify-between items-center text-sm">
-                              <span className="truncate">{feeder.school_name}</span>
-                              <div className="text-right">
-                                <span className="font-medium">{feeder.students_transferred}</span>
-                                <span className="text-xs text-muted-foreground ml-1">
-                                  ({feeder.retention_rate.toFixed(1)}% retention)
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Recommended Targets</CardTitle>
-                    <CardDescription>Strategic recruitment opportunities</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {!competitiveData ? (
-                      <div className="space-y-3">
-                        <Skeleton className="h-4 w-full" />
-                        <Skeleton className="h-4 w-3/4" />
-                        <Skeleton className="h-4 w-1/2" />
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {competitiveData.recruitment_insights.recommended_targets.map((target, index) => (
-                          <div key={index} className="flex items-start gap-3 p-3 bg-muted/50 rounded">
-                            <div className="p-1 bg-primary/10 rounded">
-                              <Target className="h-4 w-4 text-primary" />
-                            </div>
-                            <p className="text-sm flex-1">{target}</p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
             </TabsContent>
           </Tabs>
         </div>

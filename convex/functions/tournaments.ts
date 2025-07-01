@@ -157,50 +157,68 @@ export const getTournaments = query({
 
 export const getTournamentBySlug = query({
   args: { slug: v.string() },
-  handler: async (ctx, args) => {
-    const tournament = await ctx.db
-      .query("tournaments")
-      .withIndex("by_slug", (q) => q.eq("slug", args.slug))
-      .first();
+  handler: async (ctx, args): Promise<{
+    success: boolean;
+    error?: string;
+    data?: any;
+  }> => {
+    try {
+      const tournament = await ctx.db
+        .query("tournaments")
+        .withIndex("by_slug", (q) => q.eq("slug", args.slug))
+        .first();
 
-    if (!tournament) {
-      throw new Error("Tournament not found");
+      if (!tournament) {
+        return {
+          success: false,
+          error: "Tournament not found. This tournament may have been deleted or the URL is incorrect."
+        };
+      }
+
+      let league = null;
+      if (tournament.league_id) {
+        league = await ctx.db.get(tournament.league_id);
+      }
+
+      let coordinator = null;
+      if (tournament.coordinator_id) {
+        coordinator = await ctx.db.get(tournament.coordinator_id);
+      }
+
+      const teams = await ctx.db
+        .query("teams")
+        .withIndex("by_tournament_id", (q) => q.eq("tournament_id", tournament._id))
+        .collect();
+
+      const schoolIds = new Set(teams.map(team => team.school_id).filter(Boolean));
+
+      const hasTeams = teams.length > 0;
+
+      return {
+        success: true,
+        data: {
+          ...tournament,
+          league: league ? {
+            _id: league._id,
+            name: league.name,
+            type: league.type,
+          } : null,
+          coordinator: coordinator ? {
+            _id: coordinator._id,
+            name: coordinator.name,
+          } : null,
+          teamCount: teams.length,
+          schoolCount: schoolIds.size,
+          hasTeams,
+        }
+      };
+    } catch (error) {
+      console.error("Error fetching tournament:", error);
+      return {
+        success: false,
+        error: "An unexpected error occurred while loading the tournament. Please try again later."
+      };
     }
-
-    let league = null;
-    if (tournament.league_id) {
-      league = await ctx.db.get(tournament.league_id);
-    }
-
-    let coordinator = null;
-    if (tournament.coordinator_id) {
-      coordinator = await ctx.db.get(tournament.coordinator_id);
-    }
-
-    const teams = await ctx.db
-      .query("teams")
-      .withIndex("by_tournament_id", (q) => q.eq("tournament_id", tournament._id))
-      .collect();
-
-    const schoolIds = new Set(teams.map(team => team.school_id).filter(Boolean));
-
-    const hasTeams = teams.length > 0;
-
-    return {
-      ...tournament,
-      league: league ? {
-        _id: league._id,
-        name: league.name,
-        type: league.type,
-      } : null,
-      coordinator: coordinator ? {
-        _id: coordinator._id,
-        name: coordinator.name,
-      } : null,
-      teamCount: teams.length,
-      schoolCount: schoolIds.size,
-      hasTeams,
-    };
   },
 });
 

@@ -28,38 +28,50 @@ export const getStudentDashboardStats = query({
     const oneYearAgo = now - (365 * 24 * 60 * 60 * 1000);
     const thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000);
 
+    const allTournaments = await ctx.db
+      .query("tournaments")
+      .withIndex("by_status", (q) => q.eq("status", "completed"))
+      .collect();
+
+    const totalTournaments = allTournaments.length;
+
     const studentTeams = await ctx.db
       .query("teams")
       .collect();
 
     const userTeams = studentTeams.filter(team => team.members.includes(student.id));
+    const participatedTournamentIds = Array.from(new Set(userTeams.map(t => t.tournament_id)));
 
-    const tournamentIds = Array.from(new Set(userTeams.map(t => t.tournament_id)));
-    const allTournaments = await Promise.all(
-      tournamentIds.map(id => ctx.db.get(id))
+    const participatedTournaments = await Promise.all(
+      participatedTournamentIds.map(id => ctx.db.get(id))
     );
-    const validTournaments = allTournaments.filter(Boolean) as Doc<"tournaments">[];
+    const validParticipatedTournaments = participatedTournaments.filter(Boolean) as Doc<"tournaments">[];
 
-    const totalTournaments = validTournaments.length;
-
-    const tournamentsAttendedThisYear = validTournaments.filter(t =>
+    const tournamentsAttendedThisYear = validParticipatedTournaments.filter(t =>
       t.start_date >= oneYearAgo && t.start_date <= now
     ).length;
 
-    const upcomingTournaments = validTournaments.filter(t =>
+    const allUpcomingTournaments = await ctx.db
+      .query("tournaments")
+      .withIndex("by_status", (q) => q.eq("status", "published"))
+      .collect();
+
+    const upcomingTournaments = allUpcomingTournaments.filter(t =>
       t.start_date > now && t.start_date <= now + (30 * 24 * 60 * 60 * 1000)
     ).length;
 
+    const previousYearEnd = oneYearAgo;
     const twoYearsAgo = now - (2 * 365 * 24 * 60 * 60 * 1000);
-    const previousYearTournaments = validTournaments.filter(t =>
-      t.start_date >= twoYearsAgo && t.start_date < oneYearAgo
+
+    const previousYearAttended = validParticipatedTournaments.filter(t =>
+      t.start_date >= twoYearsAgo && t.start_date < previousYearEnd
     ).length;
 
-    const attendedGrowth = previousYearTournaments > 0
-      ? ((tournamentsAttendedThisYear - previousYearTournaments) / previousYearTournaments) * 100
+    const attendedGrowth = previousYearAttended > 0
+      ? ((tournamentsAttendedThisYear - previousYearAttended) / previousYearAttended) * 100
       : tournamentsAttendedThisYear > 0 ? 100 : 0;
 
-    const previousUpcoming = validTournaments.filter(t =>
+    const previousUpcoming = allUpcomingTournaments.filter(t =>
       t.start_date > thirtyDaysAgo && t.start_date <= now
     ).length;
 
@@ -67,15 +79,15 @@ export const getStudentDashboardStats = query({
       ? ((upcomingTournaments - previousUpcoming) / previousUpcoming) * 100
       : upcomingTournaments > 0 ? 100 : 0;
 
-    const tournamentsThirtyDaysAgo = validTournaments.filter(t =>
-      t.created_at <= thirtyDaysAgo
-    ).length;
-    const newTournaments = validTournaments.filter(t =>
-      t.created_at > thirtyDaysAgo
-    ).length;
+    const previousTotalTournaments = await ctx.db
+      .query("tournaments")
+      .withIndex("by_status", (q) => q.eq("status", "completed"))
+      .filter((q) => q.lte(q.field("created_at"), thirtyDaysAgo))
+      .collect();
 
-    const tournamentsGrowth = tournamentsThirtyDaysAgo > 0
-      ? (newTournaments / tournamentsThirtyDaysAgo) * 100
+    const newTournaments = allTournaments.length - previousTotalTournaments.length;
+    const tournamentsGrowth = previousTotalTournaments.length > 0
+      ? (newTournaments / previousTotalTournaments.length) * 100
       : newTournaments > 0 ? 100 : 0;
 
     return {
@@ -113,46 +125,47 @@ export const getStudentRankAndPosition = query({
       .withIndex("by_role_status", (q) => q.eq("role", "student").eq("status", "active"))
       .collect();
 
-    const speakerResults = await ctx.db
-      .query("tournament_results")
-      .withIndex("by_result_type", (q) => q.eq("result_type", "speaker"))
+    const allJudgingScores = await ctx.db.query("judging_scores").collect();
+    const allTeams = await ctx.db.query("teams").collect();
+    const allDebates = await ctx.db.query("debates").collect();
+    const allTournaments = await ctx.db
+      .query("tournaments")
+      .withIndex("by_status", (q) => q.eq("status", "completed"))
       .collect();
 
-    const studentsWithPerformance = [];
+    const sortedTournaments = allTournaments.sort((a, b) => a.end_date - b.end_date);
+    const latestTournament = sortedTournaments[sortedTournaments.length - 1];
 
-    for (const studentUser of allStudents) {
-      const studentSpeakerResults = speakerResults.filter(r => r.speaker_id === studentUser._id);
-
-      if (studentSpeakerResults.length > 0) {
-        const totalPoints = studentSpeakerResults.reduce((sum, r) => sum + (r.total_speaker_points || 0), 0);
-        const avgPoints = totalPoints / studentSpeakerResults.length;
-        const bestRank = Math.min(...studentSpeakerResults.map(r => r.speaker_rank || 999));
-
-        studentsWithPerformance.push({
-          student_id: studentUser._id,
-          totalPoints,
-          avgPoints,
-          bestRank,
-          tournamentsCount: studentSpeakerResults.length,
-        });
-      }
+    if (!latestTournament) {
+      return {
+        currentRank: null,
+        totalStudents: 0,
+        rankChange: 0,
+      };
     }
 
-    studentsWithPerformance.sort((a, b) => {
-      if (a.totalPoints !== b.totalPoints) return b.totalPoints - a.totalPoints;
-      return a.bestRank - b.bestRank;
-    });
+    const currentRankings = await calculateStudentRankings(
+      ctx, allStudents, allJudgingScores, allTeams, allDebates, sortedTournaments
+    );
 
-    const currentStudentIndex = studentsWithPerformance.findIndex(s => s.student_id === student.id);
-    const currentRank = currentStudentIndex !== -1 ? currentStudentIndex + 1 : null;
-    const totalStudents = studentsWithPerformance.length;
+    const previousTournaments = sortedTournaments.slice(0, -1);
+    const previousRankings = await calculateStudentRankings(
+      ctx, allStudents, allJudgingScores, allTeams, allDebates, previousTournaments
+    );
+
+    const currentStudentRank = currentRankings.find(r => r.student_id === student.id);
+    const previousStudentRank = previousRankings.find(r => r.student_id === student.id);
+
+    const currentRank = currentStudentRank?.rank || null;
+    const totalStudents = currentRankings.length;
 
     let rankChange = 0;
-    if (currentStudentIndex !== -1) {
-      const currentStudent = studentsWithPerformance[currentStudentIndex];
-      if (currentStudent.tournamentsCount > 1) {
-        rankChange = Math.random() > 0.5 ? 1 : -1;
-      }
+    if (currentStudentRank && previousStudentRank) {
+
+      rankChange = previousStudentRank.rank - currentStudentRank.rank;
+    } else if (currentStudentRank && !previousStudentRank) {
+
+      rankChange = 0;
     }
 
     return {
@@ -162,6 +175,97 @@ export const getStudentRankAndPosition = query({
     };
   },
 });
+
+const calculateStudentRankings = async (
+  ctx: any,
+  allStudents: any[],
+  allJudgingScores: any[],
+  allTeams: any[],
+  allDebates: any[],
+  tournaments: any[]
+) => {
+  const studentsWithPerformance = [];
+  const tournamentIds = new Set(tournaments.map(t => t._id));
+
+  for (const studentUser of allStudents) {
+    const studentTeams = allTeams.filter(t =>
+      t.members.includes(studentUser._id) && tournamentIds.has(t.tournament_id)
+    );
+
+    if (studentTeams.length === 0) continue;
+
+    let totalSpeakerPoints = 0;
+    let scoresCount = 0;
+    let totalTeamWins = 0;
+    let totalTeamDebates = 0;
+    let highestIndividualScore = 0;
+    const individualScores = [];
+
+    const relevantJudgingScores = allJudgingScores.filter(score => {
+      const debate = allDebates.find(d => d._id === score.debate_id);
+      return debate && tournamentIds.has(debate.tournament_id);
+    });
+
+    for (const score of relevantJudgingScores) {
+      const studentSpeakerScores = score.speaker_scores.filter((ss: { speaker_id: any; }) => ss.speaker_id === studentUser._id);
+
+      for (const speakerScore of studentSpeakerScores) {
+        totalSpeakerPoints += speakerScore.score;
+        scoresCount++;
+        highestIndividualScore = Math.max(highestIndividualScore, speakerScore.score);
+        individualScores.push(speakerScore.score);
+      }
+    }
+
+    for (const team of studentTeams) {
+      const teamDebates = allDebates.filter(d =>
+        (d.proposition_team_id === team._id || d.opposition_team_id === team._id) &&
+        d.status === "completed" &&
+        tournamentIds.has(d.tournament_id)
+      );
+
+      for (const debate of teamDebates) {
+        totalTeamDebates++;
+        if (debate.winning_team_id === team._id) {
+          totalTeamWins++;
+        }
+      }
+    }
+
+    if (scoresCount > 0) {
+
+      const avgScore = totalSpeakerPoints / scoresCount;
+      const variance = individualScores.reduce((sum, score) => sum + Math.pow(score - avgScore, 2), 0) / individualScores.length;
+      const deviation = Math.sqrt(variance);
+
+      studentsWithPerformance.push({
+        student_id: studentUser._id,
+        totalSpeakerPoints,
+        totalTeamWins,
+        highestIndividualScore,
+        deviation,
+      });
+    }
+  }
+
+  studentsWithPerformance.sort((a, b) => {
+    if (a.totalSpeakerPoints !== b.totalSpeakerPoints) {
+      return b.totalSpeakerPoints - a.totalSpeakerPoints;
+    }
+    if (a.totalTeamWins !== b.totalTeamWins) {
+      return b.totalTeamWins - a.totalTeamWins;
+    }
+    if (a.highestIndividualScore !== b.highestIndividualScore) {
+      return b.highestIndividualScore - a.highestIndividualScore;
+    }
+    return a.deviation - b.deviation;
+  });
+
+  return studentsWithPerformance.map((student, index) => ({
+    ...student,
+    rank: index + 1,
+  }));
+};
 
 export const getStudentPerformanceTrend = query({
   args: {
@@ -211,12 +315,9 @@ export const getStudentPerformanceTrend = query({
       t.start_date >= startDate && t.start_date <= now
     );
 
-    const speakerResults = await ctx.db
-      .query("tournament_results")
-      .withIndex("by_result_type", (q) => q.eq("result_type", "speaker"))
-      .collect();
-
-    const studentResults = speakerResults.filter(r => r.speaker_id === student.id);
+    const allJudgingScores = await ctx.db.query("judging_scores").collect();
+    const allTeams = await ctx.db.query("teams").collect();
+    const allDebates = await ctx.db.query("debates").collect();
 
     const performanceData: Array<{
       date: string;
@@ -226,26 +327,54 @@ export const getStudentPerformanceTrend = query({
     }> = [];
 
     for (const tournament of relevantTournaments.sort((a, b) => a.start_date - b.start_date)) {
-      const studentResult = studentResults.find(r => {
 
-        const tournamentSpeakerResults = speakerResults.filter(sr => sr.tournament_id === tournament._id);
-        return tournamentSpeakerResults.some(tsr => tsr._id === r._id);
-      });
+      const studentTeamsInTournament = allTeams.filter(t =>
+        t.tournament_id === tournament._id && t.members.includes(student.id)
+      );
 
-      if (studentResult) {
+      if (studentTeamsInTournament.length === 0) continue;
 
-        const tournamentSpeakerResults = speakerResults.filter(r => r.tournament_id === tournament._id);
-        const platformAverage = tournamentSpeakerResults.length > 0
-          ? tournamentSpeakerResults.reduce((sum, r) => sum + (r.total_speaker_points || 0), 0) / tournamentSpeakerResults.length
-          : 0;
+      const tournamentDebates = allDebates.filter(d => d.tournament_id === tournament._id);
 
-        performanceData.push({
-          date: formatDateByPeriod(tournament.start_date, args.period),
-          student_performance: studentResult.total_speaker_points || 0,
-          platform_average: Math.round(platformAverage * 10) / 10,
-          tournament_name: tournament.name,
-        });
+      const tournamentScores = allJudgingScores.filter(score =>
+        tournamentDebates.some(debate => debate._id === score.debate_id)
+      );
+
+      let studentTotalPoints = 0;
+      let studentScoreCount = 0;
+
+      for (const score of tournamentScores) {
+        const studentSpeakerScores = score.speaker_scores.filter(ss => ss.speaker_id === student.id);
+        for (const speakerScore of studentSpeakerScores) {
+          studentTotalPoints += speakerScore.score;
+          studentScoreCount++;
+        }
       }
+
+      if (studentScoreCount === 0) continue;
+
+      const studentAvgPerformance = studentTotalPoints / studentScoreCount;
+
+      let allPointsInTournament = 0;
+      let allScoreCountInTournament = 0;
+
+      for (const score of tournamentScores) {
+        for (const speakerScore of score.speaker_scores) {
+          allPointsInTournament += speakerScore.score;
+          allScoreCountInTournament++;
+        }
+      }
+
+      const platformAverage = allScoreCountInTournament > 0
+        ? allPointsInTournament / allScoreCountInTournament
+        : 0;
+
+      performanceData.push({
+        date: formatDateByPeriod(tournament.start_date, args.period),
+        student_performance: Math.round(studentAvgPerformance * 10) / 10,
+        platform_average: Math.round(platformAverage * 10) / 10,
+        tournament_name: tournament.name,
+      });
     }
 
     return performanceData;
@@ -279,19 +408,30 @@ export const getStudentLeaderboard = query({
       .withIndex("by_role_status", (q) => q.eq("role", "student").eq("status", "active"))
       .collect();
 
-    const speakerResults = await ctx.db
-      .query("tournament_results")
-      .withIndex("by_result_type", (q) => q.eq("result_type", "speaker"))
-      .collect();
+    const allJudgingScores = await ctx.db.query("judging_scores").collect();
+    const allTeams = await ctx.db.query("teams").collect();
 
     const studentsWithPerformance = [];
 
     for (const student of allStudents) {
-      const studentSpeakerResults = speakerResults.filter(r => r.speaker_id === student._id);
+      const studentTeams = allTeams.filter(t => t.members.includes(student._id));
 
-      if (studentSpeakerResults.length > 0) {
-        const totalPoints = studentSpeakerResults.reduce((sum, r) => sum + (r.total_speaker_points || 0), 0);
-        const avgPoints = totalPoints / studentSpeakerResults.length;
+      if (studentTeams.length === 0) continue;
+
+      let totalPoints = 0;
+      let scoresCount = 0;
+
+      for (const score of allJudgingScores) {
+        const studentSpeakerScores = score.speaker_scores.filter(ss => ss.speaker_id === student._id);
+
+        for (const speakerScore of studentSpeakerScores) {
+          totalPoints += speakerScore.score;
+          scoresCount++;
+        }
+      }
+
+      if (scoresCount > 0) {
+        const avgPoints = totalPoints / scoresCount;
 
         studentsWithPerformance.push({
           student_id: student._id,
@@ -299,7 +439,7 @@ export const getStudentLeaderboard = query({
           profile_image: student.profile_image,
           totalPoints: Math.round(totalPoints),
           avgPoints: Math.round(avgPoints * 10) / 10,
-          tournamentsCount: studentSpeakerResults.length,
+          tournamentsCount: studentTeams.length,
           rankChange: Math.random() > 0.6 ? 1 : Math.random() > 0.3 ? -1 : 0,
         });
       }

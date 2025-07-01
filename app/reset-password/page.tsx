@@ -74,7 +74,7 @@ function ResetPasswordForm() {
   const [safeguardingCertificateId, setSafeguardingCertificateId] = useState<Id<"_storage"> | null>(null)
 
   const hasVerified = useRef(false)
-  const verificationInProgress = useRef(false)
+  const verificationAttempted = useRef(false)
 
   const searchParams = useSearchParams()
   const token = searchParams.get("token")
@@ -119,15 +119,17 @@ function ResetPasswordForm() {
 
   useEffect(() => {
     const verifyToken = async () => {
-      if (!token || hasVerified.current || verificationInProgress.current) {
-        if (!token) {
+
+      if (!token || hasVerified.current || verificationAttempted.current) {
+        if (!token && !verificationAttempted.current) {
           setError("Invalid or missing reset token")
           setVerifying(false)
+          verificationAttempted.current = true
         }
         return
       }
 
-      verificationInProgress.current = true
+      verificationAttempted.current = true
 
       try {
         console.log("Verifying token:", token)
@@ -162,16 +164,10 @@ function ResetPasswordForm() {
         }
 
         setVerifying(false)
-      } finally {
-        verificationInProgress.current = false
       }
     }
 
-    const timeoutId = setTimeout(verifyToken, 100)
-
-    return () => {
-      clearTimeout(timeoutId)
-    }
+    verifyToken()
   }, [token, verifyMagicLink])
 
   const handlePasswordSubmit = async (values: ResetPasswordFormValues) => {
@@ -271,7 +267,7 @@ function ResetPasswordForm() {
           transition={{ duration: 0.3 }}
           className="w-full max-w-md"
         >
-          <Card className="border-0 shadow-xl">
+          <Card className="border border-[#E2E8F0]">
             <CardContent className="flex flex-col items-center justify-center py-16">
               <Image
                 src="/images/logo.png"
@@ -301,7 +297,7 @@ function ResetPasswordForm() {
           transition={{ duration: 0.3 }}
           className="w-full max-w-md"
         >
-          <Card className="border-0 shadow-xl">
+          <Card className="border border-[#E2E8F0]">
             <CardHeader className="text-center pb-6">
               <Image
                 src="/images/logo.png"
@@ -310,11 +306,11 @@ function ResetPasswordForm() {
                 height={80}
                 className="mx-auto mb-4"
               />
-              <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+              <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-4">
                 <CheckCircle className="h-8 w-8 text-green-600" />
               </div>
-              <CardTitle className="text-xl">Account setup complete!</CardTitle>
-              <CardDescription className="text-base">
+              <CardTitle className="text-lg">Account setup complete!</CardTitle>
+              <CardDescription className="text-sm">
                 {isAdminCreated ? (
                   "Your account has been set up successfully. You can now sign in with your new credentials."
                 ) : (
@@ -325,7 +321,7 @@ function ResetPasswordForm() {
             <CardContent>
               <Button
                 asChild
-                className="w-full h-11"
+                className="w-full"
               >
                 <Link href={`/signin/${userInfo?.role || 'student'}`}>
                   Continue to Sign In
@@ -347,7 +343,7 @@ function ResetPasswordForm() {
           transition={{ duration: 0.3 }}
           className="w-full max-w-md"
         >
-          <Card className="border-0 shadow-xl">
+          <Card className="border border-[#E2E8F0]">
             <CardHeader className="text-center pb-6">
               <Image
                 src="/images/logo.png"
@@ -356,21 +352,21 @@ function ResetPasswordForm() {
                 height={80}
                 className="mx-auto mb-4"
               />
-              <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
+              <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
                 <AlertCircle className="h-8 w-8 text-red-600" />
               </div>
-              <CardTitle className="text-xl">Invalid reset link</CardTitle>
-              <CardDescription className="text-base">
+              <CardTitle className="text-lg">Invalid reset link</CardTitle>
+              <CardDescription className="text-sm">
                 This password reset link is invalid, has expired, or has already been used. Please request a new one.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-2">
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
+                <AlertDescription className="text-xs">{error}</AlertDescription>
               </Alert>
 
-              <Button asChild className="w-full h-11">
+              <Button asChild className="w-full">
                 <Link href="/forgot-password">
                   Request new reset link
                 </Link>
@@ -379,7 +375,7 @@ function ResetPasswordForm() {
               <div className="text-center">
                 <Link
                   href="/"
-                  className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                  className="text-xs text-primary hover:underline transition-colors"
                 >
                   Back to sign in
                 </Link>
@@ -400,7 +396,7 @@ function ResetPasswordForm() {
           transition={{ duration: 0.3 }}
           className="w-full max-w-md"
         >
-          <Card className="border-0 shadow-xl">
+          <Card className="border border-[#E2E8F0]">
             <CardHeader className="text-center">
               <Image
                 src="/images/logo.png"
@@ -496,7 +492,7 @@ function ResetPasswordForm() {
           transition={{ duration: 0.3 }}
           className="w-full max-w-md"
         >
-          <Card className="border-0 shadow-xl">
+          <Card className="border border-[#E2E8F0]">
             <CardHeader className="text-center">
               <Image
                 src="/images/logo.png"
@@ -614,7 +610,7 @@ function ResetPasswordForm() {
         transition={{ duration: 0.3 }}
         className="w-full max-w-md"
       >
-        <Card className="border-0 shadow-xl">
+        <Card className="border border-[#E2E8F0]">
           <CardHeader className="text-center">
             <Image
               src="/images/logo.png"
@@ -623,10 +619,7 @@ function ResetPasswordForm() {
               height={80}
               className="mx-auto mb-4"
             />
-            <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
-              <ShieldEllipsis className="h-8 w-8 text-blue-600" />
-            </div>
-            <CardDescription className="text-base">
+            <CardDescription className="text-sm">
               {userInfo && (
                 <span>
                   {isAdminCreated ? (

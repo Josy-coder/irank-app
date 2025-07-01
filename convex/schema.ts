@@ -244,11 +244,13 @@ export default defineSchema({
     ),
     ranking_released: v.optional(v.object({
       prelims: v.object({
+        teams: v.boolean(),
         schools: v.boolean(),
         students: v.boolean(),
         volunteers: v.boolean(),
       }),
       full_tournament: v.object({
+        teams: v.boolean(),
         schools: v.boolean(),
         students: v.boolean(),
         volunteers: v.boolean(),
@@ -289,6 +291,21 @@ export default defineSchema({
       v.literal("withdrawn"),
       v.literal("disqualified")
     ),
+    prelim_wins: v.optional(v.number()),
+    prelim_losses: v.optional(v.number()),
+    prelim_points: v.optional(v.number()),
+    elimination_wins: v.optional(v.number()),
+    elimination_losses: v.optional(v.number()),
+    elimination_points: v.optional(v.number()),
+    eliminated_in_round: v.optional(v.number()),
+    opponents_faced: v.optional(v.array(v.object({
+      opponent_team_id: v.id("teams"),
+      debate_id: v.id("debates"),
+      won: v.boolean(),
+      round_number: v.number(),
+      round_type: v.string(),
+    }))),
+
     created_at: v.number(),
     updated_at: v.optional(v.number()),
   })
@@ -302,6 +319,7 @@ export default defineSchema({
       searchField: "name",
       filterFields: ["tournament_id", "school_id", "status"]
     }),
+
 
   tournament_invitations: defineTable({
     tournament_id: v.id("tournaments"),
@@ -384,6 +402,11 @@ export default defineSchema({
       v.literal("proposition"),
       v.literal("opposition")
     )),
+    proposition_votes: v.optional(v.number()),
+    opposition_votes: v.optional(v.number()),
+    proposition_team_points: v.optional(v.number()),
+    opposition_team_points: v.optional(v.number()),
+
     argument_flow: v.optional(v.array(v.object({
       type: v.union(
         v.literal("main"),
@@ -421,6 +444,9 @@ export default defineSchema({
         v.literal("all")
       )
     }))),
+
+    created_at: v.number(),
+    updated_at: v.optional(v.number()),
   })
     .index("by_round_id", ["round_id"])
     .index("by_tournament_id", ["tournament_id"])
@@ -430,7 +456,9 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_round_id_status", ["round_id", "status"])
     .index("by_tournament_id_status", ["tournament_id", "status"])
-    .index("by_round_room_name", ["round_id", "room_name"]),
+    .index("by_round_room_name", ["round_id", "room_name"])
+    .index("by_winning_team_id", ["winning_team_id"])
+    .index("by_tournament_id_winning_team", ["tournament_id", "winning_team_id"]),
 
   judging_scores: defineTable({
     debate_id: v.id("debates"),
@@ -456,39 +484,56 @@ export default defineSchema({
     })),
     notes: v.optional(v.string()),
     submitted_at: v.number(),
-    feedback_submitted: v.optional(v.boolean())
+    feedback_submitted: v.optional(v.boolean()),
+    created_at: v.number(),
+    updated_at: v.optional(v.number()),
   })
     .index("by_debate_id", ["debate_id"])
     .index("by_judge_id", ["judge_id"])
     .index("by_debate_id_judge_id", ["debate_id", "judge_id"])
     .index("by_submitted_at", ["submitted_at"]),
 
-  tournament_results: defineTable({
+  judge_results: defineTable({
     tournament_id: v.id("tournaments"),
-    result_type: v.union(
-      v.literal("team"),
-      v.literal("speaker")
-    ),
-    team_id: v.optional(v.id("teams")),
-    wins: v.optional(v.number()),
-    losses: v.optional(v.number()),
-    team_points: v.optional(v.number()),
-    team_rank: v.optional(v.number()),
-    is_eliminated: v.optional(v.boolean()),
-    eliminated_in_round: v.optional(v.number()),
-    speaker_id: v.optional(v.id("users")),
-    speaker_team_id: v.optional(v.id("teams")),
-    total_speaker_points: v.optional(v.number()),
-    average_speaker_score: v.optional(v.number()),
-    speaker_rank: v.optional(v.number()),
+    judge_id: v.id("users"),
+    total_debates_judged: v.number(),
+    prelim_debates_judged: v.number(),
+    elimination_debates_judged: v.number(),
+    head_judge_assignments: v.number(),
+    attendance_score: v.number(),
+
+    feedback_scores: v.array(v.object({
+      from_team_id: v.optional(v.id("teams")),
+      from_user_id: v.id("users"),
+      debate_id: v.id("debates"),
+      clarity: v.number(),
+      fairness: v.number(),
+      knowledge: v.number(),
+      helpfulness: v.number(),
+      comments: v.optional(v.string()),
+      bias_detected: v.optional(v.boolean()),
+      bias_explanation: v.optional(v.string()),
+      submitted_at: v.number(),
+      is_anonymous: v.boolean(),
+    })),
+
+    avg_feedback_score: v.number(),
+    total_feedback_count: v.number(),
+    consistency_score: v.number(),
+
+    cross_tournament_stats: v.optional(v.object({
+      tournaments_judged: v.number(),
+      total_debates_across_tournaments: v.number(),
+      avg_feedback_across_tournaments: v.number(),
+    })),
+
+    created_at: v.number(),
+    updated_at: v.optional(v.number()),
   })
     .index("by_tournament_id", ["tournament_id"])
-    .index("by_tournament_id_result_type", ["tournament_id", "result_type"])
-    .index("by_team_id", ["team_id"])
-    .index("by_result_type", ["result_type"])
-    .index("by_tournament_id_team_id", ["tournament_id", "team_id"])
-    .index("by_speaker_id", ["speaker_id"])
-    .index("by_tournament_id_speaker_id", ["tournament_id", "speaker_id"]),
+    .index("by_judge_id", ["judge_id"])
+    .index("by_tournament_id_judge_id", ["tournament_id", "judge_id"])
+    .index("by_total_debates_judged", ["total_debates_judged"]),
 
   notifications: defineTable({
     user_id: v.id("users"),

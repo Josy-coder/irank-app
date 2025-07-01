@@ -52,18 +52,6 @@ interface PairingConflict {
   team_ids?: Id<"teams">[];
   judge_ids?: Id<"users">[];
 }
-
-interface PairingResult {
-  room_name: string;
-  proposition_team_id?: Id<"teams">;
-  opposition_team_id?: Id<"teams">;
-  judges: Id<"users">[];
-  head_judge_id?: Id<"users">;
-  is_bye_round: boolean;
-  conflicts: PairingConflict[];
-  quality_score: number;
-}
-
 export const getTournamentPairingData = query({
   args: {
     token: v.string(),
@@ -117,18 +105,17 @@ export const getTournamentPairingData = query({
       .withIndex("by_tournament_id", (q) => q.eq("tournament_id", args.tournament_id))
       .collect();
 
-    const results = await ctx.db
-      .query("tournament_results")
-      .withIndex("by_tournament_id", (q) => q.eq("tournament_id", args.tournament_id))
-      .collect();
-
-    const judgeFeedback = await ctx.db
-      .query("judge_feedback")
-      .withIndex("by_tournament_id", (q) => q.eq("tournament_id", args.tournament_id))
-      .collect();
+    const judgingScores = await ctx.db.query("judging_scores").collect();
+    const judgeFeedback = await ctx.db.query("judge_feedback").collect();
 
     let crossTournamentDebates: Doc<"debates">[] = [];
-    let crossTournamentFeedback: Doc<"judge_feedback">[] = [];
+    let crossTournamentJudgingScores: Array<{
+      judge_id: Id<"users">;
+      tournament_id: Id<"tournaments">;
+      debates_judged: number;
+      avg_feedback: number;
+      consistency_score: number;
+    }> = [];
     let leagueTournaments: Doc<"tournaments">[] = [];
 
     if (league) {
@@ -149,12 +136,56 @@ export const getTournamentPairingData = query({
 
         crossTournamentDebates.push(...tournamentDebates);
 
-        const tournamentFeedback = await ctx.db
-          .query("judge_feedback")
-          .withIndex("by_tournament_id", (q) => q.eq("tournament_id", leagueTournament._id))
-          .collect();
+        const tournamentJudgingScores = judgingScores.filter(score =>
+          tournamentDebates.some(d => d._id === score.debate_id)
+        );
 
-        crossTournamentFeedback.push(...tournamentFeedback);
+        const judgeStatsMap = new Map<Id<"users">, { debates: number; feedback: number[]; scores: number[] }>();
+
+        tournamentJudgingScores.forEach(score => {
+          const current = judgeStatsMap.get(score.judge_id) || { debates: 0, feedback: [], scores: [] };
+          current.debates++;
+
+          if (score.speaker_scores) {
+            const avgScore = score.speaker_scores.reduce((sum, s) => sum + s.score, 0) / score.speaker_scores.length;
+            current.scores.push(avgScore);
+          }
+
+          judgeStatsMap.set(score.judge_id, current);
+        });
+
+        const tournamentFeedback = judgeFeedback.filter(feedback =>
+          tournamentDebates.some(d => d._id === feedback.debate_id)
+        );
+
+        tournamentFeedback.forEach(feedback => {
+          const current = judgeStatsMap.get(feedback.judge_id);
+          if (current) {
+            const avgRating = (feedback.clarity + feedback.fairness + feedback.knowledge + feedback.helpfulness) / 4;
+            current.feedback.push(avgRating);
+          }
+        });
+
+        Array.from(judgeStatsMap.entries()).forEach(([judgeId, stats]) => {
+          const avgFeedback = stats.feedback.length > 0
+            ? stats.feedback.reduce((sum, f) => sum + f, 0) / stats.feedback.length
+            : 3.0;
+
+          const consistencyScore = stats.scores.length > 1
+            ? Math.max(0, 100 - (stats.scores.reduce((sum, s, i, arr) => {
+              if (i === 0) return sum;
+              return sum + Math.abs(s - arr[i-1]);
+            }, 0) / (stats.scores.length - 1)) * 10)
+            : 1.0;
+
+          crossTournamentJudgingScores.push({
+            judge_id: judgeId,
+            tournament_id: leagueTournament._id,
+            debates_judged: stats.debates,
+            avg_feedback: avgFeedback,
+            consistency_score: consistencyScore,
+          });
+        });
       }
     }
 
@@ -190,9 +221,22 @@ export const getTournamentPairingData = query({
             return round?.round_number || 0;
           });
 
-        const teamResult = results.find(r => r.team_id === team._id && r.result_type === "team");
-        const wins = teamResult?.wins || 0;
-        const totalPoints = teamResult?.team_points || 0;
+        // Calculate wins and points from debates directly
+        let wins = 0;
+        let totalPoints = 0;
+
+        teamDebates.forEach(debate => {
+          if (debate.status === "completed" && debate.winning_team_id === team._id) {
+            wins++;
+          }
+
+          // Add points from this team's participation
+          if (debate.proposition_team_id === team._id && debate.proposition_team_points) {
+            totalPoints += debate.proposition_team_points;
+          } else if (debate.opposition_team_id === team._id && debate.opposition_team_points) {
+            totalPoints += debate.opposition_team_points;
+          }
+        });
 
         let crossTournamentPerformance = {
           total_tournaments: 0,
@@ -202,7 +246,7 @@ export const getTournamentPairingData = query({
         };
 
         if (league && team.school_id) {
-
+          // Get cross-tournament performance from other tournaments in the league
           const schoolTeamsInLeague = new Set<Id<"teams">>();
 
           for (const leagueTournament of leagueTournaments) {
@@ -216,23 +260,37 @@ export const getTournamentPairingData = query({
             tournamentTeams.forEach(t => schoolTeamsInLeague.add(t._id));
           }
 
-          const crossResults = await Promise.all(
-            Array.from(schoolTeamsInLeague).map(async (teamId) => {
-              return await ctx.db
-                .query("tournament_results")
-                .withIndex("by_team_id", (q) => q.eq("team_id", teamId))
-                .filter(q => q.eq(q.field("result_type"), "team"))
-                .collect();
-            })
-          );
+          // Calculate cross-tournament stats from debates
+          let crossWins = 0;
+          let crossPoints = 0;
+          let crossDebatesCount = 0;
 
-          const flatResults = crossResults.flat();
-          if (flatResults.length > 0) {
+          for (const crossDebate of crossTournamentDebates) {
+            if (schoolTeamsInLeague.has(crossDebate.proposition_team_id!) ||
+              schoolTeamsInLeague.has(crossDebate.opposition_team_id!)) {
+              crossDebatesCount++;
+
+              if (crossDebate.status === "completed") {
+                if (schoolTeamsInLeague.has(crossDebate.winning_team_id!)) {
+                  crossWins++;
+                }
+
+                if (schoolTeamsInLeague.has(crossDebate.proposition_team_id!) && crossDebate.proposition_team_points) {
+                  crossPoints += crossDebate.proposition_team_points;
+                }
+                if (schoolTeamsInLeague.has(crossDebate.opposition_team_id!) && crossDebate.opposition_team_points) {
+                  crossPoints += crossDebate.opposition_team_points;
+                }
+              }
+            }
+          }
+
+          if (crossDebatesCount > 0) {
             crossTournamentPerformance = {
-              total_tournaments: new Set(flatResults.map(r => r.tournament_id)).size,
-              total_wins: flatResults.reduce((sum, r) => sum + (r.wins || 0), 0),
-              total_debates: flatResults.length,
-              avg_performance: flatResults.reduce((sum, r) => sum + (r.team_points || 0), 0) / flatResults.length,
+              total_tournaments: leagueTournaments.length,
+              total_wins: crossWins,
+              total_debates: crossDebatesCount,
+              avg_performance: crossPoints / crossDebatesCount,
             };
           }
         }
@@ -262,11 +320,13 @@ export const getTournamentPairingData = query({
 
         const conflicts: Id<"teams">[] = [];
 
+        // Add school conflicts
         if (judge!.school_id) {
           teams.filter(t => t.school_id === judge!.school_id)
             .forEach(t => conflicts.push(t._id));
         }
 
+        // Add feedback conflicts from judge feedback
         const poorFeedback = judgeFeedback.filter(f =>
           f.judge_id === judge!._id &&
           f.bias_detected === true &&
@@ -274,7 +334,7 @@ export const getTournamentPairingData = query({
         );
 
         poorFeedback.forEach(f => {
-          if (!conflicts.includes(f.team_id)) {
+          if (f.team_id && !conflicts.includes(f.team_id)) {
             conflicts.push(f.team_id);
           }
         });
@@ -287,9 +347,9 @@ export const getTournamentPairingData = query({
           return isElim && d.judges.includes(judge!._id);
         }).length;
 
-        const judgeScores = judgeFeedback.filter(f => f.judge_id === judge!._id);
-        const avgFeedbackScore = judgeScores.length > 0
-          ? judgeScores.reduce((sum, f) => sum + ((f.clarity + f.fairness + f.knowledge + f.helpfulness) / 4), 0) / judgeScores.length
+        const judgeFeedbackForJudge = judgeFeedback.filter(f => f.judge_id === judge!._id);
+        const avgFeedbackScore = judgeFeedbackForJudge.length > 0
+          ? judgeFeedbackForJudge.reduce((sum, f) => sum + (f.clarity + f.fairness + f.knowledge + f.helpfulness) / 4, 0) / judgeFeedbackForJudge.length
           : 3.0;
 
         let crossTournamentStats = {
@@ -301,25 +361,17 @@ export const getTournamentPairingData = query({
         };
 
         if (league) {
-          const crossDebates = crossTournamentDebates.filter(d => d.judges.includes(judge!._id));
-          const crossFeedback = crossTournamentFeedback.filter(f => f.judge_id === judge!._id);
+          const crossJudgeResults = crossTournamentJudgingScores.filter(jr => jr.judge_id === judge!._id);
 
-          if (crossDebates.length > 0) {
-            const tournamentIds = new Set(crossDebates.map(d => d.tournament_id));
+          if (crossJudgeResults.length > 0) {
+            const tournamentIds = new Set(crossJudgeResults.map(jr => jr.tournament_id));
 
             crossTournamentStats = {
               total_tournaments: tournamentIds.size,
-              total_debates: crossDebates.length,
-              total_elimination_debates: crossDebates.filter(d => {
-
-                return !!d.round_id;
-              }).length,
-              avg_feedback: crossFeedback.length > 0
-                ? crossFeedback.reduce((sum, f) => sum + ((f.clarity + f.fairness + f.knowledge + f.helpfulness) / 4), 0) / crossFeedback.length
-                : 3.0,
-              consistency_score: crossFeedback.length > 0
-                ? 1 - (crossFeedback.filter(f => f.bias_detected).length / crossFeedback.length)
-                : 1.0,
+              total_debates: crossJudgeResults.reduce((sum, jr) => sum + jr.debates_judged, 0),
+              total_elimination_debates: 0, // Would need more complex calculation
+              avg_feedback: crossJudgeResults.reduce((sum, jr) => sum + jr.avg_feedback, 0) / crossJudgeResults.length,
+              consistency_score: crossJudgeResults.reduce((sum, jr) => sum + jr.consistency_score, 0) / crossJudgeResults.length,
             };
           }
         }
@@ -348,14 +400,13 @@ export const getTournamentPairingData = query({
       judges: enrichedJudges,
       rounds: rounds.sort((a, b) => a.round_number - b.round_number),
       debates,
-      results,
       current_round: currentRound,
       pairing_method: currentRound <= 5 ? "fold" : "swiss",
       can_generate_all_prelims: tournament.prelim_rounds <= 5,
       cross_tournament_data: {
         league_tournaments: leagueTournaments.length,
         total_debates: crossTournamentDebates.length,
-        total_feedback: crossTournamentFeedback.length,
+        total_judge_results: crossTournamentJudgingScores.length,
       }
     };
   },
@@ -405,7 +456,6 @@ export const savePairings = mutation({
         .collect();
 
       if (existingDebates.length > 0) {
-
         const activeDebates = existingDebates.filter(d =>
           d.status === "inProgress" || d.status === "completed"
         );
@@ -415,7 +465,6 @@ export const savePairings = mutation({
         }
 
         if (tournament.status === "inProgress") {
-
           if (existingRound.status === "inProgress") {
             throw new Error("Cannot overwrite pairings: Round is currently in progress");
           }
@@ -428,7 +477,6 @@ export const savePairings = mutation({
 
       roundId = existingRound._id;
     } else {
-
       roundId = await ctx.db.insert("rounds", {
         tournament_id: args.tournament_id,
         round_number: args.round_number,
@@ -499,6 +547,7 @@ export const savePairings = mutation({
         status: "pending",
         is_public_speaking: pairing.is_bye_round,
         poi_count: 0,
+        created_at: Date.now(),
       });
 
       debateIds.push(debateId);
@@ -558,8 +607,6 @@ export const handleTeamWithdrawal = mutation({
       throw new Error("Team is already withdrawn");
     }
 
-    const teamSchool = team.school_id ? await ctx.db.get(team.school_id) : null;
-
     await ctx.db.patch(args.team_id, {
       status: "withdrawn",
       updated_at: Date.now(),
@@ -586,30 +633,15 @@ export const handleTeamWithdrawal = mutation({
       if (!remainingTeamId) continue;
 
       const remainingTeam = await ctx.db.get(remainingTeamId);
-      const remainingSchool = remainingTeam?.school_id ? await ctx.db.get(remainingTeam.school_id) : null;
 
       const round = await ctx.db.get(debate.round_id);
       if (!round) continue;
-
-      const roundDebates = await ctx.db
-        .query("debates")
-        .withIndex("by_round_id", (q) => q.eq("round_id", debate.round_id))
-        .collect();
-
-      const hasSchoolByeConflict = remainingSchool && roundDebates.some(d => {
-        if (!d.is_public_speaking || d._id === debate._id) return false;
-
-        const psTeamId = d.proposition_team_id;
-        if (!psTeamId) return false;
-
-        return false;
-      });
 
       await ctx.db.patch(debate._id, {
         is_public_speaking: true,
         proposition_team_id: remainingTeamId,
         opposition_team_id: undefined,
-
+        updated_at: Date.now(),
       });
 
       affectedDebates.push({
@@ -699,7 +731,10 @@ export const updatePairing = mutation({
       opposition_team_id: debate.opposition_team_id,
     };
 
-    await ctx.db.patch(args.debate_id, args.updates);
+    await ctx.db.patch(args.debate_id, {
+      ...args.updates,
+      updated_at: Date.now(),
+    });
 
     await ctx.runMutation(internal.functions.audit.createAuditLog, {
       user_id: sessionResult.user.id,
@@ -1051,7 +1086,6 @@ export const generateMultiplePrelimRounds = mutation({
         throw new Error(`Tournament only has ${tournament.prelim_rounds} preliminary rounds`);
       }
     } else if (roundType === "elimination") {
-
       const prelimRounds = await ctx.db
         .query("rounds")
         .withIndex("by_tournament_id", (q) => q.eq("tournament_id", args.tournament_id))
@@ -1067,15 +1101,15 @@ export const generateMultiplePrelimRounds = mutation({
         throw new Error(`Tournament only has ${tournament.elimination_rounds} elimination rounds`);
       }
 
-      const results = await ctx.db
-        .query("tournament_results")
-        .withIndex("by_tournament_id_result_type", (q) =>
-          q.eq("tournament_id", args.tournament_id).eq("result_type", "team")
-        )
+      // Check if team rankings are available through debates
+      const debates = await ctx.db
+        .query("debates")
+        .withIndex("by_tournament_id", (q) => q.eq("tournament_id", args.tournament_id))
         .collect();
 
-      if (results.length === 0) {
-        throw new Error("Cannot generate elimination rounds: No team rankings available. Please calculate preliminary results first.");
+      const completedDebates = debates.filter(d => d.status === "completed");
+      if (completedDebates.length === 0) {
+        throw new Error("Cannot generate elimination rounds: No completed debates available for rankings");
       }
     }
 
@@ -1116,6 +1150,7 @@ export const generateMultiplePrelimRounds = mutation({
     };
   },
 });
+
 function generatePairingRecommendations(
   qualityMetrics: any,
   totalTeams: number,

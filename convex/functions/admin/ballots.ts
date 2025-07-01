@@ -109,6 +109,61 @@ export const getAllTournamentBallots = query({
   },
 });
 
+const updateDebateResults = async (ctx: any, debateId: Id<"debates">) => {
+  const submissions = await ctx.db
+    .query("judging_scores")
+    .withIndex("by_debate_id", (q: { eq: (arg0: string, arg1: Id<"debates">) => any; }) => q.eq("debate_id", debateId))
+    .filter((q: any) => q.eq(q.field("feedback_submitted"), true))
+    .collect();
+
+  if (submissions.length === 0) return;
+
+  const debate = await ctx.db.get(debateId);
+  if (!debate) return;
+
+  const propVotes = submissions.filter((s: { winning_position: string; }) => s.winning_position === "proposition").length;
+  const oppVotes = submissions.filter((s: { winning_position: string; }) => s.winning_position === "opposition").length;
+
+  let winningTeamId: Id<"teams"> | undefined;
+  let winningPosition: "proposition" | "opposition" | undefined;
+
+  if (propVotes > oppVotes) {
+    winningTeamId = debate.proposition_team_id;
+    winningPosition = "proposition";
+  } else if (oppVotes > propVotes) {
+    winningTeamId = debate.opposition_team_id;
+    winningPosition = "opposition";
+  }
+
+  const teamPoints = new Map<Id<"teams">, number>();
+  submissions.forEach((submission: { speaker_scores: any[]; }) => {
+    submission.speaker_scores.forEach(speakerScore => {
+      const currentPoints = teamPoints.get(speakerScore.team_id) || 0;
+      teamPoints.set(speakerScore.team_id, currentPoints + speakerScore.score);
+    });
+  });
+
+  const avgTeamPoints = new Map<Id<"teams">, number>();
+  teamPoints.forEach((totalPoints, teamId) => {
+    avgTeamPoints.set(teamId, totalPoints / submissions.length);
+  });
+
+  await ctx.db.patch(debateId, {
+    winning_team_id: winningTeamId,
+    winning_team_position: winningPosition,
+    proposition_votes: propVotes,
+    opposition_votes: oppVotes,
+    proposition_team_points: debate.proposition_team_id
+      ? avgTeamPoints.get(debate.proposition_team_id) || 0
+      : undefined,
+    opposition_team_points: debate.opposition_team_id
+      ? avgTeamPoints.get(debate.opposition_team_id) || 0
+      : undefined,
+    status: "completed",
+    updated_at: Date.now(),
+  });
+};
+
 export const updateBallot = mutation({
   args: {
     token: v.string(),
@@ -127,41 +182,11 @@ export const updateBallot = mutation({
         teamwork_strategy: v.number(),
         rebuttal_response: v.number(),
         comments: v.optional(v.string()),
-        clarity: v.optional(v.number()),
-        fairness: v.optional(v.number()),
-        knowledge: v.optional(v.number()),
-        helpfulness: v.optional(v.number()),
         bias_detected: v.optional(v.boolean()),
         bias_explanation: v.optional(v.string()),
       }))),
       notes: v.optional(v.string()),
-
-      fact_checks: v.optional(v.array(v.object({
-        claim: v.string(),
-        result: v.union(
-          v.literal("true"),
-          v.literal("false"),
-          v.literal("partially_true"),
-          v.literal("inconclusive")
-        ),
-        sources: v.optional(v.array(v.string())),
-        checked_by: v.id("users"),
-        timestamp: v.number(),
-        explanation: v.optional(v.string())
-      }))),
-      argument_flow: v.optional(v.array(v.object({
-        type: v.union(
-          v.literal("main"),
-          v.literal("rebuttal"),
-          v.literal("poi")
-        ),
-        content: v.string(),
-        speaker: v.id("users"),
-        team: v.id("teams"),
-        timestamp: v.number(),
-        rebutted_by: v.optional(v.array(v.string())),
-        strength: v.optional(v.number())
-      }))),
+      feedback_submitted: v.optional(v.boolean()),
     }),
   },
   handler: async (ctx, args): Promise<{ success: boolean }> => {
@@ -178,25 +203,13 @@ export const updateBallot = mutation({
       throw new Error("Ballot not found");
     }
 
-    const { fact_checks, argument_flow, ...ballotUpdates } = args.updates;
+    await ctx.db.patch(args.ballot_id, {
+      ...args.updates,
+      updated_at: Date.now(),
+    });
 
-    await ctx.db.patch(args.ballot_id, ballotUpdates);
-
-    if (fact_checks || argument_flow) {
-      const debate = await ctx.db.get(ballot.debate_id);
-      if (debate) {
-        const debateUpdates: any = {};
-
-        if (fact_checks) {
-          debateUpdates.fact_checks = fact_checks;
-        }
-
-        if (argument_flow) {
-          debateUpdates.argument_flow = argument_flow;
-        }
-
-        await ctx.db.patch(ballot.debate_id, debateUpdates);
-      }
+    if (args.updates.feedback_submitted) {
+      await updateDebateResults(ctx, ballot.debate_id);
     }
 
     await ctx.runMutation(internal.functions.audit.createAuditLog, {
@@ -236,6 +249,7 @@ export const flagBallotForReview = mutation({
 
     await ctx.db.patch(args.ballot_id, {
       notes: flaggedNotes,
+      updated_at: Date.now(),
     });
 
     await ctx.runMutation(internal.functions.audit.createAuditLog, {
@@ -270,7 +284,6 @@ export const unflagBallot = mutation({
     }
 
     const currentNotes: string = ballot.notes || "";
-
     const unflaggedNotes: string = currentNotes
       .replace(/\n\[ADMIN FLAG:.*?]/g, '')
       .replace(/\n\[JUDGE FLAG:.*?]/g, '')
@@ -278,6 +291,7 @@ export const unflagBallot = mutation({
 
     await ctx.db.patch(args.ballot_id, {
       notes: unflaggedNotes,
+      updated_at: Date.now(),
     });
 
     await ctx.runMutation(internal.functions.audit.createAuditLog, {

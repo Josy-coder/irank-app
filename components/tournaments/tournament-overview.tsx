@@ -143,7 +143,7 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
     team_size: 3,
     prelim_rounds: 3,
     elimination_rounds: 3,
-    judges_per_debate: 3,
+    judges_per_debate: 1,
     fee: "",
     fee_currency: "RWF" as "RWF" | "USD"
   })
@@ -1356,7 +1356,7 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
                           max="15"
                           value={speakingEditForm.speaking_times[`speaker${speakerNum}`] || 8}
                           onChange={(e) =>
-                            handleSpeakingTimeChange(`speaker${speakerNum}`, parseInt(e.target.value) || 8)
+                            handleSpeakingTimeChange(`speaker${speakerNum}`, parseInt(e.target.value) || 5)
                           }
                         />
                       </div>

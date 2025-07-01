@@ -23,8 +23,6 @@ import {
   AreaChart,
   Bar,
   BarChart,
-  Line,
-  LineChart,
   Pie,
   PieChart,
   Cell,
@@ -237,9 +235,9 @@ function ErrorDisplay({ error }: { error: string }) {
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
       <div className="text-center max-w-md">
-        <Icon className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-        <h1 className="text-xl font-semibold mb-2">{title}</h1>
-        <p className="text-muted-foreground mb-4">{description}</p>
+        <Icon className="h-8 w-8 text-muted-foreground mx-auto mb-4" />
+        <h1 className="text-lg font-semibold mb-2">{title}</h1>
+        <p className="text-muted-foreground text-xs mb-4">{description}</p>
         <div className="flex gap-2 justify-center">
           <Button variant="outline" onClick={() => router.push('/')}>
             Go Back
@@ -421,21 +419,36 @@ function PublicReports() {
               </ChartCard>
 
               <ChartCard
-                title="Completion Rate"
-                description="Tournament completion percentage"
+                title="Platform Growth"
+                description="Growth metrics overview"
               >
-                <div className="text-center py-8">
-                  <div className="text-4xl font-bold text-primary">
-                    {overview.completion_rate || 0}%
+                <div className="space-y-4 py-4">
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div>
+                      <div className="text-2xl font-bold text-green-600">
+                        {overview.growth_metrics?.tournaments > 0 ? '+' : ''}{overview.growth_metrics?.tournaments?.toFixed(1) || '0'}%
+                      </div>
+                      <p className="text-xs text-muted-foreground">Tournaments</p>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold text-blue-600">
+                        {overview.growth_metrics?.users > 0 ? '+' : ''}{overview.growth_metrics?.users?.toFixed(1) || '0'}%
+                      </div>
+                      <p className="text-xs text-muted-foreground">Users</p>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold text-purple-600">
+                        {overview.growth_metrics?.schools > 0 ? '+' : ''}{overview.growth_metrics?.schools?.toFixed(1) || '0'}%
+                      </div>
+                      <p className="text-xs text-muted-foreground">Schools</p>
+                    </div>
                   </div>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Average tournament completion rate
-                  </p>
                 </div>
               </ChartCard>
             </div>
           </div>
         )}
+
         {(sections.length === 0 || sections.includes('tournaments')) && tournaments && (
           <div className="space-y-6">
             <div>
@@ -518,32 +531,6 @@ function PublicReports() {
                 </ChartCard>
               )}
 
-              {tournaments.completion_rates && (
-                <ChartCard
-                  title="Completion Rates"
-                  description="Monthly tournament completion trends"
-                >
-                  <ChartContainer config={{ rate: { label: "Completion Rate", color: "hsl(var(--chart-1))" } }} className="min-h-[300px] w-full">
-                    <LineChart data={tournaments.completion_rates}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="month" />
-                      <YAxis />
-                      <ChartTooltip
-                        content={<ChartTooltipContent />}
-                        formatter={(value) => [`${value}%`, "Completion Rate"]}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="rate"
-                        stroke="var(--color-rate)"
-                        strokeWidth={2}
-                        dot={{ fill: "var(--color-rate)" }}
-                      />
-                    </LineChart>
-                  </ChartContainer>
-                </ChartCard>
-              )}
-
               {tournaments.virtual_vs_physical && (
                 <ChartCard
                   title="Virtual vs Physical"
@@ -578,32 +565,43 @@ function PublicReports() {
                   </ChartContainer>
                 </ChartCard>
               )}
-            </div>
 
-            {tournaments.geographic_distribution && (
-              <ChartCard
-                title="Geographic Distribution"
-                description="Tournament distribution by country"
-              >
-                <ChartContainer
-                  config={{
-                    tournaments: { label: "Tournaments", color: "hsl(var(--chart-1))" },
-                    schools: { label: "Schools", color: "hsl(var(--chart-2))" }
-                  }}
-                  className="min-h-[300px] w-full"
+              {tournaments.participation_metrics && (
+                <ChartCard
+                  title="Participation Metrics"
+                  description="Schools and students participation"
                 >
-                  <BarChart data={tournaments.geographic_distribution}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="country" />
-                    <YAxis />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <ChartLegend content={<ChartLegendContent />} />
-                    <Bar dataKey="tournaments" fill="var(--color-tournaments)" />
-                    <Bar dataKey="schools" fill="var(--color-schools)" />
-                  </BarChart>
-                </ChartContainer>
-              </ChartCard>
-            )}
+                  <div className="space-y-6 py-4">
+                    <div className="grid grid-cols-2 gap-4 text-center">
+                      <div>
+                        <div className="text-3xl font-bold text-primary">
+                          {tournaments.participation_metrics.schools_participated}
+                        </div>
+                        <p className="text-sm text-muted-foreground">Schools Participated</p>
+                      </div>
+                      <div>
+                        <div className="text-3xl font-bold text-primary">
+                          {tournaments.participation_metrics.total_students}
+                        </div>
+                        <p className="text-sm text-muted-foreground">Total Students</p>
+                      </div>
+                    </div>
+
+                    {tournaments.participation_metrics.school_participation_breakdown?.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="text-sm font-medium">Top Participating Schools</h4>
+                        {tournaments.participation_metrics.school_participation_breakdown.slice(0, 5).map((school: any, index: number) => (
+                          <div key={index} className="flex justify-between items-center text-sm">
+                            <span className="truncate">{school.school_name}</span>
+                            <Badge variant="outline">{school.students_count} students</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </ChartCard>
+              )}
+            </div>
           </div>
         )}
 
@@ -706,51 +704,51 @@ function PublicReports() {
                 </ChartCard>
               )}
 
-              {users.geographic_distribution && (
+              {users.engagement_metrics && (
                 <ChartCard
-                  title="Geographic Distribution"
-                  description="User distribution by country"
+                  title="Engagement Metrics"
+                  description="User activity and participation"
                 >
-                  <ChartContainer
-                    config={{
-                      users: { label: "Users", color: "hsl(var(--chart-1))" },
-                      schools: { label: "Schools", color: "hsl(var(--chart-2))" }
-                    }}
-                    className="min-h-[300px] w-full"
-                  >
-                    <BarChart data={users.geographic_distribution}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="country" />
-                      <YAxis />
-                      <ChartTooltip content={<ChartTooltipContent />} />
-                      <ChartLegend content={<ChartLegendContent />} />
-                      <Bar dataKey="users" fill="var(--color-users)" />
-                      <Bar dataKey="schools" fill="var(--color-schools)" />
-                    </BarChart>
-                  </ChartContainer>
+                  <div className="space-y-6 py-4">
+                    <div className="text-center">
+                      <div className="text-3xl font-bold text-primary">
+                        {users.engagement_metrics.active_users?.toLocaleString() || '0'}
+                      </div>
+                      <p className="text-sm text-muted-foreground">Active Users (Last 30 days)</p>
+                    </div>
+
+                    {users.engagement_metrics.tournament_participation?.length > 0 && (
+                      <div className="space-y-3">
+                        <h4 className="text-sm font-medium">Tournament Participation by Role</h4>
+                        {users.engagement_metrics.tournament_participation.map((item: any, index: number) => (
+                          <div key={index} className="flex justify-between items-center">
+                            <span className="text-sm capitalize">{item.role.replace('_', ' ')}</span>
+                            <Badge variant="outline">{item.participation_rate}%</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </ChartCard>
               )}
 
-              {users.retention_rates && (
+              {users.engagement_metrics?.login_frequency && (
                 <ChartCard
-                  title="Retention Rates"
-                  description="User retention by cohort"
+                  title="Login Activity"
+                  description="User login frequency"
                 >
                   <ChartContainer
                     config={{
-                      retention_rate: { label: "Retention Rate", color: "hsl(var(--chart-1))" }
+                      logins: { label: "Logins", color: "hsl(var(--chart-1))" }
                     }}
                     className="min-h-[300px] w-full"
                   >
-                    <BarChart data={users.retention_rates}>
+                    <BarChart data={users.engagement_metrics.login_frequency}>
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="cohort" />
+                      <XAxis dataKey="period" />
                       <YAxis />
-                      <ChartTooltip
-                        content={<ChartTooltipContent />}
-                        formatter={(value) => [`${value}%`, "Retention Rate"]}
-                      />
-                      <Bar dataKey="retention_rate" fill="var(--color-retention_rate)" />
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <Bar dataKey="logins" fill="var(--color-logins)" />
                     </BarChart>
                   </ChartContainer>
                 </ChartCard>
@@ -882,6 +880,71 @@ function PublicReports() {
                 </ChartCard>
               )}
             </div>
+
+            {financial && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Outstanding Payments</CardTitle>
+                    <CardDescription>Pending payment analysis</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-orange-600">
+                          {financial.outstanding_payments?.total_amount?.toLocaleString() || 0}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {financial.outstanding_payments?.count || 0} pending payments
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Waiver Usage</CardTitle>
+                    <CardDescription>Fee waivers granted</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-blue-600">
+                          {financial.waiver_usage?.total_waivers || 0}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {financial.waiver_usage?.total_amount_waived?.toLocaleString() || 0} waived
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Payment Summary</CardTitle>
+                    <CardDescription>Financial overview</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      <div className="flex justify-between">
+                        <span className="text-sm text-muted-foreground">Total Revenue</span>
+                        <span className="text-sm font-medium">
+                          {financial.revenue_trends?.reduce((sum: number, day: any) => sum + day.revenue, 0)?.toLocaleString() || 0}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-muted-foreground">Total Transactions</span>
+                        <span className="text-sm font-medium">
+                          {financial.revenue_trends?.reduce((sum: number, day: any) => sum + day.transactions, 0)?.toLocaleString() || 0}
+                        </span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
           </div>
         )}
 
@@ -893,287 +956,183 @@ function PublicReports() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {performance.judge_performance?.feedback_trends && (
+              {performance.cross_tournament_rankings?.top_schools && (
                 <ChartCard
-                  title="Judge Feedback Trends"
-                  description="Average judge ratings over time"
+                  title="Top Schools Performance"
+                  description="Cross-tournament school rankings"
                 >
-                  <ChartContainer
-                    config={{
-                      average_rating: { label: "Average Rating", color: "hsl(var(--chart-1))" }
-                    }}
-                    className="min-h-[300px] w-full"
-                  >
-                    <LineChart data={performance.judge_performance.feedback_trends}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="period" />
-                      <YAxis domain={[0, 5]} />
-                      <ChartTooltip content={<ChartTooltipContent />} />
-                      <Line
-                        type="monotone"
-                        dataKey="average_rating"
-                        stroke="var(--color-average_rating)"
-                        strokeWidth={2}
-                        dot={{ fill: "var(--color-average_rating)" }}
-                      />
-                    </LineChart>
-                  </ChartContainer>
-                </ChartCard>
-              )}
-
-              {performance.team_performance && (
-                <ChartCard
-                  title="Team Performance"
-                  description="School performance metrics"
-                >
-                  <ChartContainer
-                    config={{
-                      win_rate: { label: "Win Rate", color: "hsl(var(--chart-1))" }
-                    }}
-                    className="min-h-[300px] w-full"
-                  >
-                    <BarChart data={performance.team_performance.slice(0, 10)}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis
-                        dataKey="school_name"
-                        angle={-45}
-                        textAnchor="end"
-                        height={100}
-                      />
-                      <YAxis />
-                      <ChartTooltip content={<ChartTooltipContent />} />
-                      <Bar dataKey="win_rate" fill="var(--color-win_rate)" />
-                    </BarChart>
-                  </ChartContainer>
-                </ChartCard>
-              )}
-
-              {performance.speaker_performance && (
-                <ChartCard
-                  title="Speaker Rankings"
-                  description="Speaker performance distribution"
-                >
-                  <ChartContainer
-                    config={performance.speaker_performance.reduce((acc: ChartConfig, rank: any, index: number) => {
-                      acc[rank.speaker_rank_range] = {
-                        label: rank.speaker_rank_range,
-                        color: CHART_COLORS[index % CHART_COLORS.length]
-                      }
-                      return acc
-                    }, {})}
-                    className="min-h-[300px] w-full"
-                  >
-                    <PieChart>
-                      <Pie
-                        data={performance.speaker_performance}
-                        dataKey="count"
-                        nameKey="speaker_rank_range"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={100}
-                        label={({ speaker_rank_range, percentage }) => `${speaker_rank_range}: ${percentage}%`}
-                      >
-                        {performance.speaker_performance.map((item: any, index: number) => (
-                          <Cell key={`cell-${item}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <ChartTooltip content={<ChartTooltipContent />} />
-                      <ChartLegend content={<ChartLegendContent />} />
-                    </PieChart>
-                  </ChartContainer>
-                </ChartCard>
-              )}
-
-              {performance.debate_quality?.fact_check_usage && (
-                <ChartCard
-                  title="Fact Check Usage"
-                  description="AI fact-checking utilization by tournament"
-                >
-                  <ChartContainer
-                    config={{
-                      usage_rate: { label: "Usage Rate", color: "hsl(var(--chart-1))" }
-                    }}
-                    className="min-h-[300px] w-full"
-                  >
-                    <BarChart data={performance.debate_quality.fact_check_usage.slice(0, 10)}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis
-                        dataKey="tournament"
-                        angle={-45}
-                        textAnchor="end"
-                        height={100}
-                      />
-                      <YAxis />
-                      <ChartTooltip
-                        content={<ChartTooltipContent />}
-                        formatter={(value) => [`${value}`, "Fact Checks per Debate"]}
-                      />
-                      <Bar dataKey="usage_rate" fill="var(--color-usage_rate)" />
-                    </BarChart>
-                  </ChartContainer>
-                </ChartCard>
-              )}
-
-              {performance.efficiency_metrics?.judge_response_times && (
-                <ChartCard
-                  title="Judge Response Times"
-                  description="Average time for judges to submit ballots"
-                >
-                  <ChartContainer
-                    config={{
-                      avg_response_time: { label: "Response Time (hours)", color: "hsl(var(--chart-1))" }
-                    }}
-                    className="min-h-[300px] w-full"
-                  >
-                    <LineChart data={performance.efficiency_metrics.judge_response_times}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="period" />
-                      <YAxis />
-                      <ChartTooltip
-                        content={<ChartTooltipContent />}
-                        formatter={(value) => [`${value} hours`, "Avg Response Time"]}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="avg_response_time"
-                        stroke="var(--color-avg_response_time)"
-                        strokeWidth={2}
-                        dot={{ fill: "var(--color-avg_response_time)" }}
-                      />
-                    </LineChart>
-                  </ChartContainer>
-                </ChartCard>
-              )}
-
-              {performance.judge_performance?.bias_detection && (
-                <ChartCard
-                  title="Bias Detection"
-                  description="Judge bias detection rates"
-                >
-                  <ChartContainer
-                    config={{
-                      bias_rate: { label: "Bias Rate (%)", color: "hsl(var(--chart-1))" }
-                    }}
-                    className="min-h-[300px] w-full"
-                  >
-                    <BarChart data={performance.judge_performance.bias_detection.filter((judge: any) => judge.bias_rate > 0).slice(0, 10)}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis
-                        dataKey="judge_name"
-                        angle={-45}
-                        textAnchor="end"
-                        height={100}
-                      />
-                      <YAxis />
-                      <ChartTooltip
-                        content={<ChartTooltipContent />}
-                        formatter={(value) => [`${value}%`, "Bias Rate"]}
-                      />
-                      <Bar dataKey="bias_rate" fill="var(--color-bias_rate)" />
-                    </BarChart>
-                  </ChartContainer>
-                </ChartCard>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              {performance.efficiency_metrics && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Tournament Efficiency</CardTitle>
-                    <CardDescription>Average duration metrics</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-primary">
-                          {performance.efficiency_metrics.avg_tournament_duration || 0}
+                  <div className="space-y-3">
+                    {performance.cross_tournament_rankings.top_schools.slice(0, 10).map((school: any, index: number) => (
+                      <div key={index} className="flex justify-between items-center p-3 border rounded">
+                        <div>
+                          <p className="font-medium">{school.school_name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {school.tournaments_participated} tournaments • Avg rank: {school.average_rank}
+                          </p>
                         </div>
-                        <p className="text-sm text-muted-foreground">
-                          Average tournament duration (days)
-                        </p>
+                        <div className="text-right">
+                          <Badge variant="outline">#{index + 1}</Badge>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {school.consistency_score.toFixed(1)}% consistency
+                          </p>
+                        </div>
                       </div>
-                      {performance.efficiency_metrics.round_completion_times && (
-                        <div className="space-y-2">
-                          {performance.efficiency_metrics.round_completion_times.map((round: any, index: number) => (
-                            <div key={index} className="flex justify-between items-center">
-                              <span className="text-sm text-muted-foreground capitalize">
-                                {round.round_type}
-                              </span>
-                              <span className="text-sm font-medium">
-                                {round.avg_duration.toFixed(1)}h
-                              </span>
-                            </div>
-                          ))}
+                    ))}
+                  </div>
+                </ChartCard>
+              )}
+
+              {performance.cross_tournament_rankings?.top_speakers && (
+                <ChartCard
+                  title="Top Speakers Performance"
+                  description="Cross-tournament speaker rankings"
+                >
+                  <div className="space-y-3">
+                    {performance.cross_tournament_rankings.top_speakers.slice(0, 10).map((speaker: any, index: number) => (
+                      <div key={index} className="flex justify-between items-center p-3 border rounded">
+                        <div>
+                          <p className="font-medium">{speaker.speaker_name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {speaker.school_name} • {speaker.tournaments_participated} tournaments
+                          </p>
                         </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
+                        <div className="text-right">
+                          <Badge variant="outline">#{index + 1}</Badge>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Best: #{speaker.best_rank} • Avg: {speaker.average_rank}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ChartCard>
               )}
 
               {performance.judge_performance?.consistency_scores && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Judge Consistency</CardTitle>
-                    <CardDescription>Top performing judges</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {performance.judge_performance.consistency_scores.slice(0, 5).map((judge: any, index: number) => (
-                        <div key={index} className="flex justify-between items-center">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{judge.judge_name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {judge.debates_judged} debates
-                            </p>
-                          </div>
-                          <Badge variant="outline">
-                            {judge.consistency.toFixed(1)}%
-                          </Badge>
+                <ChartCard
+                  title="Judge Consistency"
+                  description="Top performing judges"
+                >
+                  <div className="space-y-3">
+                    {performance.judge_performance.consistency_scores.slice(0, 10).map((judge: any, index: number) => (
+                      <div key={index} className="flex justify-between items-center p-3 border rounded">
+                        <div>
+                          <p className="font-medium">{judge.judge_name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {judge.debates_judged} debates • {judge.tournaments_participated} tournaments
+                          </p>
                         </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
+                        <div className="text-right">
+                          <Badge variant="outline">{judge.consistency.toFixed(1)}%</Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ChartCard>
               )}
 
-              {performance.debate_quality?.argument_complexity && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Argument Quality</CardTitle>
-                    <CardDescription>Debate complexity metrics</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {performance.debate_quality.argument_complexity.slice(0, 3).map((tournament: any, index: number) => (
-                        <div key={index} className="space-y-2">
-                          <p className="text-sm font-medium truncate" title={tournament.tournament}>
-                            {tournament.tournament}
+              {performance.judge_performance?.feedback_quality && (
+                <ChartCard
+                  title="Judge Feedback Quality"
+                  description="Judge performance based on feedback"
+                >
+                  <div className="space-y-3">
+                    {performance.judge_performance.feedback_quality.slice(0, 10).map((judge: any, index: number) => (
+                      <div key={index} className="flex justify-between items-center p-3 border rounded">
+                        <div>
+                          <p className="font-medium">{judge.judge_name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {judge.total_feedback_received} reviews • {judge.response_time_avg}h avg response
                           </p>
-                          <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Args:</span>
-                              <span>{tournament.avg_arguments}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Rebuttals:</span>
-                              <span>{tournament.avg_rebuttals}</span>
-                            </div>
-                          </div>
-                          <div className="w-full bg-muted rounded-full h-2">
-                            <div
-                              className="bg-primary h-2 rounded-full"
-                              style={{ width: `${Math.min(tournament.quality_score, 100)}%` }}
-                            />
-                          </div>
                         </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
+                        <div className="text-right">
+                          <Badge variant="outline">{judge.avg_feedback_score.toFixed(1)}/5</Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ChartCard>
               )}
             </div>
+
+            {performance.tournament_rankings && (
+              <ChartCard
+                title="Recent Tournament Results"
+                description="Latest tournament rankings and outcomes"
+              >
+                <div className="space-y-4">
+                  {performance.tournament_rankings.slice(0, 5).map((tournament: any, index: number) => (
+                    <div key={index} className="border rounded p-4">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h4 className="font-medium">{tournament.tournament_name}</h4>
+                          <p className="text-sm text-muted-foreground">
+                            {tournament.format} • {new Date(tournament.date).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <div className="text-right text-sm">
+                          <span>{tournament.team_rankings.length} teams</span>
+                          <br />
+                          <span className="text-muted-foreground">{tournament.speaker_rankings.length} speakers</span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <h5 className="text-sm font-medium mb-2">Top Teams</h5>
+                          <div className="space-y-1">
+                            {tournament.team_rankings.slice(0, 3).map((team: any, teamIndex: number) => (
+                              <div key={teamIndex} className="flex justify-between text-xs">
+                                <span>#{team.rank} {team.team_name}</span>
+                                <span>{team.wins}W {team.total_points}pts</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <h5 className="text-sm font-medium mb-2">Top Speakers</h5>
+                          <div className="space-y-1">
+                            {tournament.speaker_rankings.slice(0, 3).map((speaker: any, speakerIndex: number) => (
+                              <div key={speakerIndex} className="flex justify-between text-xs">
+                                <span>#{speaker.rank} {speaker.speaker_name}</span>
+                                <span>{speaker.total_points}pts</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ChartCard>
+            )}
+
+            {performance.cross_tournament_rankings?.top_teams && (
+              <ChartCard
+                title="Top Team Combinations"
+                description="Most successful team partnerships"
+              >
+                <div className="space-y-3">
+                  {performance.cross_tournament_rankings.top_teams.slice(0, 10).map((team: any, index: number) => (
+                    <div key={index} className="flex justify-between items-center p-3 border rounded">
+                      <div>
+                        <p className="font-medium">{team.team_composition}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {team.school_name} • {team.tournaments_together} tournaments together
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <Badge variant="outline">{team.win_rate}% wins</Badge>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {team.combined_points} total points
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ChartCard>
+            )}
           </div>
         )}
 

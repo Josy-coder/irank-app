@@ -17,7 +17,6 @@ export const getDashboardOverview = query({
     total_users: number;
     total_schools: number;
     total_debates: number;
-    completion_rate: number;
     growth_metrics: {
       tournaments: number;
       users: number;
@@ -61,11 +60,6 @@ export const getDashboardOverview = query({
     );
 
     const allDebates = await ctx.db.query("debates").collect();
-    const completedDebates = allDebates.filter(d => d.status === "completed");
-
-    const completionRate = allDebates.length > 0
-      ? (completedDebates.length / allDebates.length) * 100
-      : 0;
 
     const previousPeriodStart = dateRange.start - (dateRange.end - dateRange.start);
     const previousTournaments = allTournaments.filter(t =>
@@ -89,7 +83,6 @@ export const getDashboardOverview = query({
       total_users: allUsers.length,
       total_schools: allSchools.length,
       total_debates: allDebates.length,
-      completion_rate: Math.round(completionRate * 10) / 10,
       growth_metrics: {
         tournaments: Math.round(calculateGrowth(tournamentsInRange.length, previousTournaments.length) * 10) / 10,
         users: Math.round(calculateGrowth(usersInRange.length, previousUsers.length) * 10) / 10,
@@ -121,20 +114,19 @@ export const getTournamentAnalytics = query({
       count: number;
       percentage: number;
     }>;
-    completion_rates: Array<{
-      month: string;
-      rate: number;
-    }>;
     virtual_vs_physical: {
       virtual: number;
       physical: number;
     };
-    average_participants: number;
-    geographic_distribution: Array<{
-      country: string;
-      tournaments: number;
-      schools: number;
-    }>;
+    participation_metrics: {
+      schools_participated: number;
+      total_students: number;
+      school_participation_breakdown: Array<{
+        school_name: string;
+        students_count: number;
+        tournaments_participated: number;
+      }>;
+    };
   }> => {
 
     if (args.token !== "shared") {
@@ -192,85 +184,61 @@ export const getTournamentAnalytics = query({
       percentage: tournaments.length > 0 ? Math.round((count / tournaments.length) * 100 * 10) / 10 : 0,
     }));
 
-    const monthlyCompletion: Record<string, { total: number; completed: number }> = {};
-    tournaments.forEach(t => {
-      const month = new Date(t.created_at).toISOString().slice(0, 7);
-      if (!monthlyCompletion[month]) {
-        monthlyCompletion[month] = { total: 0, completed: 0 };
-      }
-      monthlyCompletion[month].total++;
-      if (t.status === "completed") {
-        monthlyCompletion[month].completed++;
-      }
-    });
-
-    const completion_rates = Object.entries(monthlyCompletion).map(([month, data]) => ({
-      month,
-      rate: data.total > 0 ? Math.round((data.completed / data.total) * 100 * 10) / 10 : 0,
-    })).sort((a, b) => a.month.localeCompare(b.month));
-
     const virtual_vs_physical = {
       virtual: tournaments.filter(t => t.is_virtual).length,
       physical: tournaments.filter(t => !t.is_virtual).length,
     };
 
-    const teamsData = await Promise.all(
-      tournaments.map(async (tournament) => {
-        const teams = await ctx.db
-          .query("teams")
-          .withIndex("by_tournament_id", (q) => q.eq("tournament_id", tournament._id))
-          .collect();
-        return teams.length;
-      })
+    const teams = await ctx.db.query("teams").collect();
+    const tournamentTeams = teams.filter(team =>
+      tournaments.some(t => t._id === team.tournament_id)
     );
 
-    const average_participants = teamsData.length > 0
-      ? Math.round((teamsData.reduce((sum, count) => sum + count, 0) / teamsData.length) * 10) / 10
-      : 0;
-
     const schoolIds = new Set<Id<"schools">>();
-    const teamsAll = await ctx.db.query("teams").collect();
-    teamsAll.forEach(team => {
-      if (team.school_id && tournaments.some(t => t._id === team.tournament_id)) {
+    const studentIds = new Set<Id<"users">>();
+
+    tournamentTeams.forEach(team => {
+      if (team.school_id) {
         schoolIds.add(team.school_id);
       }
+      team.members.forEach(memberId => {
+        studentIds.add(memberId);
+      });
     });
 
     const schools = await Promise.all(
       Array.from(schoolIds).map(id => ctx.db.get(id))
     );
+    const validSchools = schools.filter(Boolean);
 
-    const countryData: Record<string, { tournaments: Set<Id<"tournaments">>; schools: number }> = {};
+    const schoolParticipationBreakdown = await Promise.all(
+      validSchools.map(async (school) => {
+        const schoolTeams = tournamentTeams.filter(team => team.school_id === school!._id);
+        const schoolStudentIds = new Set<Id<"users">>();
+        const schoolTournamentIds = new Set<Id<"tournaments">>();
 
-    for (const school of schools) {
-      if (!school) continue;
+        schoolTeams.forEach(team => {
+          team.members.forEach(memberId => schoolStudentIds.add(memberId));
+          schoolTournamentIds.add(team.tournament_id);
+        });
 
-      if (!countryData[school.country]) {
-        countryData[school.country] = { tournaments: new Set(), schools: 0 };
-      }
-      countryData[school.country].schools++;
-
-      const schoolTeams = teamsAll.filter(t => t.school_id === school._id);
-      schoolTeams.forEach(team => {
-        if (tournaments.some(t => t._id === team.tournament_id)) {
-          countryData[school.country].tournaments.add(team.tournament_id);
-        }
-      });
-    }
-
-    const geographic_distribution = Object.entries(countryData).map(([country, data]) => ({
-      country,
-      tournaments: data.tournaments.size,
-      schools: data.schools,
-    }));
+        return {
+          school_name: school!.name,
+          students_count: schoolStudentIds.size,
+          tournaments_participated: schoolTournamentIds.size,
+        };
+      })
+    );
 
     return {
       tournament_trends,
       format_distribution,
-      completion_rates,
       virtual_vs_physical,
-      average_participants,
-      geographic_distribution,
+      participation_metrics: {
+        schools_participated: schoolIds.size,
+        total_students: studentIds.size,
+        school_participation_breakdown: schoolParticipationBreakdown.sort((a, b) => b.students_count - a.students_count),
+      },
     };
   },
 });
@@ -309,17 +277,6 @@ export const getUserAnalytics = query({
         participation_rate: number;
       }>;
     };
-    geographic_distribution: Array<{
-      country: string;
-      users: number;
-      schools: number;
-    }>;
-    retention_rates: Array<{
-      cohort: string;
-      retained_users: number;
-      total_users: number;
-      retention_rate: number;
-    }>;
   }> => {
     if (args.token !== "shared") {
       const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
@@ -424,53 +381,6 @@ export const getUserAnalytics = query({
       participation_rate: data.total > 0 ? Math.round((data.participated / data.total) * 100 * 10) / 10 : 0,
     }));
 
-    const schools = await ctx.db.query("schools").collect();
-    const countryData: Record<string, { users: Set<Id<"users">>; schools: number }> = {};
-
-    schools.forEach(school => {
-      if (!countryData[school.country]) {
-        countryData[school.country] = { users: new Set(), schools: 0 };
-      }
-      countryData[school.country].schools++;
-
-      allUsers.forEach(user => {
-        if (user.school_id === school._id) {
-          countryData[school.country].users.add(user._id);
-        }
-      });
-    });
-
-    const geographic_distribution = Object.entries(countryData).map(([country, data]) => ({
-      country,
-      users: data.users.size,
-      schools: data.schools,
-    }));
-
-    const cohortData: Record<string, { total: number; retained: number }> = {};
-    const retentionPeriod = 30 * 24 * 60 * 60 * 1000;
-
-    allUsers.forEach(user => {
-      const cohort = new Date(user.created_at).toISOString().slice(0, 7);
-      if (!cohortData[cohort]) {
-        cohortData[cohort] = { total: 0, retained: 0 };
-      }
-      cohortData[cohort].total++;
-
-      const retentionThreshold = user.created_at + retentionPeriod;
-      if (user.last_login_at && user.last_login_at >= retentionThreshold) {
-        cohortData[cohort].retained++;
-      }
-    });
-
-    const retention_rates = Object.entries(cohortData)
-      .filter(([_, data]) => data.total >= 10)
-      .map(([cohort, data]) => ({
-        cohort,
-        retained_users: data.retained,
-        total_users: data.total,
-        retention_rate: Math.round((data.retained / data.total) * 100 * 10) / 10,
-      }));
-
     return {
       user_growth,
       role_distribution,
@@ -479,8 +389,6 @@ export const getUserAnalytics = query({
         login_frequency,
         tournament_participation,
       },
-      geographic_distribution,
-      retention_rates,
     };
   },
 });
@@ -726,58 +634,62 @@ export const getPerformanceAnalytics = query({
     tournament_id: v.optional(v.id("tournaments")),
   },
   handler: async (ctx, args): Promise<{
+    tournament_rankings: Array<{
+      tournament_name: string;
+      format: string;
+      date: number;
+      team_rankings: Array<{
+        rank: number;
+        school_name: string;
+        team_name: string;
+        total_points: number;
+        wins: number;
+        losses: number;
+      }>;
+      speaker_rankings: Array<{
+        rank: number;
+        speaker_name: string;
+        school_name: string;
+        total_points: number;
+        average_score: number;
+      }>;
+    }>;
+    cross_tournament_rankings: {
+      top_schools: Array<{
+        school_name: string;
+        tournaments_participated: number;
+        total_points: number;
+        average_rank: number;
+        consistency_score: number;
+      }>;
+      top_speakers: Array<{
+        speaker_name: string;
+        school_name: string;
+        tournaments_participated: number;
+        total_points: number;
+        average_rank: number;
+        best_rank: number;
+      }>;
+      top_teams: Array<{
+        team_composition: string;
+        school_name: string;
+        tournaments_together: number;
+        combined_points: number;
+        win_rate: number;
+      }>;
+    };
     judge_performance: {
-      feedback_trends: Array<{
-        period: string;
-        average_rating: number;
-        total_feedback: number;
-      }>;
-      bias_detection: Array<{
-        judge_name: string;
-        bias_reports: number;
-        total_assignments: number;
-        bias_rate: number;
-      }>;
       consistency_scores: Array<{
         judge_name: string;
         consistency: number;
         debates_judged: number;
+        tournaments_participated: number;
       }>;
-    };
-    debate_quality: {
-      fact_check_usage: Array<{
-        tournament: string;
-        fact_checks: number;
-        debates: number;
-        usage_rate: number;
-      }>;
-      argument_complexity: Array<{
-        tournament: string;
-        avg_arguments: number;
-        avg_rebuttals: number;
-        quality_score: number;
-      }>;
-    };
-    team_performance: Array<{
-      school_name: string;
-      win_rate: number;
-      tournaments_participated: number;
-      avg_speaker_score: number;
-    }>;
-    speaker_performance: Array<{
-      speaker_rank_range: string;
-      count: number;
-      percentage: number;
-    }>;
-    efficiency_metrics: {
-      avg_tournament_duration: number;
-      round_completion_times: Array<{
-        round_type: string;
-        avg_duration: number;
-      }>;
-      judge_response_times: Array<{
-        period: string;
-        avg_response_time: number;
+      feedback_quality: Array<{
+        judge_name: string;
+        avg_feedback_score: number;
+        total_feedback_received: number;
+        response_time_avg: number;
       }>;
     };
   }> => {
@@ -791,289 +703,375 @@ export const getPerformanceAnalytics = query({
       }
     }
 
+    const now = Date.now();
+    const dateRange = args.date_range || {
+      start: now - (365 * 24 * 60 * 60 * 1000),
+      end: now,
+    };
+
     let tournaments = await ctx.db.query("tournaments").collect();
+
+    tournaments = tournaments.filter(t =>
+      t.start_date >= dateRange.start &&
+      t.start_date <= dateRange.end &&
+      t.status === "completed"
+    );
+
     if (args.tournament_id) {
       tournaments = tournaments.filter(t => t._id === args.tournament_id);
     }
 
+    const teams = await ctx.db.query("teams").collect();
+    const users = await ctx.db.query("users").collect();
+    const schools = await ctx.db.query("schools").collect();
     const debates = await ctx.db.query("debates").collect();
     const judgingScores = await ctx.db.query("judging_scores").collect();
     const judgeFeedback = await ctx.db.query("judge_feedback").collect();
-    const users = await ctx.db.query("users").collect();
-    const teams = await ctx.db.query("teams").collect();
-    const schools = await ctx.db.query("schools").collect();
-    const rounds = await ctx.db.query("rounds").collect();
 
-    const feedbackByPeriod: Record<string, { total: number; sum: number }> = {};
+    const tournamentRankings = await Promise.all(
+      tournaments.map(async (tournament) => {
+        const tournamentTeams = teams.filter(t => t.tournament_id === tournament._id);
+        const tournamentDebates = debates.filter(d => d.tournament_id === tournament._id);
 
-    judgeFeedback.forEach(feedback => {
-      const month = new Date(feedback.submitted_at).toISOString().slice(0, 7);
-      if (!feedbackByPeriod[month]) {
-        feedbackByPeriod[month] = { total: 0, sum: 0 };
-      }
-      feedbackByPeriod[month].total++;
-      feedbackByPeriod[month].sum += (feedback.clarity + feedback.fairness + feedback.knowledge + feedback.helpfulness) / 4;
+        const teamStats = new Map<Id<"teams">, { wins: number; losses: number; totalPoints: number; }>();
+
+        tournamentDebates.forEach(debate => {
+          if (debate.status === "completed" && debate.winning_team_id) {
+            const winningTeam = teamStats.get(debate.winning_team_id) || { wins: 0, losses: 0, totalPoints: 0 };
+            winningTeam.wins++;
+            if (debate.proposition_team_id === debate.winning_team_id && debate.proposition_team_points) {
+              winningTeam.totalPoints += debate.proposition_team_points;
+            } else if (debate.opposition_team_id === debate.winning_team_id && debate.opposition_team_points) {
+              winningTeam.totalPoints += debate.opposition_team_points;
+            }
+            teamStats.set(debate.winning_team_id, winningTeam);
+
+            const losingTeamId = debate.proposition_team_id === debate.winning_team_id ?
+              debate.opposition_team_id : debate.proposition_team_id;
+
+            if (losingTeamId) {
+              const losingTeam = teamStats.get(losingTeamId) || { wins: 0, losses: 0, totalPoints: 0 };
+              losingTeam.losses++;
+              if (debate.proposition_team_id === losingTeamId && debate.proposition_team_points) {
+                losingTeam.totalPoints += debate.proposition_team_points;
+              } else if (debate.opposition_team_id === losingTeamId && debate.opposition_team_points) {
+                losingTeam.totalPoints += debate.opposition_team_points;
+              }
+              teamStats.set(losingTeamId, losingTeam);
+            }
+          }
+        });
+
+        const teamRankings = Array.from(teamStats.entries())
+          .map(([teamId, stats]) => {
+            const team = tournamentTeams.find(t => t._id === teamId);
+            const school = team?.school_id ? schools.find(s => s._id === team.school_id) : null;
+
+            return {
+              team_id: teamId,
+              team_name: team?.name || "Unknown Team",
+              school_name: school?.name || "Unknown School",
+              wins: stats.wins,
+              losses: stats.losses,
+              total_points: stats.totalPoints,
+            };
+          })
+          .sort((a, b) => {
+            if (b.wins !== a.wins) return b.wins - a.wins;
+            return b.total_points - a.total_points;
+          })
+          .map((team, index) => ({
+            rank: index + 1,
+            school_name: team.school_name,
+            team_name: team.team_name,
+            total_points: team.total_points,
+            wins: team.wins,
+            losses: team.losses,
+          }));
+
+        const speakerStats = new Map<Id<"users">, { totalPoints: number; totalScores: number; scoreCount: number; }>();
+
+        const tournamentJudgingScores = judgingScores.filter(score =>
+          tournamentDebates.some(d => d._id === score.debate_id)
+        );
+
+        tournamentJudgingScores.forEach(score => {
+          if (score.speaker_scores) {
+            score.speaker_scores.forEach(speakerScore => {
+              const current = speakerStats.get(speakerScore.speaker_id) || { totalPoints: 0, totalScores: 0, scoreCount: 0 };
+              current.totalPoints += speakerScore.score;
+              current.totalScores += speakerScore.score;
+              current.scoreCount++;
+              speakerStats.set(speakerScore.speaker_id, current);
+            });
+          }
+        });
+
+        const speakerRankings = Array.from(speakerStats.entries())
+          .map(([speakerId, stats]) => {
+            const speaker = users.find(u => u._id === speakerId);
+            const school = speaker?.school_id ? schools.find(s => s._id === speaker.school_id) : null;
+
+            return {
+              speaker_id: speakerId,
+              speaker_name: speaker?.name || "Unknown Speaker",
+              school_name: school?.name || "Unknown School",
+              total_points: stats.totalPoints,
+              average_score: stats.scoreCount > 0 ? stats.totalScores / stats.scoreCount : 0,
+            };
+          })
+          .sort((a, b) => b.total_points - a.total_points)
+          .map((speaker, index) => ({
+            rank: index + 1,
+            speaker_name: speaker.speaker_name,
+            school_name: speaker.school_name,
+            total_points: speaker.total_points,
+            average_score: Math.round(speaker.average_score * 10) / 10,
+          }));
+
+        return {
+          tournament_name: tournament.name,
+          format: tournament.format,
+          date: tournament.start_date,
+          team_rankings: teamRankings.slice(0, 20),
+          speaker_rankings: speakerRankings.slice(0, 20),
+        };
+      })
+    );
+
+    const schoolPerformance = new Map<Id<"schools">, {
+      tournaments: number;
+      totalPoints: number;
+      ranks: number[];
+      name: string;
+    }>();
+
+    const speakerPerformance = new Map<Id<"users">, {
+      tournaments: number;
+      totalPoints: number;
+      ranks: number[];
+      name: string;
+      schoolName: string;
+    }>();
+
+    const teamCompositions = new Map<string, {
+      tournaments: number;
+      totalPoints: number;
+      wins: number;
+      total: number;
+      schoolName: string;
+    }>();
+
+    tournamentRankings.forEach(tournament => {
+
+      tournament.team_rankings.forEach(team => {
+        const schoolId = schools.find(s => s.name === team.school_name)?._id;
+        if (schoolId) {
+          const current = schoolPerformance.get(schoolId) || {
+            tournaments: 0,
+            totalPoints: 0,
+            ranks: [],
+            name: team.school_name
+          };
+          current.tournaments++;
+          current.totalPoints += team.total_points;
+          current.ranks.push(team.rank);
+          schoolPerformance.set(schoolId, current);
+        }
+      });
+
+      tournament.speaker_rankings.forEach(speaker => {
+        const speakerId = users.find(u => u.name === speaker.speaker_name)?._id;
+        if (speakerId) {
+          const current = speakerPerformance.get(speakerId) || {
+            tournaments: 0,
+            totalPoints: 0,
+            ranks: [],
+            name: speaker.speaker_name,
+            schoolName: speaker.school_name
+          };
+          current.tournaments++;
+          current.totalPoints += speaker.total_points;
+          current.ranks.push(speaker.rank);
+          speakerPerformance.set(speakerId, current);
+        }
+      });
+
+      tournament.team_rankings.forEach(team => {
+        const key = `${team.school_name}-Team`;
+        const current = teamCompositions.get(key) || {
+          tournaments: 0,
+          totalPoints: 0,
+          wins: 0,
+          total: 0,
+          schoolName: team.school_name
+        };
+        current.tournaments++;
+        current.totalPoints += team.total_points;
+        current.wins += team.wins;
+        current.total += (team.wins + team.losses);
+        teamCompositions.set(key, current);
+      });
     });
 
-    const feedback_trends = Object.entries(feedbackByPeriod).map(([period, data]) => ({
-      period,
-      average_rating: data.total > 0 ? Math.round((data.sum / data.total) * 10) / 10 : 0,
-      total_feedback: data.total,
-    })).sort((a, b) => a.period.localeCompare(b.period));
+    const topSchools = Array.from(schoolPerformance.entries())
+      .map(([schoolId, data]) => {
+        const avgRank = data.ranks.length > 0 ? data.ranks.reduce((sum, rank) => sum + rank, 0) / data.ranks.length : 999;
+        const variance = data.ranks.length > 0 ?
+          data.ranks.reduce((sum, rank) => sum + Math.pow(rank - avgRank, 2), 0) / data.ranks.length : 0;
+        const consistencyScore = Math.max(0, 100 - Math.sqrt(variance));
 
-    const judgeStats: Record<Id<"users">, { bias_reports: number; total_assignments: number; name: string }> = {};
+        return {
+          school_name: data.name,
+          tournaments_participated: data.tournaments,
+          total_points: data.totalPoints,
+          average_rank: Math.round(avgRank * 10) / 10,
+          consistency_score: Math.round(consistencyScore * 10) / 10,
+        };
+      })
+      .sort((a, b) => a.average_rank - b.average_rank)
+      .slice(0, 10);
+
+    const topSpeakers = Array.from(speakerPerformance.entries())
+      .map(([speakerId, data]) => {
+        const avgRank = data.ranks.length > 0 ? data.ranks.reduce((sum, rank) => sum + rank, 0) / data.ranks.length : 999;
+        const bestRank = data.ranks.length > 0 ? Math.min(...data.ranks) : 999;
+
+        return {
+          speaker_name: data.name,
+          school_name: data.schoolName,
+          tournaments_participated: data.tournaments,
+          total_points: data.totalPoints,
+          average_rank: Math.round(avgRank * 10) / 10,
+          best_rank: bestRank,
+        };
+      })
+      .sort((a, b) => a.average_rank - b.average_rank)
+      .slice(0, 10);
+
+    const topTeams = Array.from(teamCompositions.entries())
+      .map(([composition, data]) => ({
+        team_composition: composition,
+        school_name: data.schoolName,
+        tournaments_together: data.tournaments,
+        combined_points: data.totalPoints,
+        win_rate: data.total > 0 ? Math.round((data.wins / data.total) * 100 * 10) / 10 : 0,
+      }))
+      .sort((a, b) => b.win_rate - a.win_rate)
+      .slice(0, 10);
+
+    const judgeConsistency = new Map<Id<"users">, { scores: number[]; name: string; debatesJudged: number; tournaments: Set<Id<"tournaments">>; }>();
 
     judgingScores.forEach(score => {
-      if (!judgeStats[score.judge_id]) {
-        const judge = users.find(u => u._id === score.judge_id);
-        judgeStats[score.judge_id] = {
-          bias_reports: 0,
-          total_assignments: 0,
-          name: judge?.name || "Unknown Judge",
-        };
-      }
-      judgeStats[score.judge_id].total_assignments++;
+      const judge = users.find(u => u._id === score.judge_id);
+      if (!judge || judge.role !== "volunteer") return;
 
-      const hasBias = score.speaker_scores?.some(s => s.bias_detected) || false;
-      if (hasBias) {
-        judgeStats[score.judge_id].bias_reports++;
-      }
-    });
+      const debate = debates.find(d => d._id === score.debate_id);
+      if (!debate || !tournaments.some(t => t._id === debate.tournament_id)) return;
 
-    const bias_detection = Object.values(judgeStats).map(stats => ({
-      judge_name: stats.name,
-      bias_reports: stats.bias_reports,
-      total_assignments: stats.total_assignments,
-      bias_rate: stats.total_assignments > 0 ? Math.round((stats.bias_reports / stats.total_assignments) * 100 * 10) / 10 : 0,
-    })).filter(j => j.total_assignments >= 5);
-
-    const judgeConsistency: Record<Id<"users">, { scores: number[]; name: string }> = {};
-
-    judgingScores.forEach(score => {
-      if (!judgeConsistency[score.judge_id]) {
-        const judge = users.find(u => u._id === score.judge_id);
-        judgeConsistency[score.judge_id] = {
-          scores: [],
-          name: judge?.name || "Unknown Judge",
-        };
-      }
+      const current = judgeConsistency.get(score.judge_id) || {
+        scores: [],
+        name: judge.name,
+        debatesJudged: 0,
+        tournaments: new Set(),
+      };
 
       if (score.speaker_scores) {
         const avgScore = score.speaker_scores.reduce((sum, s) => sum + s.score, 0) / score.speaker_scores.length;
-        judgeConsistency[score.judge_id].scores.push(avgScore);
+        current.scores.push(avgScore);
       }
+
+      current.debatesJudged++;
+      current.tournaments.add(debate.tournament_id);
+      judgeConsistency.set(score.judge_id, current);
     });
 
-    const consistency_scores = Object.values(judgeConsistency).map(data => {
-      if (data.scores.length < 3) return null;
+    const consistencyScores = Array.from(judgeConsistency.entries())
+      .map(([judgeId, data]) => {
+        if (data.scores.length < 3) return null;
 
-      const mean = data.scores.reduce((sum, s) => sum + s, 0) / data.scores.length;
-      const variance = data.scores.reduce((sum, s) => sum + Math.pow(s - mean, 2), 0) / data.scores.length;
-      const standardDeviation = Math.sqrt(variance);
+        const mean = data.scores.reduce((sum, s) => sum + s, 0) / data.scores.length;
+        const variance = data.scores.reduce((sum, s) => sum + Math.pow(s - mean, 2), 0) / data.scores.length;
+        const standardDeviation = Math.sqrt(variance);
+        const consistency = Math.max(0, 100 - (standardDeviation * 10));
 
-      const consistency = Math.max(0, 100 - (standardDeviation * 10));
-
-      return {
-        judge_name: data.name,
-        consistency: Math.round(consistency * 10) / 10,
-        debates_judged: data.scores.length,
-      };
-    }).filter(Boolean) as Array<{
+        return {
+          judge_name: data.name,
+          consistency: Math.round(consistency * 10) / 10,
+          debates_judged: data.debatesJudged,
+          tournaments_participated: data.tournaments.size,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b!.consistency - a!.consistency)
+      .slice(0, 15) as Array<{
       judge_name: string;
       consistency: number;
       debates_judged: number;
+      tournaments_participated: number;
     }>;
 
-    const factCheckByTournament: Record<Id<"tournaments">, { fact_checks: number; debates: number }> = {};
+    const judgeFeedbackQuality = new Map<Id<"users">, {
+      feedbackScores: number[];
+      name: string;
+      responseTimes: number[];
+    }>();
 
-    debates.forEach(debate => {
-      if (!factCheckByTournament[debate.tournament_id]) {
-        factCheckByTournament[debate.tournament_id] = { fact_checks: 0, debates: 0 };
-      }
-      factCheckByTournament[debate.tournament_id].debates++;
-      factCheckByTournament[debate.tournament_id].fact_checks += debate.fact_checks?.length || 0;
-    });
+    judgeFeedback.forEach(feedback => {
+      const judge = users.find(u => u._id === feedback.judge_id);
+      if (!judge || judge.role !== "volunteer") return;
 
-    const fact_check_usage = Object.entries(factCheckByTournament).map(([tournamentId, data]) => {
-      const tournament = tournaments.find(t => t._id === tournamentId);
-      return {
-        tournament: tournament?.name || "Unknown Tournament",
-        fact_checks: data.fact_checks,
-        debates: data.debates,
-        usage_rate: data.debates > 0 ? Math.round((data.fact_checks / data.debates) * 10) / 10 : 0,
+      const debate = debates.find(d => d._id === feedback.debate_id);
+      if (!debate || !tournaments.some(t => t._id === debate.tournament_id)) return;
+
+      const current = judgeFeedbackQuality.get(feedback.judge_id) || {
+        feedbackScores: [],
+        name: judge.name,
+        responseTimes: [],
       };
-    });
 
-    const argumentByTournament: Record<Id<"tournaments">, { arguments: number[]; rebuttals: number[]; debates: number }> = {};
+      const avgScore = (feedback.clarity + feedback.fairness + feedback.knowledge + feedback.helpfulness) / 4;
+      current.feedbackScores.push(avgScore);
 
-    debates.forEach(debate => {
-      if (!argumentByTournament[debate.tournament_id]) {
-        argumentByTournament[debate.tournament_id] = { arguments: [], rebuttals: [], debates: 0 };
-      }
-      argumentByTournament[debate.tournament_id].debates++;
-
-      if (debate.argument_flow) {
-        const mainArgs = debate.argument_flow.filter(arg => arg.type === "main").length;
-        const rebuttals = debate.argument_flow.filter(arg => arg.type === "rebuttal").length;
-
-        argumentByTournament[debate.tournament_id].arguments.push(mainArgs);
-        argumentByTournament[debate.tournament_id].rebuttals.push(rebuttals);
-      }
-    });
-
-    const argument_complexity = Object.entries(argumentByTournament).map(([tournamentId, data]) => {
-      const tournament = tournaments.find(t => t._id === tournamentId);
-      const avgArgs = data.arguments.length > 0 ? data.arguments.reduce((sum, a) => sum + a, 0) / data.arguments.length : 0;
-      const avgRebuttals = data.rebuttals.length > 0 ? data.rebuttals.reduce((sum, r) => sum + r, 0) / data.rebuttals.length : 0;
-
-      const quality_score = Math.min(100, (avgArgs * 10) + (avgRebuttals * 15));
-
-      return {
-        tournament: tournament?.name || "Unknown Tournament",
-        avg_arguments: Math.round(avgArgs * 10) / 10,
-        avg_rebuttals: Math.round(avgRebuttals * 10) / 10,
-        quality_score: Math.round(quality_score * 10) / 10,
-      };
-    });
-
-    const teamPerformance: Record<Id<"schools">, { wins: number; total: number; speaker_scores: number[]; tournaments: Set<Id<"tournaments">> }> = {};
-
-    const results = await ctx.db.query("tournament_results").collect();
-
-    results.forEach(result => {
-      if (result.result_type === "team" && result.team_id) {
-        const team = teams.find(t => t._id === result.team_id);
-        if (team?.school_id) {
-          if (!teamPerformance[team.school_id]) {
-            teamPerformance[team.school_id] = { wins: 0, total: 0, speaker_scores: [], tournaments: new Set() };
-          }
-          teamPerformance[team.school_id].wins += result.wins || 0;
-          teamPerformance[team.school_id].total += (result.wins || 0) + (result.losses || 0);
-          teamPerformance[team.school_id].tournaments.add(team.tournament_id);
+      if (debate.start_time) {
+        const responseTime = (feedback.submitted_at - debate.start_time) / (60 * 60 * 1000);
+        if (responseTime > 0 && responseTime < 72) {
+          current.responseTimes.push(responseTime);
         }
       }
 
-      if (result.result_type === "speaker" && result.speaker_team_id) {
-        const team = teams.find(t => t._id === result.speaker_team_id);
-        if (team?.school_id && result.average_speaker_score) {
-          if (!teamPerformance[team.school_id]) {
-            teamPerformance[team.school_id] = { wins: 0, total: 0, speaker_scores: [], tournaments: new Set() };
-          }
-          teamPerformance[team.school_id].speaker_scores.push(result.average_speaker_score);
-        }
-      }
+      judgeFeedbackQuality.set(feedback.judge_id, current);
     });
 
-    const team_performance = Object.entries(teamPerformance).map(([schoolId, data]) => {
-      const school = schools.find(s => s._id === schoolId);
-      const winRate = data.total > 0 ? (data.wins / data.total) * 100 : 0;
-      const avgSpeakerScore = data.speaker_scores.length > 0
-        ? data.speaker_scores.reduce((sum, s) => sum + s, 0) / data.speaker_scores.length
-        : 0;
+    const feedbackQuality = Array.from(judgeFeedbackQuality.entries())
+      .map(([judgeId, data]) => {
+        const avgFeedbackScore = data.feedbackScores.length > 0 ?
+          data.feedbackScores.reduce((sum, score) => sum + score, 0) / data.feedbackScores.length : 0;
 
-      return {
-        school_name: school?.name || "Unknown School",
-        win_rate: Math.round(winRate * 10) / 10,
-        tournaments_participated: data.tournaments.size,
-        avg_speaker_score: Math.round(avgSpeakerScore * 10) / 10,
-      };
-    }).filter(p => p.tournaments_participated > 0);
+        const avgResponseTime = data.responseTimes.length > 0 ?
+          data.responseTimes.reduce((sum, time) => sum + time, 0) / data.responseTimes.length : 0;
 
-    const speakerResults = results.filter(r => r.result_type === "speaker");
-    const speakerDistribution: Record<string, number> = {};
-
-    speakerResults.forEach(result => {
-      if (result.speaker_rank) {
-        let rankRange: string;
-        if (result.speaker_rank <= 10) {
-          rankRange = "Top 10";
-        } else if (result.speaker_rank <= 25) {
-          rankRange = "Top 25";
-        } else if (result.speaker_rank <= 50) {
-          rankRange = "Top 50";
-        } else if (result.speaker_rank <= 100) {
-          rankRange = "Top 100";
-        } else {
-          rankRange = "Below 100";
-        }
-        speakerDistribution[rankRange] = (speakerDistribution[rankRange] || 0) + 1;
-      }
-    });
-
-    const totalSpeakers = speakerResults.length;
-    const speaker_performance = Object.entries(speakerDistribution).map(([rankRange, count]) => ({
-      speaker_rank_range: rankRange,
-      count,
-      percentage: totalSpeakers > 0 ? Math.round((count / totalSpeakers) * 100 * 10) / 10 : 0,
-    }));
-
-    const completedTournaments = tournaments.filter(t => t.status === "completed");
-    const totalDuration = completedTournaments.reduce((sum, t) => sum + (t.end_date - t.start_date), 0);
-    const avg_tournament_duration = completedTournaments.length > 0
-      ? Math.round((totalDuration / completedTournaments.length) / (24 * 60 * 60 * 1000) * 10) / 10
-      : 0;
-
-    const roundTypeData: Record<string, number[]> = {};
-
-    rounds.forEach(round => {
-      if (round.status === "completed") {
-        const duration = round.end_time - round.start_time;
-        const durationHours = duration / (60 * 60 * 1000);
-
-        if (!roundTypeData[round.type]) {
-          roundTypeData[round.type] = [];
-        }
-        roundTypeData[round.type].push(durationHours);
-      }
-    });
-
-    const round_completion_times = Object.entries(roundTypeData).map(([type, durations]) => ({
-      round_type: type,
-      avg_duration: durations.length > 0
-        ? Math.round((durations.reduce((sum, d) => sum + d, 0) / durations.length) * 10) / 10
-        : 0,
-    }));
-
-    const responseTimeByPeriod: Record<string, number[]> = {};
-
-    judgingScores.forEach(score => {
-      const month = new Date(score.submitted_at).toISOString().slice(0, 7);
-      if (!responseTimeByPeriod[month]) {
-        responseTimeByPeriod[month] = [];
-      }
-
-      const debate = debates.find(d => d._id === score.debate_id);
-      if (debate && debate.start_time) {
-        const responseTime = (score.submitted_at - debate.start_time) / (60 * 60 * 1000);
-        if (responseTime > 0 && responseTime < 24 * 7) {
-          responseTimeByPeriod[month].push(responseTime);
-        }
-      }
-    });
-
-    const judge_response_times = Object.entries(responseTimeByPeriod).map(([period, times]) => ({
-      period,
-      avg_response_time: times.length > 0
-        ? Math.round((times.reduce((sum, t) => sum + t, 0) / times.length) * 10) / 10
-        : 0,
-    })).sort((a, b) => a.period.localeCompare(b.period));
+        return {
+          judge_name: data.name,
+          avg_feedback_score: Math.round(avgFeedbackScore * 10) / 10,
+          total_feedback_received: data.feedbackScores.length,
+          response_time_avg: Math.round(avgResponseTime * 10) / 10,
+        };
+      })
+      .filter(judge => judge.total_feedback_received >= 2)
+      .sort((a, b) => b.avg_feedback_score - a.avg_feedback_score)
+      .slice(0, 15);
 
     return {
+      tournament_rankings: tournamentRankings.sort((a, b) => b.date - a.date),
+      cross_tournament_rankings: {
+        top_schools: topSchools,
+        top_speakers: topSpeakers,
+        top_teams: topTeams,
+      },
       judge_performance: {
-        feedback_trends,
-        bias_detection,
-        consistency_scores,
-      },
-      debate_quality: {
-        fact_check_usage,
-        argument_complexity,
-      },
-      team_performance,
-      speaker_performance,
-      efficiency_metrics: {
-        avg_tournament_duration,
-        round_completion_times,
-        judge_response_times,
+        consistency_scores: consistencyScores,
+        feedback_quality: feedbackQuality,
       },
     };
   },
@@ -1197,13 +1195,13 @@ export const exportAnalyticsData = query({
   },
   handler: async (ctx, args): Promise<Record<string, any>> => {
 
-      const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
-        token: args.token,
-      });
+    const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
+      token: args.token,
+    });
 
-      if (!sessionResult.valid || !sessionResult.user || sessionResult.user.role !== "admin") {
-        throw new Error("Admin access required");
-      }
+    if (!sessionResult.valid || !sessionResult.user || sessionResult.user.role !== "admin") {
+      throw new Error("Admin access required");
+    }
 
     const exportData: Record<string, any> = {};
 

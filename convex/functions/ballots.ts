@@ -72,19 +72,15 @@ export const getTournamentBallots = query({
         let canSeeResults: boolean = true;
 
         if (user.role === "admin") {
-
           canSeeFullDetails = true;
           ballotDetails = submissions;
         } else if (user.role === "volunteer") {
-
           if (debate.judges.includes(user.id)) {
             canSeeFullDetails = true;
             ballotDetails = submissions;
           }
         } else if (user.role === "school_admin") {
-
           if (isDreamsMode) {
-
             canSeeResults = false;
           } else {
             const userSchoolId: Id<"schools"> | undefined = user.school_id;
@@ -114,13 +110,11 @@ export const getTournamentBallots = query({
             userTeamIds.includes(debate.opposition_team_id!);
 
           if (isMyTeamInvolved) {
-
             canSeeFullDetails = true;
             ballotDetails = submissions.map(submission => ({
               ...submission,
               speaker_scores: submission.speaker_scores.map(score => ({
                 ...score,
-
                 comments: score.speaker_id === user.id ? score.comments : undefined,
               }))
             }));
@@ -175,6 +169,7 @@ export const updateRecording = mutation({
     await ctx.db.patch(args.debate_id, {
       recording: args.recording_id,
       recording_duration: args.duration,
+      updated_at: Date.now(),
     });
 
     return { success: true };

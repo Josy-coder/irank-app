@@ -33,37 +33,27 @@ export const getVolunteerDashboardStats = query({
       .collect();
 
     const judgedDebates = allDebates.filter(debate =>
-      debate.judges.includes(volunteer.id)
+      debate.judges.includes(volunteer.id) || debate.head_judge_id === volunteer.id
     );
 
     const totalRoundsJudged = judgedDebates.length;
 
     const tournamentIds = Array.from(new Set(judgedDebates.map(d => d.tournament_id)));
-    const allTournaments = await Promise.all(
+    const participatedTournaments = await Promise.all(
       tournamentIds.map(id => ctx.db.get(id))
     );
-    const validTournaments = allTournaments.filter(Boolean) as Doc<"tournaments">[];
+    const validParticipatedTournaments = participatedTournaments.filter(Boolean) as Doc<"tournaments">[];
 
-    const tournamentsAttended = validTournaments.filter(t =>
+    const tournamentsAttended = validParticipatedTournaments.filter(t =>
       t.start_date >= oneYearAgo && t.start_date <= now
     ).length;
 
-    const invitations = await ctx.db
-      .query("tournament_invitations")
-      .withIndex("by_target_type_target_id", (q) =>
-        q.eq("target_type", "volunteer").eq("target_id", volunteer.id)
-      )
+    const allUpcomingTournaments = await ctx.db
+      .query("tournaments")
+      .withIndex("by_status", (q) => q.eq("status", "published"))
       .collect();
 
-    const acceptedInvitations = invitations.filter(inv => inv.status === "accepted");
-    const upcomingTournamentIds = acceptedInvitations.map(inv => inv.tournament_id);
-
-    const upcomingTournaments = await Promise.all(
-      upcomingTournamentIds.map(id => ctx.db.get(id))
-    );
-
-    const validUpcomingTournaments = upcomingTournaments.filter(Boolean) as Doc<"tournaments">[];
-    const upcomingCount = validUpcomingTournaments.filter(t =>
+    const upcomingCount = allUpcomingTournaments.filter(t =>
       t.start_date > now && t.start_date <= now + (30 * 24 * 60 * 60 * 1000)
     ).length;
 
@@ -79,7 +69,7 @@ export const getVolunteerDashboardStats = query({
       : recentRounds > 0 ? 100 : 0;
 
     const twoYearsAgo = now - (2 * 365 * 24 * 60 * 60 * 1000);
-    const previousYearTournaments = validTournaments.filter(t =>
+    const previousYearTournaments = validParticipatedTournaments.filter(t =>
       t.start_date >= twoYearsAgo && t.start_date < oneYearAgo
     ).length;
 
@@ -87,7 +77,7 @@ export const getVolunteerDashboardStats = query({
       ? ((tournamentsAttended - previousYearTournaments) / previousYearTournaments) * 100
       : tournamentsAttended > 0 ? 100 : 0;
 
-    const previousUpcoming = validUpcomingTournaments.filter(t =>
+    const previousUpcoming = allUpcomingTournaments.filter(t =>
       t.start_date > thirtyDaysAgo && t.start_date <= now
     ).length;
 
@@ -130,58 +120,46 @@ export const getVolunteerRankAndPosition = query({
       .withIndex("by_role_status", (q) => q.eq("role", "volunteer").eq("status", "active"))
       .collect();
 
-    const allDebates = await ctx.db
-      .query("debates")
+    const allDebates = await ctx.db.query("debates").collect();
+    const allJudgeFeedback = await ctx.db.query("judge_feedback").collect();
+    const allTournaments = await ctx.db
+      .query("tournaments")
+      .withIndex("by_status", (q) => q.eq("status", "completed"))
       .collect();
 
-    const judgeFeedback = await ctx.db
-      .query("judge_feedback")
-      .collect();
+    const sortedTournaments = allTournaments.sort((a, b) => a.end_date - b.end_date);
+    const latestTournament = sortedTournaments[sortedTournaments.length - 1];
 
-    const volunteersWithPerformance = [];
-
-    for (const volunteerUser of allVolunteers) {
-      const judgedDebates = allDebates.filter(d => d.judges.includes(volunteerUser._id));
-      const feedback = judgeFeedback.filter(f => f.judge_id === volunteerUser._id);
-
-      if (judgedDebates.length > 0) {
-        const totalDebates = judgedDebates.length;
-        const headJudgeCount = judgedDebates.filter(d => d.head_judge_id === volunteerUser._id).length;
-
-        let avgFeedbackScore = 3.0;
-        if (feedback.length > 0) {
-          const totalScore = feedback.reduce((sum, f) => {
-            return sum + ((f.clarity + f.fairness + f.knowledge + f.helpfulness) / 4);
-          }, 0);
-          avgFeedbackScore = totalScore / feedback.length;
-        }
-
-        volunteersWithPerformance.push({
-          volunteer_id: volunteerUser._id,
-          totalDebates,
-          headJudgeCount,
-          avgFeedbackScore,
-          feedbackCount: feedback.length,
-        });
-      }
+    if (!latestTournament) {
+      return {
+        currentRank: null,
+        totalVolunteers: 0,
+        rankChange: 0,
+      };
     }
 
-    volunteersWithPerformance.sort((a, b) => {
-      if (a.totalDebates !== b.totalDebates) return b.totalDebates - a.totalDebates;
-      if (a.avgFeedbackScore !== b.avgFeedbackScore) return b.avgFeedbackScore - a.avgFeedbackScore;
-      return b.headJudgeCount - a.headJudgeCount;
-    });
+    const currentRankings = await calculateVolunteerRankings(
+      ctx, allVolunteers, allDebates, allJudgeFeedback, sortedTournaments
+    );
 
-    const currentVolunteerIndex = volunteersWithPerformance.findIndex(v => v.volunteer_id === volunteer.id);
-    const currentRank = currentVolunteerIndex !== -1 ? currentVolunteerIndex + 1 : null;
-    const totalVolunteers = volunteersWithPerformance.length;
+    const previousTournaments = sortedTournaments.slice(0, -1);
+    const previousRankings = await calculateVolunteerRankings(
+      ctx, allVolunteers, allDebates, allJudgeFeedback, previousTournaments
+    );
+
+    const currentVolunteerRank = currentRankings.find(r => r.volunteer_id === volunteer.id);
+    const previousVolunteerRank = previousRankings.find(r => r.volunteer_id === volunteer.id);
+
+    const currentRank = currentVolunteerRank?.rank || null;
+    const totalVolunteers = currentRankings.length;
 
     let rankChange = 0;
-    if (currentVolunteerIndex !== -1) {
-      const currentVolunteer = volunteersWithPerformance[currentVolunteerIndex];
-      if (currentVolunteer.totalDebates > 5) {
-        rankChange = Math.random() > 0.5 ? 1 : -1;
-      }
+    if (currentVolunteerRank && previousVolunteerRank) {
+
+      rankChange = previousVolunteerRank.rank - currentVolunteerRank.rank;
+    } else if (currentVolunteerRank && !previousVolunteerRank) {
+
+      rankChange = 0;
     }
 
     return {
@@ -191,6 +169,83 @@ export const getVolunteerRankAndPosition = query({
     };
   },
 });
+
+const calculateVolunteerRankings = async (
+  ctx: any,
+  allVolunteers: any[],
+  allDebates: any[],
+  allJudgeFeedback: any[],
+  tournaments: any[]
+) => {
+  const volunteersWithPerformance = [];
+  const tournamentIds = new Set(tournaments.map(t => t._id));
+
+  const allRounds = await ctx.db.query("rounds").collect();
+
+  for (const volunteerUser of allVolunteers) {
+
+    const judgedDebates = allDebates.filter(d =>
+      (d.judges.includes(volunteerUser._id) || d.head_judge_id === volunteerUser._id) &&
+      tournamentIds.has(d.tournament_id)
+    );
+
+    if (judgedDebates.length === 0) continue;
+
+    let elimDebatesJudged = 0;
+    let prelimDebatesJudged = 0;
+
+    for (const debate of judgedDebates) {
+      const round = allRounds.find((r: { _id: any; }) => r._id === debate.round_id);
+      if (round) {
+        if (round.type === "elimination") {
+          elimDebatesJudged++;
+        } else if (round.type === "preliminary") {
+          prelimDebatesJudged++;
+        }
+      }
+    }
+
+    const weightedDebateScore = (elimDebatesJudged * 2) + prelimDebatesJudged;
+
+    const volunteerFeedback = allJudgeFeedback.filter(f =>
+      f.judge_id === volunteerUser._id && tournamentIds.has(f.tournament_id)
+    );
+
+    let avgFeedbackScore = 0;
+    if (volunteerFeedback.length > 0) {
+      const totalFeedbackScore = volunteerFeedback.reduce((sum, feedback) => {
+        return sum + ((feedback.clarity + feedback.fairness + feedback.knowledge + feedback.helpfulness) / 4);
+      }, 0);
+      avgFeedbackScore = totalFeedbackScore / volunteerFeedback.length;
+    }
+
+    const participatedTournaments = Array.from(new Set(judgedDebates.map(d => d.tournament_id))).length;
+    const attendanceScore = participatedTournaments > 0 ? (judgedDebates.length / participatedTournaments) : 0;
+
+    volunteersWithPerformance.push({
+      volunteer_id: volunteerUser._id,
+      weightedDebateScore,
+      attendanceScore,
+      avgFeedbackScore,
+      totalDebatesJudged: judgedDebates.length,
+    });
+  }
+
+  volunteersWithPerformance.sort((a, b) => {
+    if (a.weightedDebateScore !== b.weightedDebateScore) {
+      return b.weightedDebateScore - a.weightedDebateScore;
+    }
+    if (a.attendanceScore !== b.attendanceScore) {
+      return b.attendanceScore - a.attendanceScore;
+    }
+    return b.avgFeedbackScore - a.avgFeedbackScore;
+  });
+
+  return volunteersWithPerformance.map((volunteer, index) => ({
+    ...volunteer,
+    rank: index + 1,
+  }));
+};
 
 export const getVolunteerPerformanceTrend = query({
   args: {
@@ -240,13 +295,8 @@ export const getVolunteerPerformanceTrend = query({
       t.start_date >= startDate && t.start_date <= now
     );
 
-    const allDebates = await ctx.db
-      .query("debates")
-      .collect();
-
-    const judgeFeedback = await ctx.db
-      .query("judge_feedback")
-      .collect();
+    const allDebates = await ctx.db.query("debates").collect();
+    const allJudgeResults = await ctx.db.query("judge_results").collect();
 
     const performanceData: Array<{
       date: string;
@@ -261,36 +311,30 @@ export const getVolunteerPerformanceTrend = query({
         d.tournament_id === tournament._id && d.judges.includes(volunteer.id)
       );
 
-      if (tournamentDebates.length > 0) {
+      if (tournamentDebates.length === 0) continue;
 
-        const volunteerFeedback = judgeFeedback.filter(f =>
-          f.judge_id === volunteer.id && f.tournament_id === tournament._id
-        );
+      const volunteerJudgeResult = allJudgeResults.find(jr =>
+        jr.tournament_id === tournament._id && jr.judge_id === volunteer.id
+      );
 
-        let volunteerScore = 3.0; // Default score
-        if (volunteerFeedback.length > 0) {
-          const totalScore = volunteerFeedback.reduce((sum, f) => {
-            return sum + ((f.clarity + f.fairness + f.knowledge + f.helpfulness) / 4);
-          }, 0);
-          volunteerScore = totalScore / volunteerFeedback.length;
-        }
-
-        const tournamentFeedback = judgeFeedback.filter(f => f.tournament_id === tournament._id);
-        let platformAverage = 3.0;
-        if (tournamentFeedback.length > 0) {
-          const totalPlatformScore = tournamentFeedback.reduce((sum, f) => {
-            return sum + ((f.clarity + f.fairness + f.knowledge + f.helpfulness) / 4);
-          }, 0);
-          platformAverage = totalPlatformScore / tournamentFeedback.length;
-        }
-
-        performanceData.push({
-          date: formatDateByPeriod(tournament.start_date, args.period),
-          volunteer_performance: Math.round(volunteerScore * 10) / 10,
-          platform_average: Math.round(platformAverage * 10) / 10,
-          tournament_name: tournament.name,
-        });
+      let volunteerScore = 3.0;
+      if (volunteerJudgeResult) {
+        volunteerScore = volunteerJudgeResult.avg_feedback_score;
       }
+
+      const tournamentJudgeResults = allJudgeResults.filter(jr => jr.tournament_id === tournament._id);
+      let platformAverage = 3.0;
+      if (tournamentJudgeResults.length > 0) {
+        const totalScore = tournamentJudgeResults.reduce((sum, jr) => sum + jr.avg_feedback_score, 0);
+        platformAverage = totalScore / tournamentJudgeResults.length;
+      }
+
+      performanceData.push({
+        date: formatDateByPeriod(tournament.start_date, args.period),
+        volunteer_performance: Math.round(volunteerScore * 10) / 10,
+        platform_average: Math.round(platformAverage * 10) / 10,
+        tournament_name: tournament.name,
+      });
     }
 
     return performanceData;
@@ -324,31 +368,20 @@ export const getVolunteerLeaderboard = query({
       .withIndex("by_role_status", (q) => q.eq("role", "volunteer").eq("status", "active"))
       .collect();
 
-    const allDebates = await ctx.db
-      .query("debates")
-      .collect();
-
-    const judgeFeedback = await ctx.db
-      .query("judge_feedback")
-      .collect();
+    const allDebates = await ctx.db.query("debates").collect();
+    const allJudgeResults = await ctx.db.query("judge_results").collect();
 
     const volunteersWithPerformance = [];
 
     for (const volunteer of allVolunteers) {
       const judgedDebates = allDebates.filter(d => d.judges.includes(volunteer._id));
-      const feedback = judgeFeedback.filter(f => f.judge_id === volunteer._id);
+      const judgeResult = allJudgeResults.find(jr => jr.judge_id === volunteer._id);
 
-      if (judgedDebates.length > 0) {
-        const totalDebates = judgedDebates.length;
-        const headJudgeCount = judgedDebates.filter(d => d.head_judge_id === volunteer._id).length;
-
-        let avgFeedbackScore = 3.0;
-        if (feedback.length > 0) {
-          const totalScore = feedback.reduce((sum, f) => {
-            return sum + ((f.clarity + f.fairness + f.knowledge + f.helpfulness) / 4);
-          }, 0);
-          avgFeedbackScore = totalScore / feedback.length;
-        }
+      if (judgedDebates.length > 0 || judgeResult) {
+        const totalDebates = judgeResult?.total_debates_judged || judgedDebates.length;
+        const headJudgeCount = judgeResult?.head_judge_assignments ||
+          judgedDebates.filter(d => d.head_judge_id === volunteer._id).length;
+        const avgFeedbackScore = judgeResult?.avg_feedback_score || 3.0;
 
         volunteersWithPerformance.push({
           volunteer_id: volunteer._id,

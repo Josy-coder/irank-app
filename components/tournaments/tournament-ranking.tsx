@@ -4,29 +4,23 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
-  Trophy,
   Users,
   Star,
   Medal,
   Award,
   Download,
-  RefreshCw,
   Crown,
-  TrendingUp,
   Building,
   Loader2,
   Settings,
   ChevronUp,
   ChevronDown,
   Search,
-  BarChart3,
-  Info,
-  CheckCircle,
-  AlertCircle,
-  AlertTriangle
-} from 'lucide-react';
+  AlertTriangle,
+  UsersRound, School, GraduationCap
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -44,6 +38,22 @@ interface RankingResponse<T> {
   error: string | null;
   data: T;
   type: 'success' | 'permission_error' | 'validation_error' | 'data_insufficient' | 'not_released';
+}
+
+interface TeamRanking {
+  rank: number;
+  team_id: Id<"teams">;
+  team_name: string;
+  school_id?: Id<"schools">;
+  school_name?: string;
+  school_type?: string;
+  total_wins: number;
+  total_losses: number;
+  total_points: number;
+  opponents_total_wins: number;
+  opponents_total_points: number;
+  head_to_head_wins: number;
+  eliminated_in_round?: number;
 }
 
 interface SchoolRanking {
@@ -80,8 +90,8 @@ interface StudentRanking {
   team_wins: number;
   team_rank: number;
   debates_count: number;
-  avg_position_rank_in_team: number;
-  speaking_time_efficiency: number;
+  highest_individual_score: number;
+  points_deviation: number;
   cross_tournament_performance: {
     tournaments_participated: number;
     avg_points_per_tournament: number;
@@ -100,6 +110,7 @@ interface VolunteerRanking {
   elimination_debates_judged: number;
   prelim_debates_judged: number;
   head_judge_assignments: number;
+  attendance_score: number;
   avg_feedback_score: number;
   total_feedback_count: number;
   consistency_score: number;
@@ -123,7 +134,7 @@ export default function TournamentRankings({
                                              userRole,
                                              token,
                                            }: TournamentRankingsProps) {
-  const [activeTab, setActiveTab] = useState<'schools' | 'students' | 'volunteers'>('schools');
+  const [activeTab, setActiveTab] = useState<'teams' | 'schools' | 'students' | 'volunteers'>('teams');
   const [includeElimination, setIncludeElimination] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'rank' | 'name' | 'performance'>('rank');
@@ -131,7 +142,6 @@ export default function TournamentRankings({
   const [filterSchool, setFilterSchool] = useState<string>('all');
   const [showDetails, setShowDetails] = useState<Record<string, boolean>>({});
   const [exportFormat, setExportFormat] = useState<'csv' | 'pdf'>('csv');
-  const [isRecalculating, setIsRecalculating] = useState(false);
 
   const isAdmin = userRole === 'admin';
   const hasToken = Boolean(token);
@@ -141,16 +151,24 @@ export default function TournamentRankings({
   const canManageReleaseSettings = isAdmin;
   const canToggleElimination = isAdmin;
   const canExportRankings = isAdmin;
-  const canViewBrackets = isAdmin;
-  const canViewAdvancedStats = isAdmin;
-  const canViewDataQuality = isAdmin;
+
+  const scope = includeElimination ? "full_tournament" : "prelims";
+
+  const teamRankingsResponse = useQuery(
+    api.functions.rankings.getTeamRankings,
+    canViewRankings ? {
+      token,
+      tournament_id: tournament._id,
+      scope: scope,
+    } : "skip"
+  );
 
   const schoolRankingsResponse = useQuery(
     api.functions.rankings.getSchoolRankings,
     canViewRankings ? {
       token,
       tournament_id: tournament._id,
-      include_elimination: includeElimination,
+      scope: scope,
     } : "skip"
   );
 
@@ -159,7 +177,7 @@ export default function TournamentRankings({
     canViewRankings ? {
       token,
       tournament_id: tournament._id,
-      include_elimination: includeElimination,
+      scope: scope,
     } : "skip"
   );
 
@@ -171,34 +189,13 @@ export default function TournamentRankings({
     } : "skip"
   );
 
-  const rankingStatsResponse = useQuery(
-    api.functions.rankings.getRankingStatistics,
-    canViewAdvancedStats ? {
-      token,
-      tournament_id: tournament._id,
-    } : "skip"
-  );
-
-  const eliminationBracketsResponse = useQuery(
-    api.functions.rankings.generateEliminationBrackets,
-    canViewBrackets ? {
-      token,
-      tournament_id: tournament._id,
-    } : "skip"
-  );
-
-  const exportRankingsDataResponse = useQuery(
-    api.functions.rankings.exportRankingsData,
-    canExportRankings && schoolRankingsResponse && studentRankingsResponse && volunteerRankingsResponse ? {
-      token,
-      tournament_id: tournament._id,
-      ranking_type: activeTab,
-      include_elimination: includeElimination,
-    } : "skip"
-  );
-
   const updateRankingReleaseMutation = useMutation(api.functions.rankings.updateRankingRelease);
-  const recalculateRankingsMutation = useMutation(api.functions.rankings.recalculateRankings);
+
+  const teamRankings = useMemo(() =>
+      teamRankingsResponse?.success ? teamRankingsResponse.data : [],
+    [teamRankingsResponse]
+  );
+  const teamError = teamRankingsResponse?.success === false ? teamRankingsResponse.error : null;
 
   const schoolRankings = useMemo(() =>
       schoolRankingsResponse?.success ? schoolRankingsResponse.data : [],
@@ -218,21 +215,15 @@ export default function TournamentRankings({
   );
   const volunteerError = volunteerRankingsResponse?.success === false ? volunteerRankingsResponse.error : null;
 
-  const rankingStats = rankingStatsResponse?.success ? rankingStatsResponse.data : null;
-  const statsError = rankingStatsResponse?.success === false ? rankingStatsResponse.error : null;
-
-  const eliminationBrackets = eliminationBracketsResponse?.success ? eliminationBracketsResponse.data : null;
-  const bracketsError = eliminationBracketsResponse?.success === false ? eliminationBracketsResponse.error : null;
-
-  const exportRankingsData = exportRankingsDataResponse?.success ? exportRankingsDataResponse.data : null;
-
   const [releaseSettings, setReleaseSettings] = useState({
     prelims: {
+      teams: false,
       schools: false,
       students: false,
       volunteers: false,
     },
     full_tournament: {
+      teams: false,
       schools: false,
       students: false,
       volunteers: false,
@@ -250,6 +241,9 @@ export default function TournamentRankings({
     let rankings: any[] = [];
 
     switch (activeTab) {
+      case 'teams':
+        rankings = teamRankings || [];
+        break;
       case 'schools':
         rankings = schoolRankings || [];
         break;
@@ -264,10 +258,10 @@ export default function TournamentRankings({
     if (searchQuery) {
       rankings = rankings.filter(item => {
         const searchFields = [
+          item.team_name,
           item.school_name,
           item.speaker_name,
-          item.volunteer_name,
-          item.team_name
+          item.volunteer_name
         ].filter(Boolean).join(' ').toLowerCase();
 
         return searchFields.includes(searchQuery.toLowerCase());
@@ -285,8 +279,8 @@ export default function TournamentRankings({
 
       switch (sortBy) {
         case 'name':
-          aValue = a.school_name || a.speaker_name || a.volunteer_name || '';
-          bValue = b.school_name || b.speaker_name || b.volunteer_name || '';
+          aValue = a.team_name || a.school_name || a.speaker_name || a.volunteer_name || '';
+          bValue = b.team_name || b.school_name || b.speaker_name || b.volunteer_name || '';
           break;
         case 'performance':
           aValue = a.total_points || a.total_speaker_points || a.total_debates_judged || 0;
@@ -305,12 +299,12 @@ export default function TournamentRankings({
     });
 
     return rankings;
-  }, [activeTab, schoolRankings, studentRankings, volunteerRankings, searchQuery, filterSchool, sortBy, sortDirection]);
+  }, [activeTab, teamRankings, schoolRankings, studentRankings, volunteerRankings, searchQuery, filterSchool, sortBy, sortDirection]);
 
   const availableSchools = useMemo(() => {
     const schools = new Set<{id: string, name: string}>();
 
-    [schoolRankings, studentRankings, volunteerRankings].forEach(rankings => {
+    [teamRankings, schoolRankings, studentRankings, volunteerRankings].forEach(rankings => {
       rankings?.forEach((item: any) => {
         if (item.school_id && item.school_name) {
           schools.add({id: item.school_id, name: item.school_name});
@@ -319,7 +313,7 @@ export default function TournamentRankings({
     });
 
     return Array.from(schools);
-  }, [schoolRankings, studentRankings, volunteerRankings]);
+  }, [teamRankings, schoolRankings, studentRankings, volunteerRankings]);
 
   const updateReleaseSettings = async (newSettings: typeof releaseSettings) => {
     if (!canManageReleaseSettings || !updateRankingReleaseMutation) {
@@ -340,44 +334,24 @@ export default function TournamentRankings({
     }
   };
 
-  const recalculateRankings = async () => {
-    if (!canRecalculateRankings || !recalculateRankingsMutation) {
-      toast.error("You don't have permission to recalculate rankings");
-      return;
-    }
-
-    setIsRecalculating(true);
-    try {
-      const result = await recalculateRankingsMutation({
-        token,
-        tournament_id: tournament._id,
-      });
-      toast.success(`Rankings recalculated for ${result.teams_processed} teams and ${result.speakers_processed} speakers`);
-    } catch (error: any) {
-      toast.error(error.message || "Failed to recalculate rankings");
-    } finally {
-      setIsRecalculating(false);
-    }
-  };
-
   const exportRankings = () => {
     if (!canExportRankings) {
       toast.error("You don't have permission to export rankings");
       return;
     }
 
-    if (!exportRankingsData) {
+    const currentData = filteredAndSortedRankings;
+    if (!currentData || currentData.length === 0) {
       toast.error("No data to export");
       return;
     }
 
-    const data = exportRankingsData;
-    const headers = Object.keys(data[0] || {});
+    const headers = Object.keys(currentData[0] || {});
 
     if (exportFormat === 'csv') {
       const csv = [
         headers.join(','),
-        ...data.map((row: any) => headers.map(header => {
+        ...currentData.map((row: any) => headers.map(header => {
           const value = row[header];
           return typeof value === 'string' && value.includes(',') ? `"${value}"` : value;
         }).join(','))
@@ -462,9 +436,65 @@ export default function TournamentRankings({
               <AlertTitle>Admin Note</AlertTitle>
               <AlertDescription className="text-xs">
                 Rankings become available once preliminary rounds are completed and results are scored.
-                You can try recalculating rankings after more data is available.
               </AlertDescription>
             </Alert>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+
+  const TeamRankingCard = ({ team }: { team: TeamRanking }) => (
+    <Card className="hover:shadow-md transition-all duration-200">
+      <CardContent className="p-6">
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <RankingBadge rank={team.rank} />
+            <div>
+              <h3 className="font-semibold text-lg">{team.team_name}</h3>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                {team.school_name && <span>{team.school_name}</span>}
+                {team.school_type && <Badge variant="outline">{team.school_type}</Badge>}
+              </div>
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-2xl font-bold text-primary">{team.total_wins}</div>
+            <div className="text-sm text-muted-foreground">wins</div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="text-center">
+            <div className="text-xl font-bold">{team.total_points}</div>
+            <div className="text-xs text-muted-foreground">Total Points</div>
+          </div>
+          <div className="text-center">
+            <div className="text-xl font-bold">{team.total_losses}</div>
+            <div className="text-xs text-muted-foreground">Losses</div>
+          </div>
+          <div className="text-center">
+            <div className="text-xl font-bold">{team.opponents_total_wins}</div>
+            <div className="text-xs text-muted-foreground">Opp Wins</div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 text-center text-sm">
+          <div>
+            <div className="font-medium">{team.opponents_total_points}</div>
+            <div className="text-xs text-muted-foreground">Opponent Points</div>
+          </div>
+          <div>
+            <div className="font-medium">{team.head_to_head_wins}</div>
+            <div className="text-xs text-muted-foreground">H2H Wins</div>
+          </div>
+        </div>
+
+        {team.eliminated_in_round && (
+          <div className="mt-3 pt-3 border-t">
+            <Badge variant="secondary" className="w-full justify-center">
+              Eliminated in Round {team.eliminated_in_round}
+            </Badge>
           </div>
         )}
       </CardContent>
@@ -600,9 +630,14 @@ export default function TournamentRankings({
             <div className="text-xs text-muted-foreground">Debates</div>
           </div>
           <div>
-            <div className="text-lg font-bold">{student.avg_position_rank_in_team.toFixed(1)}</div>
-            <div className="text-xs text-muted-foreground">Pos Rank</div>
+            <div className="text-lg font-bold">{student.highest_individual_score}</div>
+            <div className="text-xs text-muted-foreground">Best Score</div>
           </div>
+        </div>
+
+        <div className="mt-3 pt-3 border-t text-center text-sm">
+          <div className="font-medium">{student.points_deviation.toFixed(2)}</div>
+          <div className="text-xs text-muted-foreground">Points Deviation</div>
         </div>
 
         {student.cross_tournament_performance.tournaments_participated > 0 && (
@@ -664,13 +699,17 @@ export default function TournamentRankings({
           />
         </div>
 
-        <div className="grid grid-cols-3 gap-2 text-center mb-4">
+        <div className="grid grid-cols-4 gap-2 text-center mb-4">
           <div>
             <div className="text-lg font-bold">{volunteer.head_judge_assignments}</div>
             <div className="text-xs text-muted-foreground">Head Judge</div>
           </div>
           <div>
-            <div className="text-lg font-bold">{volunteer.consistency_score.toFixed(2)}</div>
+            <div className="text-lg font-bold">{volunteer.attendance_score.toFixed(1)}</div>
+            <div className="text-xs text-muted-foreground">Attendance</div>
+          </div>
+          <div>
+            <div className="text-lg font-bold">{volunteer.consistency_score.toFixed(1)}</div>
             <div className="text-xs text-muted-foreground">Consistency</div>
           </div>
           <div>
@@ -702,7 +741,7 @@ export default function TournamentRankings({
     </Card>
   );
 
-  const isLoading = !schoolRankingsResponse || !studentRankingsResponse || !volunteerRankingsResponse;
+  const isLoading = !teamRankingsResponse || !schoolRankingsResponse || !studentRankingsResponse || !volunteerRankingsResponse;
 
   const currentRankings = filteredAndSortedRankings;
 
@@ -723,28 +762,6 @@ export default function TournamentRankings({
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
-            
-            {canRecalculateRankings && (
-              <Button
-                variant="outline"
-                onClick={recalculateRankings}
-                size="sm"
-                disabled={isRecalculating}
-              >
-                {isRecalculating ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span className="hidden custom:block">Recalculating....</span>
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-4 w-4" />
-                    <span className="hidden custom:block">Recalculate</span>
-                  </>
-                )}
-              </Button>
-            )}
-
             {canToggleElimination && (
               <div className="flex items-center space-x-1">
                 <Switch
@@ -783,7 +800,7 @@ export default function TournamentRankings({
           </div>
         </div>
         <div className="p-4 space-y-2">
-          
+
           {canManageReleaseSettings && (
             <Alert>
               <Settings className="h-4 w-4" />
@@ -794,7 +811,7 @@ export default function TournamentRankings({
                     <div>
                       <h5 className="text-sm font-medium mb-2">Preliminary Rankings</h5>
                       <div className="space-y-2">
-                        {(['schools', 'students', 'volunteers'] as const).map(type => (
+                        {(['teams', 'schools', 'students', 'volunteers'] as const).map(type => (
                           <div key={type} className="flex items-center space-x-2">
                             <Checkbox
                               id={`prelims-${type}`}
@@ -820,7 +837,7 @@ export default function TournamentRankings({
                     <div>
                       <h5 className="text-sm font-medium mb-2">Full Tournament Rankings</h5>
                       <div className="space-y-2">
-                        {(['schools', 'students', 'volunteers'] as const).map(type => (
+                        {(['teams', 'schools', 'students', 'volunteers'] as const).map(type => (
                           <div key={type} className="flex items-center space-x-2">
                             <Checkbox
                               id={`full-${type}`}
@@ -849,52 +866,8 @@ export default function TournamentRankings({
             </Alert>
           )}
 
-          
-          {!statsError && rankingStats && (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2">
-                    <Building className="h-5 w-5 text-blue-500" />
-                    <span className="text-sm font-medium">Schools</span>
-                  </div>
-                  <div className="text-2xl font-bold mt-1">{rankingStats.tournament_summary?.total_teams || 0}</div>
-                </CardContent>
-              </Card>
 
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2">
-                    <Users className="h-5 w-5 text-green-500" />
-                    <span className="text-sm font-medium">Students</span>
-                  </div>
-                  <div className="text-2xl font-bold mt-1">{rankingStats.tournament_summary?.total_speakers || 0}</div>
-                </CardContent>
-              </Card>
 
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2">
-                    <Star className="h-5 w-5 text-purple-500" />
-                    <span className="text-sm font-medium">Volunteers</span>
-                  </div>
-                  <div className="text-2xl font-bold mt-1">{volunteerRankings?.length || 0}</div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2">
-                    <Trophy className="h-5 w-5 text-orange-500" />
-                    <span className="text-sm font-medium">Debates</span>
-                  </div>
-                  <div className="text-2xl font-bold mt-1">{rankingStats.tournament_summary?.total_debates || 0}</div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          
           <Card>
             <CardContent className="p-4">
               <div className="flex flex-col lg:flex-row gap-4">
@@ -950,32 +923,41 @@ export default function TournamentRankings({
             </CardContent>
           </Card>
 
-          
+
           <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)}>
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
+              <TabsTrigger value="teams" className="flex items-center gap-2">
+                <UsersRound className="h-4 w-4" />
+                <span className="hidden custom:inline">Teams</span>
+                {teamRankings && (
+                  <Badge variant="secondary" className="ml-1 hidden custom:inline-flex">
+                    {teamRankings.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
               <TabsTrigger value="schools" className="flex items-center gap-2">
-                <Building className="h-4 w-4" />
-                Schools
+                <School className="h-4 w-4" />
+                <span className="hidden custom:inline">Schools</span>
                 {schoolRankings && (
-                  <Badge variant="secondary" className="ml-1">
+                  <Badge variant="secondary" className="ml-1 hidden custom:inline-flex">
                     {schoolRankings.length}
                   </Badge>
                 )}
               </TabsTrigger>
               <TabsTrigger value="students" className="flex items-center gap-2">
-                <Users className="h-4 w-4" />
-                Students
+                <GraduationCap className="h-4 w-4" />
+                <span className="hidden custom:inline">Students</span>
                 {studentRankings && (
-                  <Badge variant="secondary" className="ml-1">
+                  <Badge variant="secondary" className="ml-1 hidden custom:inline-flex">
                     {studentRankings.length}
                   </Badge>
                 )}
               </TabsTrigger>
               <TabsTrigger value="volunteers" className="flex items-center gap-2">
-                <Star className="h-4 w-4" />
-                Volunteers
+                <Users className="h-4 w-4" />
+                <span className="hidden custom:inline">Volunteers</span>
                 {volunteerRankings && (
-                  <Badge variant="secondary" className="ml-1">
+                  <Badge variant="secondary" className="ml-1 hidden custom:inline-flex">
                     {volunteerRankings.length}
                   </Badge>
                 )}
@@ -988,6 +970,47 @@ export default function TournamentRankings({
                 <span className="ml-2">Loading rankings...</span>
               </div>
             )}
+
+            <TabsContent value="teams" className="space-y-4">
+              {teamError ? (
+                <NotAvailableCard
+                  response={teamRankingsResponse!}
+                  title="Team Rankings Not Available"
+                  icon={UsersRound}
+                />
+              ) : currentRankings.length > 0 ? (
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {currentRankings.map((team: TeamRanking) => (
+                    <TeamRankingCard key={team.team_id} team={team} />
+                  ))}
+                </div>
+              ) : (
+                <Card>
+                  <CardContent className="text-center py-12">
+                    <UsersRound className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-lg font-medium mb-2">No Team Rankings</h3>
+                    <p className="text-muted-foreground">
+                      {searchQuery || filterSchool !== 'all'
+                        ? 'No teams match your search criteria.'
+                        : 'Team rankings will appear here once calculated.'
+                      }
+                    </p>
+                    {(searchQuery || filterSchool !== 'all') && (
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setSearchQuery('');
+                          setFilterSchool('all');
+                        }}
+                        className="mt-3"
+                      >
+                        Clear Filters
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
 
             <TabsContent value="schools" className="space-y-4">
               {schoolError ? (
@@ -1112,230 +1135,6 @@ export default function TournamentRankings({
               )}
             </TabsContent>
           </Tabs>
-
-          
-          {canViewAdvancedStats && !statsError && rankingStats && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5" />
-                  Tournament Insights
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div>
-                    <h4 className="font-medium mb-3">Performance Distribution</h4>
-                    <div className="space-y-3">
-                      {rankingStats.team_statistics && (
-                        <div>
-                          <div className="flex justify-between text-sm mb-1">
-                            <span>Perfect Teams (All Wins)</span>
-                            <span>{rankingStats.team_statistics.perfect_teams || 0}</span>
-                          </div>
-                          <div className="flex justify-between text-sm mb-1">
-                            <span>Winless Teams</span>
-                            <span>{rankingStats.team_statistics.winless_teams || 0}</span>
-                          </div>
-                          <div className="flex justify-between text-sm mb-1">
-                            <span>Average Wins per Team</span>
-                            <span>{rankingStats.team_statistics.avg_wins?.toFixed(1) || '0.0'}</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium mb-3">Competition Quality</h4>
-                    <div className="space-y-3">
-                      {rankingStats.debate_statistics && (
-                        <div>
-                          <div className="flex justify-between text-sm mb-1">
-                            <span>Total Debates</span>
-                            <span>{rankingStats.debate_statistics.total_debates}</span>
-                          </div>
-                          <div className="flex justify-between text-sm mb-1">
-                            <span>Completion Rate</span>
-                            <span>{((rankingStats.debate_statistics.completed_debates / rankingStats.debate_statistics.total_debates) * 100).toFixed(1)}%</span>
-                          </div>
-                          <div className="flex justify-between text-sm mb-1">
-                            <span>Close Debates</span>
-                            <span>{rankingStats.debate_statistics.close_debates || 0}</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {rankingStats.insights && rankingStats.insights.length > 0 && (
-                  <div className="mt-6">
-                    <h4 className="font-medium mb-3">Key Insights</h4>
-                    <div className="space-y-2">
-                      {rankingStats.insights.map((insight, index) => (
-                        <Alert key={index}>
-                          <TrendingUp className="h-4 w-4" />
-                          <AlertDescription>{insight}</AlertDescription>
-                        </Alert>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          
-          {canViewBrackets && !bracketsError && eliminationBrackets && eliminationBrackets.brackets && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Trophy className="h-5 w-5" />
-                  Elimination Brackets Preview
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-center">
-                    <div>
-                      <div className="text-2xl font-bold">{eliminationBrackets.bracket_size}</div>
-                      <div className="text-sm text-muted-foreground">Bracket Size</div>
-                    </div>
-                    <div>
-                      <div className="text-2xl font-bold">{eliminationBrackets.bracket_size}</div>
-                      <div className="text-sm text-muted-foreground">Qualified Teams</div>
-                    </div>
-                    <div>
-                      <div className="text-2xl font-bold">{eliminationBrackets.elimination_rounds}</div>
-                      <div className="text-sm text-muted-foreground">Elimination Rounds</div>
-                    </div>
-                    <div>
-                      <div className="text-2xl font-bold">
-                        {eliminationBrackets.qualification_stats?.qualification_threshold.min_wins || 0}
-                      </div>
-                      <div className="text-sm text-muted-foreground">Min Wins to Qualify</div>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  <div>
-                    <h5 className="font-medium mb-3">Sample Bracket Matchups</h5>
-                    <div className="grid gap-3">
-                      {eliminationBrackets.brackets.slice(0, 4).map((bracket: any, index: number) => (
-                        <div key={index} className="flex items-center justify-between p-3 border rounded">
-                          <div className="flex items-center gap-3">
-                            <Badge variant="outline">#{bracket.top_seed.rank}</Badge>
-                            <span className="font-medium">{bracket.top_seed.team_name}</span>
-                            <span className="text-sm text-muted-foreground">
-                              ({bracket.top_seed.wins}W, {bracket.top_seed.total_points}pts)
-                            </span>
-                          </div>
-
-                          <div className="text-muted-foreground font-medium">VS</div>
-
-                          <div className="flex items-center gap-3">
-                            <span className="text-sm text-muted-foreground">
-                              ({bracket.bottom_seed.wins}W, {bracket.bottom_seed.total_points}pts)
-                            </span>
-                            <span className="font-medium">{bracket.bottom_seed.team_name}</span>
-                            <Badge variant="outline">#{bracket.bottom_seed.rank}</Badge>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {eliminationBrackets.qualification_stats?.missed_qualification &&
-                      eliminationBrackets.qualification_stats.missed_qualification.length > 0 && (
-                        <div className="mt-4">
-                          <h6 className="text-sm font-medium mb-2">Just Missed Qualification</h6>
-                          <div className="space-y-1">
-                            {eliminationBrackets.qualification_stats.missed_qualification.slice(0, 3).map((team: any, index: number) => (
-                              <div key={index} className="flex items-center justify-between text-sm p-2 bg-muted/50 rounded">
-                                <div className="flex items-center gap-2">
-                                  <Badge variant="secondary">#{team.rank}</Badge>
-                                  <span>{team.team_name}</span>
-                                </div>
-                                <div className="text-muted-foreground">
-                                  {team.wins}W, {team.total_points}pts
-                                  {team.points_behind > 0 && (
-                                    <span className="ml-2 text-red-600">
-                                      (-{team.points_behind} pts)
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          
-          {canViewBrackets && bracketsError && (
-            <Card>
-              <CardContent className="text-center py-8">
-                <Trophy className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-                <h4 className="font-medium mb-2">Elimination Brackets Not Available</h4>
-                <p className="text-sm text-muted-foreground">
-                  {bracketsError.includes('require')
-                    ? "Elimination brackets will be available once all preliminary rounds are completed."
-                    : bracketsError
-                  }
-                </p>
-              </CardContent>
-            </Card>
-          )}
-
-          
-          {canViewDataQuality && !statsError && rankingStats?.data_quality && (
-            <Alert>
-              <Info className="h-4 w-4" />
-              <AlertTitle>Data Quality</AlertTitle>
-              <AlertDescription>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
-                  <div className="flex items-center gap-2">
-                    {rankingStats.data_quality.missing_team_results === 0 ? (
-                      <CheckCircle className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <AlertCircle className="h-4 w-4 text-orange-500" />
-                    )}
-                    <span className="text-sm">
-                      Team Results: {rankingStats.data_quality.missing_team_results === 0 ? 'Complete' : `${rankingStats.data_quality.missing_team_results} missing`}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {rankingStats.data_quality.missing_speaker_results === 0 ? (
-                      <CheckCircle className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <AlertCircle className="h-4 w-4 text-orange-500" />
-                    )}
-                    <span className="text-sm">
-                      Speaker Results: {rankingStats.data_quality.missing_speaker_results === 0 ? 'Complete' : `${rankingStats.data_quality.missing_speaker_results} missing`}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {rankingStats.data_quality.scored_debates_percentage >= 95 ? (
-                      <CheckCircle className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <AlertCircle className="h-4 w-4 text-orange-500" />
-                    )}
-                    <span className="text-sm">
-                      Scored Debates: {rankingStats.data_quality.scored_debates_percentage.toFixed(1)}%
-                    </span>
-                  </div>
-                </div>
-              </AlertDescription>
-            </Alert>
-          )}
-
         </div>
       </Card>
     </div>

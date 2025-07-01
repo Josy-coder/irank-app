@@ -96,6 +96,61 @@ export const getJudgeAssignedDebates = query({
   },
 });
 
+const updateDebateResults = async (ctx: any, debateId: Id<"debates">) => {
+  const submissions = await ctx.db
+    .query("judging_scores")
+    .withIndex("by_debate_id", (q: { eq: (arg0: string, arg1: Id<"debates">) => any; }) => q.eq("debate_id", debateId))
+    .filter((q: any) => q.eq(q.field("feedback_submitted"), true))
+    .collect();
+
+  if (submissions.length === 0) return;
+
+  const debate = await ctx.db.get(debateId);
+  if (!debate) return;
+
+  const propVotes = submissions.filter((s: { winning_position: string; }) => s.winning_position === "proposition").length;
+  const oppVotes = submissions.filter((s: { winning_position: string; }) => s.winning_position === "opposition").length;
+
+  let winningTeamId: Id<"teams"> | undefined;
+  let winningPosition: "proposition" | "opposition" | undefined;
+
+  if (propVotes > oppVotes) {
+    winningTeamId = debate.proposition_team_id;
+    winningPosition = "proposition";
+  } else if (oppVotes > propVotes) {
+    winningTeamId = debate.opposition_team_id;
+    winningPosition = "opposition";
+  }
+
+  const teamPoints = new Map<Id<"teams">, number>();
+  submissions.forEach((submission: { speaker_scores: any[]; }) => {
+    submission.speaker_scores.forEach(speakerScore => {
+      const currentPoints = teamPoints.get(speakerScore.team_id) || 0;
+      teamPoints.set(speakerScore.team_id, currentPoints + speakerScore.score);
+    });
+  });
+
+  const avgTeamPoints = new Map<Id<"teams">, number>();
+  teamPoints.forEach((totalPoints, teamId) => {
+    avgTeamPoints.set(teamId, totalPoints / submissions.length);
+  });
+
+  await ctx.db.patch(debateId, {
+    winning_team_id: winningTeamId,
+    winning_team_position: winningPosition,
+    proposition_votes: propVotes,
+    opposition_votes: oppVotes,
+    proposition_team_points: debate.proposition_team_id
+      ? avgTeamPoints.get(debate.proposition_team_id) || 0
+      : undefined,
+    opposition_team_points: debate.opposition_team_id
+      ? avgTeamPoints.get(debate.opposition_team_id) || 0
+      : undefined,
+    status: "completed",
+    updated_at: Date.now(),
+  });
+};
+
 export const submitBallot = mutation({
   args: {
     token: v.string(),
@@ -113,10 +168,6 @@ export const submitBallot = mutation({
       teamwork_strategy: v.number(),
       rebuttal_response: v.number(),
       comments: v.optional(v.string()),
-      clarity: v.optional(v.number()),
-      fairness: v.optional(v.number()),
-      knowledge: v.optional(v.number()),
-      helpfulness: v.optional(v.number()),
       bias_detected: v.optional(v.boolean()),
       bias_explanation: v.optional(v.string()),
     })),
@@ -187,7 +238,6 @@ export const submitBallot = mutation({
     };
 
     const processedSpeakerScores = args.speaker_scores.map(speaker => {
-
       validateScore(speaker.content_knowledge, "content_knowledge");
       validateScore(speaker.argumentation_logic, "argumentation_logic");
       validateScore(speaker.presentation_style, "presentation_style");
@@ -222,37 +272,19 @@ export const submitBallot = mutation({
       notes: args.notes,
       submitted_at: Date.now(),
       feedback_submitted: args.is_final_submission,
+      created_at: Date.now(),
     };
 
     let ballotId: Id<"judging_scores">;
 
     if (existingSubmission) {
-
-      await ctx.db.patch(existingSubmission._id, ballotData);
+      await ctx.db.patch(existingSubmission._id, {
+        ...ballotData,
+        updated_at: Date.now(),
+      });
       ballotId = existingSubmission._id;
-
-      await ctx.runMutation(internal.functions.audit.createAuditLog, {
-        user_id: judgeId,
-        action: "ballot_submitted",
-        resource_type: "judging_scores",
-        resource_id: existingSubmission._id,
-        description: args.is_final_submission
-          ? "Submitted final ballot"
-          : "Updated ballot draft",
-      });
     } else {
-
       ballotId = await ctx.db.insert("judging_scores", ballotData);
-
-      await ctx.runMutation(internal.functions.audit.createAuditLog, {
-        user_id: judgeId,
-        action: "ballot_submitted",
-        resource_type: "judging_scores",
-        resource_id: ballotId,
-        description: args.is_final_submission
-          ? "Submitted final ballot"
-          : "Created ballot draft",
-      });
     }
 
     if (args.fact_checks || args.argument_flow) {
@@ -261,7 +293,6 @@ export const submitBallot = mutation({
         const updates: any = {};
 
         if (args.fact_checks) {
-
           const existingFactChecks = currentDebate.fact_checks || [];
           const newFactChecks = args.fact_checks.filter(newCheck =>
             !existingFactChecks.some(existing =>
@@ -272,7 +303,6 @@ export const submitBallot = mutation({
         }
 
         if (args.argument_flow) {
-
           const existingFlow = currentDebate.argument_flow || [];
           const newFlow = args.argument_flow.filter(newArg =>
             !existingFlow.some(existing =>
@@ -284,17 +314,26 @@ export const submitBallot = mutation({
           updates.argument_flow = [...existingFlow, ...newFlow];
         }
 
-        await ctx.db.patch(args.debate_id, updates);
+        if (Object.keys(updates).length > 0) {
+          updates.updated_at = Date.now();
+          await ctx.db.patch(args.debate_id, updates);
+        }
       }
     }
 
-    if (args.is_final_submission && debate.head_judge_id === judgeId) {
-      await ctx.db.patch(args.debate_id, {
-        winning_team_id: args.winning_team_id,
-        winning_team_position: args.winning_position,
-        status: "completed",
-      });
+    if (args.is_final_submission) {
+      await updateDebateResults(ctx, args.debate_id);
     }
+
+    await ctx.runMutation(internal.functions.audit.createAuditLog, {
+      user_id: judgeId,
+      action: "ballot_submitted",
+      resource_type: "judging_scores",
+      resource_id: ballotId,
+      description: args.is_final_submission
+        ? "Submitted final ballot"
+        : "Updated ballot draft",
+    });
 
     return { success: true, ballot_id: ballotId };
   },
@@ -406,6 +445,7 @@ export const flagBallot = mutation({
 
     await ctx.db.patch(args.ballot_id, {
       notes: flaggedNotes,
+      updated_at: Date.now(),
     });
 
     await ctx.runMutation(internal.functions.audit.createAuditLog, {

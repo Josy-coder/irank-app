@@ -112,7 +112,7 @@ const FORMATS = [
 ]
 
 const DEFAULT_SPEAKING_TIMES = {
-  WorldSchools: { speaker1: 8, speaker2: 8, speaker3: 8 },
+  WorldSchools: { speaker1: 5, speaker2: 5, speaker3: 5 },
   BritishParliamentary: { speaker1: 7, speaker2: 8, speaker3: 8 },
   PublicForum: { speaker1: 4, speaker2: 4, speaker3: 3 },
   LincolnDouglas: { speaker1: 6, speaker2: 3, speaker3: 6 },
@@ -149,7 +149,7 @@ export default function CreateTournamentPage() {
     teamSize: 3,
     prelimRounds: 3,
     eliminationRounds: 3,
-    judgesPerDebate: 3,
+    judgesPerDebate: 1,
     fee: "",
     feeCurrency: "RWF",
     speakingTimes: DEFAULT_SPEAKING_TIMES.WorldSchools,
@@ -891,7 +891,7 @@ export default function CreateTournamentPage() {
                         max="15"
                         value={formData.speakingTimes[`speaker${speakerNum}`] || 8}
                         onChange={(e) =>
-                          handleSpeakingTimeChange(`speaker${speakerNum}`, parseInt(e.target.value) || 8)
+                          handleSpeakingTimeChange(`speaker${speakerNum}`, parseInt(e.target.value) || 5)
                         }
                       />
                     </div>
