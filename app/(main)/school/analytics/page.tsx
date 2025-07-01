@@ -1046,7 +1046,7 @@ export default function SchoolAnalyticsPage() {
                 </CardContent>
               </Card>
 
-              {/* Benchmarking Section */}
+              
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">School Performance Benchmarking</CardTitle>
@@ -1499,7 +1499,7 @@ export default function SchoolAnalyticsPage() {
                 </Card>
               </div>
 
-              {/* Additional Achievement Stats */}
+              
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">Achievement Progress Overview</CardTitle>

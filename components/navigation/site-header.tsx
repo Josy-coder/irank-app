@@ -9,8 +9,8 @@ import {
   Settings,
   LogOut,
   ChevronDown,
-  CloudOff,
-} from "lucide-react"
+  CloudOff, MessageCircleQuestion, CircleHelp
+} from "lucide-react";
 import Link from "next/link"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
@@ -80,6 +80,9 @@ export function SiteHeader() {
         </div>
 
         <div className="flex items-center gap-4">
+          <Link href="https://irankhub-docs.vercel.app">
+            <CircleHelp className="h-5 w-5 text-muted-foreground hover:text-primary hover:cursor-pointer" />
+          </Link>
           <NotificationCenter />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

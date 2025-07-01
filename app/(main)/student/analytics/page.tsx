@@ -381,6 +381,10 @@ export default function StudentAnalyticsPage() {
     avg_score: { label: "Avg Score", color: "hsl(var(--chart-3))" },
   } as ChartConfig), [])
 
+  const regionalPerformance = performanceData?.tournament_analysis?.regional_performance ?? [];
+  const bestFormats = performanceData?.tournament_analysis?.best_formats ?? [];
+
+
   const handleCopyChartImage = useCallback(async (chartId: string) => {
     try {
       const element = document.getElementById(chartId)
@@ -628,7 +632,7 @@ export default function StudentAnalyticsPage() {
         </div>
 
         <div className="p-6 space-y-6">
-          {/* Main Stats */}
+          
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
               title="Current Rank"
@@ -943,7 +947,7 @@ export default function StudentAnalyticsPage() {
                 </div>
               )}
 
-              {/* Judge Preferences Section */}
+              
               {performanceData?.judge_feedback_analysis?.judge_preferences && (
                 <div className="mt-6 border-t pt-6">
                   <h4 className="font-semibold text-sm text-blue-600 mb-3 flex items-center gap-2">
@@ -974,7 +978,7 @@ export default function StudentAnalyticsPage() {
                 </div>
               )}
 
-              {/* Feedback Trends Section */}
+              
               {performanceData?.judge_feedback_analysis?.feedback_trends && (
                 <div className="mt-6 border-t pt-6">
                   <h4 className="font-semibold text-sm text-purple-600 mb-3 flex items-center gap-2">
@@ -1006,7 +1010,7 @@ export default function StudentAnalyticsPage() {
             </CardContent>
           </Card>
 
-          {/* Tournament Analysis Details */}
+          
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Tournament Analysis Details</CardTitle>
@@ -1014,15 +1018,15 @@ export default function StudentAnalyticsPage() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/* Regional Performance */}
+                
                 <div>
                   <h4 className="font-semibold text-sm text-blue-600 mb-3 flex items-center gap-2">
                     <School className="h-4 w-4" />
                     Regional Performance
                   </h4>
-                  {performanceData?.tournament_analysis?.regional_performance?.length > 0 ? (
+                  {regionalPerformance.length > 0 ? (
                     <div className="space-y-2">
-                      {performanceData.tournament_analysis.regional_performance.map((region, index) => (
+                      {regionalPerformance.map((region, index) => (
                         <div key={index} className="flex justify-between items-center p-2 border rounded">
                           <div>
                             <span className="font-medium text-sm">{region.region}</span>
@@ -1042,7 +1046,7 @@ export default function StudentAnalyticsPage() {
                   )}
                 </div>
 
-                {/* Difficulty Analysis */}
+                
                 <div>
                   <h4 className="font-semibold text-sm text-orange-600 mb-3 flex items-center gap-2">
                     <Trophy className="h-4 w-4" />
@@ -1104,15 +1108,15 @@ export default function StudentAnalyticsPage() {
                   )}
                 </div>
 
-                {/* Best Formats Detail */}
+                
                 <div>
                   <h4 className="font-semibold text-sm text-green-600 mb-3 flex items-center gap-2">
                     <Medal className="h-4 w-4" />
                     Format Mastery
                   </h4>
-                  {performanceData?.tournament_analysis?.best_formats?.length > 0 ? (
+                  {bestFormats.length > 0 ? (
                     <div className="space-y-2">
-                      {performanceData.tournament_analysis.best_formats.slice(0, 4).map((format, index) => (
+                      {bestFormats.slice(0, 4).map((format, index) => (
                         <div key={index} className="flex justify-between items-center p-2 border rounded">
                           <div>
                             <span className="font-medium text-sm">{format.format}</span>

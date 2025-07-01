@@ -353,12 +353,12 @@ export function NotificationCenter() {
       <DropdownMenu open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
         <DropdownMenuTrigger asChild>
           <div className="relative">
-            <div className="w-8 h-8 bg-white border border-gray-200 dark:border-gray-700 rounded-full flex items-center justify-center cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+            <div className="w-7 h-7 bg-white border border-gray-200 dark:border-gray-700 rounded-full flex items-center justify-center cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
               <Bell className="h-4 w-4 text-muted-foreground" />
             </div>
             {unreadCount > 0 && (
-              <div className="absolute -top-1 -right-2 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
-                <span className="text-xs text-white font-medium">{unreadCount > 9 ? "9+" : unreadCount}</span>
+              <div className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full flex items-center justify-center">
+                <span className="text-[10px] text-white font-medium">{unreadCount > 9 ? "9+" : unreadCount}</span>
               </div>
             )}
           </div>

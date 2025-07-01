@@ -261,9 +261,9 @@ const computeTeamRankings = async (
     }
 
     if (debateScores.length > 0) {
-      for (const [teamId, totalPoints] of teamPointsFromJudges.entries()) {
+      teamPointsFromJudges.forEach((totalPoints, teamId) => {
         teamPointsFromJudges.set(teamId, totalPoints / debateScores.length);
-      }
+      });
     }
 
     if (propTeamId && teamStats.has(propTeamId)) {
@@ -1025,7 +1025,10 @@ export const getVolunteerRankings = query({
       }
     }
 
-    for (const volunteerId of allVolunteers) {
+    const volunteerArray = Array.from(allVolunteers);
+
+    for (let i = 0; i < volunteerArray.length; i++) {
+      const volunteerId = volunteerArray[i];
       const volunteer = await ctx.db.get(volunteerId);
       if (!volunteer) continue;
 
@@ -1040,7 +1043,9 @@ export const getVolunteerRankings = query({
       });
     }
 
-    for (const debate of debates) {
+
+    for (let i = 0; i < debates.length; i++) {
+      const debate = debates[i];
       if (debate.status !== "completed") continue;
 
       const round = rounds.find(r => r._id === debate.round_id);
@@ -1049,7 +1054,8 @@ export const getVolunteerRankings = query({
       const isElimination = round.type === "elimination";
       const isPrelim = round.type === "preliminary";
 
-      for (const judgeId of debate.judges) {
+      for (let j = 0; j < debate.judges.length; j++) {
+        const judgeId = debate.judges[j];
         const stats = volunteerStats.get(judgeId);
         if (!stats) continue;
 
@@ -1066,7 +1072,6 @@ export const getVolunteerRankings = query({
         if (stats) {
           stats.head_judge_assignments++;
           if (!debate.judges.includes(debate.head_judge_id)) {
-
             stats.total_debates_judged++;
             if (isElimination) {
               stats.elimination_debates_judged++;
@@ -1082,13 +1087,21 @@ export const getVolunteerRankings = query({
     const totalVolunteers = volunteerStats.size;
     const expectedDebatesPerVolunteer = totalVolunteers > 0 ? Math.ceil(totalDebates / totalVolunteers) : 0;
 
-    for (const feedback of allFeedback) {
+    for (let i = 0; i < allFeedback.length; i++) {
+      const feedback = allFeedback[i];
       const stats = volunteerStats.get(feedback.judge_id);
       if (!stats) continue;
 
-      const avgFeedbackScore = (feedback.clarity + feedback.fairness + feedback.knowledge + feedback.helpfulness) / 4;
+      const avgFeedbackScore = (
+        feedback.clarity +
+        feedback.fairness +
+        feedback.knowledge +
+        feedback.helpfulness
+      ) / 4;
+
       stats.feedback_scores.push(avgFeedbackScore);
     }
+
 
     const volunteerRankings: VolunteerRanking[] = await Promise.all(
       Array.from(volunteerStats.entries()).map(async ([volunteerId, stats]) => {

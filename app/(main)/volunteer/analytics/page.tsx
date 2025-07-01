@@ -550,7 +550,7 @@ export default function VolunteerAnalyticsPage() {
         </div>
 
         <div className="p-6 space-y-6">
-          {/* Main Stats */}
+          
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
               title="Debates Judged"
@@ -850,7 +850,7 @@ export default function VolunteerAnalyticsPage() {
                 </div>
               )}
 
-              {/* Feedback Given Analysis */}
+              
               {judgingData?.feedback_analysis?.feedback_given && (
                 <div className="mt-6 border-t pt-6">
                   <h4 className="font-semibold text-sm text-purple-600 mb-3 flex items-center gap-2">
@@ -966,7 +966,7 @@ export default function VolunteerAnalyticsPage() {
             </Card>
           </div>
 
-          {/* Improvement Areas */}
+          
           {judgingData?.comparative_analysis?.improvement_areas && (
             <Card>
               <CardHeader>

@@ -473,19 +473,22 @@ function YearGrid({
 } & React.HTMLAttributes<HTMLDivElement>) {
   const { goToMonth, selected } = useDayPicker()
 
-  const getSelectedMonth = (): number => {
-    if (!selected) return 0
+  const getSelectedMonth = (selected: any): number => {
+    if (!selected) return 0;
 
-    if (selected instanceof Date) {
-      return selected.getMonth()
+    if (typeof selected === 'object' && selected !== null) {
+      if (selected instanceof Date) {
+        return selected.getMonth();
+      }
+
+      if ('from' in selected && selected.from instanceof Date) {
+        return selected.from.getMonth();
+      }
     }
 
-    if (typeof selected === 'object' && 'from' in selected && selected.from instanceof Date) {
-      return selected.from.getMonth()
-    }
+    return new Date().getMonth();
+  };
 
-    return new Date().getMonth()
-  }
 
   return (
     <div className={cn("grid grid-cols-4 gap-y-2", className)} {...props}>
@@ -521,7 +524,7 @@ function YearGrid({
                 goToMonth(
                   new Date(
                     displayYears.from + i,
-                    getSelectedMonth()
+                    getSelectedMonth(selected)
                   )
                 )
               }}
