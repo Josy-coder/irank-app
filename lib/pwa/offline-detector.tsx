@@ -402,7 +402,7 @@ export function useConvexOfflineDetector(options?: ConvexOfflineDetectorOptions)
     return detector.getState()
   })
 
-  const detectorRef = useRef<ConvexOfflineDetector>()
+  const detectorRef = useRef<ConvexOfflineDetector | undefined>(undefined)
 
   useEffect(() => {
     if (typeof window !== 'undefined') {

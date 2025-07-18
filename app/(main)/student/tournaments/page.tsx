@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Building } from "lucide-react"
 import { useAuth } from "@/hooks/use-auth"
-import { TournamentList } from "@/components/tournaments/tournament-list"
-import { LeagueList } from "@/components/tournaments/league-list"
 import { Id } from "@/convex/_generated/dataModel";
+import dynamic from "next/dynamic";
+import AppLoader from "@/components/app-loader";
 
 export default function StudentTournamentsPage() {
   const { token} = useAuth()
@@ -18,6 +18,22 @@ export default function StudentTournamentsPage() {
     setSelectedLeagueId(leagueId)
     setMobileLeaguesOpen(false)
   }
+
+  const LeagueList = dynamic(() =>
+      import("@/components/tournaments/league-list").then(mod => mod.LeagueList),
+    {
+      loading: () => <div><AppLoader /></div>,
+      ssr: false,
+    }
+  )
+
+  const TournamentList = dynamic(() =>
+      import("@/components/tournaments/tournament-list").then(mod => mod.TournamentList),
+    {
+      loading: () => <div><AppLoader /></div>,
+      ssr: false,
+    }
+  )
 
   return (
     <div className="space-y-6">

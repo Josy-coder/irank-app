@@ -1,10 +1,20 @@
 "use client"
 
-import SchoolAdminSignUpForm from "@/components/auth/signup/school-signup-form"
 import { motion } from "framer-motion"
 import Image from "next/image"
+import dynamic from "next/dynamic";
+import AppLoader from "@/components/app-loader";
+import React from "react";
 
 export default function SchoolAdminSignUp() {
+
+  const SchoolAdminSignUpForm = dynamic(() =>
+      import("@/components/auth/signup/school-signup-form").then(mod => mod.SchoolAdminSignUpForm),
+    {
+      loading: () => <div><AppLoader /></div>,
+      ssr: false,
+    }
+  )
   return (
     <div className="flex min-h-screen dark:bg-gray-900">
 

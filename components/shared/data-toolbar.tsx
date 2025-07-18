@@ -1,4 +1,4 @@
-import React from "react"
+import React from "react";
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -44,8 +44,13 @@ export function DataToolbar({
                               hideSearch = false,
                             }: DataToolbarProps) {
   const hasFilters = filters && filters.some(filter =>
-    React.isValidElement(filter) && filter.props.selected?.length > 0
-  )
+    React.isValidElement(filter) &&
+    (() => {
+      const selected = (filter as React.ReactElement<{ selected?: any[] }>).props.selected;
+      return selected !== undefined && selected.length > 0;
+    })()
+  );
+
 
   return (
     <div className="w-full bg-brown p-4 space-y-4 md:space-y-0 md:flex md:items-center md:justify-between">

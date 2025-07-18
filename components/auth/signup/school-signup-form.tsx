@@ -56,7 +56,7 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>
 
-const SchoolAdminSignUpForm = () => {
+export function SchoolAdminSignUpForm () {
   const [step, setStep] = useState(1)
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -604,5 +604,3 @@ const SchoolAdminSignUpForm = () => {
     </div>
   );
 };
-
-export default SchoolAdminSignUpForm;

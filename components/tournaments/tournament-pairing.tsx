@@ -917,7 +917,7 @@ export default function TournamentPairings({
   const [generationProgress, setGenerationProgress] = useState(0);
   const [isRecalculating, setIsRecalculating] = useState(false);
 
-  const draftSaveTimeoutRef = useRef<NodeJS.Timeout>();
+  const draftSaveTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
   const isAdmin = userRole === 'admin';
   const hasToken = Boolean(token);
