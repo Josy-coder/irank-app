@@ -184,16 +184,36 @@ export const sendTournamentNotification = internalMutation({
 });
 
 
-export const getUserNotifications = query({
+export const getUserNotifications = mutation({
   args: {
     token: v.string(),
     limit: v.optional(v.number()),
     is_read: v.optional(v.boolean()),
   },
   handler: async (ctx, args): Promise<Doc<"notifications">[]> => {
-    const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
+    let sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
       token: args.token,
     });
+
+    let currentToken = args.token;
+
+    if (!sessionResult.valid) {
+      try {
+        const refreshResult = await ctx.runMutation(internal.functions.auth.refreshToken, {
+          token: args.token,
+        });
+
+        if (refreshResult.success) {
+          currentToken = refreshResult.token;
+          sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
+            token: currentToken,
+          });
+        }
+      } catch (refreshError) {
+        console.error("Token refresh failed:", refreshError);
+        throw new Error("Authentication required");
+      }
+    }
 
     if (!sessionResult.user || !sessionResult.valid) {
       throw new Error("Authentication required");
@@ -216,14 +236,34 @@ export const getUserNotifications = query({
   },
 });
 
-export const getUnreadCount = query({
+export const getUnreadCount = mutation({
   args: {
     token: v.string(),
   },
   handler: async (ctx, args): Promise<number> => {
-    const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
+    let sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
       token: args.token,
     });
+
+    let currentToken = args.token;
+
+    if (!sessionResult.valid) {
+      try {
+        const refreshResult = await ctx.runMutation(internal.functions.auth.refreshToken, {
+          token: args.token,
+        });
+
+        if (refreshResult.success) {
+          currentToken = refreshResult.token;
+          sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
+            token: currentToken,
+          });
+        }
+      } catch (refreshError) {
+        console.error("Token refresh failed:", refreshError);
+        throw new Error("Authentication required");
+      }
+    }
 
     if (!sessionResult.user || !sessionResult.valid) {
       throw new Error("Authentication required");

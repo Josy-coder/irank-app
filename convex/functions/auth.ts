@@ -1359,7 +1359,7 @@ export const getCurrentUser = query({
   },
   handler: async (ctx, args): Promise<CurrentUserResponse> => {
     try {
-      const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
+      let sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
         token: args.token,
       });
 
@@ -1409,7 +1409,7 @@ export const getCurrentUser = query({
   },
 });
 
-export const refreshToken = mutation({
+export const refreshToken = internalMutation({
   args: {
     token: v.string(),
     device_info: v.optional(v.object({
@@ -1423,26 +1423,23 @@ export const refreshToken = mutation({
     try {
       const now = Date.now();
 
-      const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
-        token: args.token,
-      });
-
-      if (!sessionResult.valid || !sessionResult.user) {
-        throw new Error("Invalid session");
-      }
-
-      const user = await ctx.db.get<"users">(sessionResult.user.id);
-      if (!user) {
-        throw new Error("User not found");
-      }
-
-      const currentSession = await ctx.db
+      const session = await ctx.db
         .query("auth_sessions")
         .withIndex("by_session_token", (q) => q.eq("session_token", args.token))
         .first();
 
-      if (!currentSession) {
+      if (!session) {
         throw new Error("Session not found");
+      }
+
+      const gracePeriod = 30 * 24 * 60 * 60 * 1000; // 30 days
+      if (session.expires_at < now - gracePeriod) {
+        throw new Error("Session too old to refresh");
+      }
+
+      const user = await ctx.db.get(session.user_id);
+      if (!user) {
+        throw new Error("User not found");
       }
 
       const tokenPayload = {
@@ -1457,11 +1454,11 @@ export const refreshToken = mutation({
       const newSessionToken = await generateSecureToken(tokenPayload);
       const expiresAt = now + (7 * 24 * 60 * 60 * 1000);
 
-      await ctx.db.patch(currentSession._id, {
+      await ctx.db.patch(session._id, {
         session_token: newSessionToken,
         expires_at: expiresAt,
         last_used_at: now,
-        device_info: args.device_info || currentSession.device_info,
+        device_info: args.device_info || session.device_info,
       });
 
       return {

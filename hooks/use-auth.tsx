@@ -40,11 +40,11 @@ type AuthContextType = {
   token: string | null
   isAuthenticated: boolean
   isLoading: boolean
+  clearAuth: () => void
   signUp: (userData: SignUpData) => Promise<void>
   signIn: (email: string, password: string, rememberMe?: boolean, mfaCode?: string, expectedRole?: string) => Promise<SignInResult>
   signInWithPhone: (data: PhoneSignInData, expectedRole?: string) => Promise<void>
   signOut: () => Promise<void>
-  refreshToken: () => Promise<void>
   generateMagicLink: (email: string, purpose: MagicLinkPurpose) => Promise<void>
   verifyMagicLink: (token: string) => Promise<MagicLinkResult>
   resetPassword: (resetToken: string, newPassword: string) => Promise<void>
@@ -169,7 +169,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInMutation = useMutation(api.functions.auth.signIn)
   const signInWithPhoneMutation = useMutation(api.functions.auth.signInWithPhone)
   const signOutMutation = useMutation(api.functions.auth.signOut)
-  const refreshTokenMutation = useMutation(api.functions.auth.refreshToken)
   const generateMagicLinkMutation = useMutation(api.functions.auth.generateMagicLink)
   const verifyMagicLinkMutation = useMutation(api.functions.auth.verifyMagicLink)
   const resetPasswordMutation = useMutation(api.functions.auth.resetPassword)
@@ -225,6 +224,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       Math.random().toString(36).substring(2, 15)
     localStorage.setItem("device_id", deviceId)
     return deviceId
+  }
+
+  const clearAuth = () => {
+    setToken(null)
+    setUser(null)
+    localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(USER_KEY)
   }
 
   const handleSignOut = async () => {
@@ -386,7 +392,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false)
     }
   }
-  
+
   const generateMagicLink = async (email: string, purpose: MagicLinkPurpose) => {
     try {
       const result = await generateMagicLinkMutation({
@@ -541,7 +547,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(friendlyMessage)
     }
   }
-  
+
   const updateSecurityQuestion = async (question: string, answer: string, currentPassword: string) => {
     if (!token) throw new Error("Authentication required")
 
@@ -564,35 +570,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const refreshToken = async () => {
-    if (!token) return
-
-    try {
-      const result = await refreshTokenMutation({
-        token,
-        device_info: getDeviceInfo(),
-      })
-
-      if (result.success && result.token) {
-        setToken(result.token)
-        localStorage.setItem(TOKEN_KEY, result.token)
-      }
-    } catch (error) {
-      console.error("Token refresh error:", error)
-      handleSignOut()
-    }
-  }
-
   const value: AuthContextType = {
     user,
     token,
     isAuthenticated: !!token && !!user,
     isLoading,
+    clearAuth,
     signUp,
     signIn,
     signInWithPhone,
     signOut: handleSignOut,
-    refreshToken,
     generateMagicLink,
     verifyMagicLink,
     resetPassword,

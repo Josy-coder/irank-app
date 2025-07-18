@@ -1,28 +1,86 @@
-import { useQuery, useMutation } from "convex/react";
+import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useAuth } from "./use-auth";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 export function useNotifications() {
-  const { user, isAuthenticated, token } = useAuth();
+  const { user, isAuthenticated, token, clearAuth } = useAuth();
+  const router = useRouter();
   const [isSupported, setIsSupported] = useState(false);
   const [permission, setPermission] = useState<NotificationPermission>("default");
 
-  const notifications = useQuery(
-    api.functions.notifications.getUserNotifications,
-    isAuthenticated && user && token ? { token, limit: 50 } : "skip"
-  );
-
-  const unreadCount = useQuery(
-    api.functions.notifications.getUnreadCount,
-    isAuthenticated && user && token ? { token } : "skip"
-  );
-
+  const getUserNotificationsMutation = useMutation(api.functions.notifications.getUserNotifications);
+  const getUnreadCountMutation = useMutation(api.functions.notifications.getUnreadCount);
   const markAsRead = useMutation(api.functions.notifications.markAsRead);
   const markAllAsRead = useMutation(api.functions.notifications.markAllAsRead);
   const storePushSubscription = useMutation(api.functions.notifications.storePushSubscription);
   const removeSubscription = useMutation(api.functions.notifications.removeUserSubscription);
   const createNotification = useMutation(api.functions.notifications.createNotification);
+
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
+  const [isLoadingUnreadCount, setIsLoadingUnreadCount] = useState(false);
+
+  const handleAuthError = (error: any) => {
+    if (error.message && error.message.toLowerCase().includes("authentication required")) {
+      console.error("Authentication failed, redirecting to login:", error);
+      clearAuth();
+      router.push("/");
+      return true;
+    }
+    return false;
+  };
+
+  const loadNotifications = async () => {
+    if (!token) return;
+
+    setIsLoadingNotifications(true);
+    try {
+      const result = await getUserNotificationsMutation({
+        token,
+        limit: 50
+      });
+      setNotifications(result);
+    } catch (error: any) {
+      console.error("Failed to load notifications:", error);
+      if (!handleAuthError(error)) {
+
+        console.error("Notification loading error:", error);
+      }
+    } finally {
+      setIsLoadingNotifications(false);
+    }
+  };
+
+  const loadUnreadCount = async () => {
+    if (!token) return;
+
+    setIsLoadingUnreadCount(true);
+    try {
+      const result = await getUnreadCountMutation({ token });
+      setUnreadCount(result);
+    } catch (error: any) {
+      console.error("Failed to load unread count:", error);
+      if (!handleAuthError(error)) {
+
+        console.error("Unread count loading error:", error);
+      }
+    } finally {
+      setIsLoadingUnreadCount(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthenticated && user && token) {
+      loadNotifications();
+      loadUnreadCount();
+    } else {
+      setNotifications([]);
+      setUnreadCount(0);
+    }
+  }, [isAuthenticated, user, token]);
 
   useEffect(() => {
     setIsSupported(
@@ -93,6 +151,7 @@ export function useNotifications() {
       return subscription;
     } catch (error) {
       console.error('Failed to subscribe to push notifications:', error);
+      handleAuthError(error);
       throw error;
     }
   };
@@ -114,6 +173,7 @@ export function useNotifications() {
       }
     } catch (error) {
       console.error('Failed to unsubscribe from push notifications:', error);
+      handleAuthError(error);
       throw error;
     }
   };
@@ -126,9 +186,19 @@ export function useNotifications() {
         token,
         notification_id: notificationId as any
       });
-    } catch (error) {
+
+      setNotifications(prev =>
+        prev.map(n =>
+          n._id === notificationId ? { ...n, is_read: true } : n
+        )
+      );
+
+      await loadUnreadCount();
+    } catch (error: any) {
       console.error("Failed to mark notification as read:", error);
-      throw error;
+      if (!handleAuthError(error)) {
+        throw error;
+      }
     }
   };
 
@@ -137,9 +207,16 @@ export function useNotifications() {
 
     try {
       await markAllAsRead({ token });
-    } catch (error) {
+
+      setNotifications(prev =>
+        prev.map(n => ({ ...n, is_read: true }))
+      );
+      setUnreadCount(0);
+    } catch (error: any) {
       console.error("Failed to mark all notifications as read:", error);
-      throw error;
+      if (!handleAuthError(error)) {
+        throw error;
+      }
     }
   };
 
@@ -154,20 +231,27 @@ export function useNotifications() {
     if (!token) return;
 
     try {
-      return await createNotification({
+      const result = await createNotification({
         token,
         ...params,
         user_id: params.user_id as any
       });
-    } catch (error) {
+
+      await loadNotifications();
+      await loadUnreadCount();
+
+      return result;
+    } catch (error: any) {
       console.error("Failed to create notification:", error);
-      throw error;
+      if (!handleAuthError(error)) {
+        throw error;
+      }
     }
   };
 
   return {
-    notifications: notifications || [],
-    unreadCount: unreadCount || 0,
+    notifications,
+    unreadCount,
 
     isSupported,
     permission,
@@ -179,7 +263,10 @@ export function useNotifications() {
     markAllAsRead: handleMarkAllAsRead,
     createNotification: handleCreateNotification,
 
-    isLoading: notifications === undefined || unreadCount === undefined,
+    loadNotifications,
+    loadUnreadCount,
+
+    isLoading: isLoadingNotifications || isLoadingUnreadCount,
   };
 }
 

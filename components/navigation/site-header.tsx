@@ -9,7 +9,7 @@ import {
   Settings,
   LogOut,
   ChevronDown,
-  CloudOff, MessageCircleQuestion, CircleHelp
+  CloudOff, CircleHelp
 } from "lucide-react";
 import Link from "next/link"
 import { useState, useEffect } from "react"

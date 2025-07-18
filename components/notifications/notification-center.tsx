@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { formatDistanceToNow, isToday, isYesterday, format } from "date-fns"
 import {
   Bell,
@@ -12,7 +12,8 @@ import {
   Medal,
   Settings,
   UserCheck,
-  Clock
+  Clock,
+  RefreshCw
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -327,16 +328,50 @@ function NotificationItem({ notification, onClose, isInDropdown = false }: Notif
 }
 
 export function NotificationCenter() {
-  const { notifications, unreadCount, markAllAsRead, isLoading } = useNotifications()
+  const {
+    notifications,
+    unreadCount,
+    markAllAsRead,
+    loadNotifications,
+    loadUnreadCount,
+    isLoading
+  } = useNotifications()
+
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [isSheetOpen, setIsSheetOpen] = useState(false)
   const [showUnreadOnly, setShowUnreadOnly] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+
+  useEffect(() => {
+    if (!isDropdownOpen && !isSheetOpen) return
+
+    const interval = setInterval(() => {
+      loadNotifications()
+      loadUnreadCount()
+    }, 30000)
+
+    return () => clearInterval(interval)
+  }, [isDropdownOpen, isSheetOpen, loadNotifications, loadUnreadCount])
 
   const handleMarkAllAsRead = async () => {
     try {
       await markAllAsRead()
     } catch (error) {
       console.error("Failed to mark all as read:", error)
+    }
+  }
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true)
+    try {
+      await Promise.all([
+        loadNotifications(),
+        loadUnreadCount()
+      ])
+    } catch (error) {
+      console.error("Failed to refresh notifications:", error)
+    } finally {
+      setIsRefreshing(false)
     }
   }
 
@@ -376,17 +411,28 @@ export function NotificationCenter() {
                 <p className="text-xs text-muted-foreground">{unreadCount} new</p>
               )}
             </div>
-            {unreadCount > 0 && (
+            <div className="flex items-center gap-2">
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={handleMarkAllAsRead}
-                className="text-xs h-8 px-3 text-primary hover:bg-primary/10"
-                disabled={isLoading}
+                className="h-8 w-8 p-0"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
               >
-                Mark all as read
+                <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
               </Button>
-            )}
+              {unreadCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleMarkAllAsRead}
+                  className="text-xs h-8 px-3 text-primary hover:bg-primary/10"
+                  disabled={isLoading}
+                >
+                  Mark all as read
+                </Button>
+              )}
+            </div>
           </div>
 
           <ScrollArea className="h-[400px]">
@@ -451,6 +497,15 @@ export function NotificationCenter() {
                   Stay updated with your tournaments and debates
                 </SheetDescription>
               </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+              >
+                <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+              </Button>
             </div>
 
             <div className="flex items-center justify-between pt-4">
