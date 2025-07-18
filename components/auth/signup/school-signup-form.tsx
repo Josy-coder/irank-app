@@ -40,9 +40,7 @@ const formSchema = z.object({
   position: z.string().min(2, { message: "Position is required" }),
   // School fields
   schoolName: z.string().min(2, { message: "School name is required" }),
-  schoolType: z.enum(["Private", "Public", "Government Aided", "International"], {
-    required_error: "Please select school type"
-  }),
+  schoolType: z.enum(["Private", "Public", "Government Aided", "International"]),
   country: z.string().min(1, { message: "Country is required" }),
   province: z.string().min(1, { message: "Province is required" }),
   district: z.string().min(1, { message: "District is required" }),
