@@ -1,7 +1,7 @@
 "use client";
 
 import { ConvexProvider, ConvexReactClient } from "convex/react";
-import { ReactNode, useState, useEffect } from "react";
+import { ReactNode, useState, useEffect, createContext } from "react";
 import { useConvexOfflineDetector } from "@/lib/pwa/offline-detector";
 import { useOfflineSync } from "@/hooks/use-offline";
 import { WifiOff, Clock } from "lucide-react";
@@ -11,6 +11,8 @@ import { toast } from "sonner";
 interface ConvexOfflineProviderProps {
     children: ReactNode;
 }
+
+const AuthErrorContext = createContext<((error: any) => boolean) | null>(null);
 
 function OfflineBanner() {
     const { isOffline } = useConvexOfflineDetector();
@@ -46,14 +48,70 @@ function OfflineBanner() {
     );
 }
 
-class AuthAwareConvexClient extends ConvexReactClient {
-    private router: any = null;
+class ConvexClientWrapper {
+    private readonly client: ConvexReactClient;
+    private authErrorHandler: ((error: any) => boolean) | null = null;
 
-    setRouter(router: any) {
-        this.router = router;
+    constructor(url: string) {
+        this.client = new ConvexReactClient(url);
+        this.interceptMethods();
     }
 
-    private handleAuthError(error: any) {
+    setAuthErrorHandler(handler: (error: any) => boolean) {
+        this.authErrorHandler = handler;
+    }
+
+    private interceptMethods() {
+        const originalMutation = this.client.mutation.bind(this.client);
+        const originalQuery = this.client.query.bind(this.client);
+        const originalAction = this.client.action.bind(this.client);
+
+        this.client.mutation = (async (mutation: any, ...argsAndOptions: any[]) => {
+            try {
+                return await (originalMutation as any)(mutation, ...argsAndOptions);
+            } catch (error) {
+                if (this.authErrorHandler && this.authErrorHandler(error)) {
+                    return;
+                }
+                throw error;
+            }
+        }) as any;
+
+        this.client.query = (async (query: any, ...argsAndOptions: any[]) => {
+            try {
+                return await (originalQuery as any)(query, ...argsAndOptions);
+            } catch (error) {
+                if (this.authErrorHandler && this.authErrorHandler(error)) {
+                    return;
+                }
+                throw error;
+            }
+        }) as any;
+
+        this.client.action = (async (action: any, ...argsAndOptions: any[]) => {
+            try {
+                return await (originalAction as any)(action, ...argsAndOptions);
+            } catch (error) {
+                if (this.authErrorHandler && this.authErrorHandler(error)) {
+                    return;
+                }
+                throw error;
+            }
+        }) as any;
+    }
+
+    getClient(): ConvexReactClient {
+        return this.client;
+    }
+}
+
+function ConvexAuthWrapper({ children }: { children: ReactNode }) {
+    const router = useRouter();
+    const [clientWrapper] = useState(() =>
+      new ConvexClientWrapper(process.env.NEXT_PUBLIC_CONVEX_URL!)
+    );
+
+    const handleAuthError = (error: any): boolean => {
         const errorMessage = error?.message || error?.toString() || "";
 
         const authErrorPatterns = [
@@ -77,73 +135,32 @@ class AuthAwareConvexClient extends ConvexReactClient {
 
             toast.error("Your session has expired. Please sign in again.");
 
-            if (this.router) {
-                this.router.push("/");
-            }
+            router.push("/");
 
             return true;
         }
 
         return false;
-    }
-
-    async mutation(mutation: any, args?: any) {
-        try {
-            return await super.mutation(mutation, args);
-        } catch (error) {
-            const handled = this.handleAuthError(error);
-            if (!handled) {
-                throw error;
-            }
-        }
-    }
-
-    async query(query: any, args?: any) {
-        try {
-            return await super.query(query, args);
-        } catch (error) {
-            const handled = this.handleAuthError(error);
-            if (!handled) {
-                throw error;
-            }
-        }
-    }
-
-    async action(action: any, args?: any) {
-        try {
-            return await super.action(action, args);
-        } catch (error) {
-            const handled = this.handleAuthError(error);
-            if (!handled) {
-                throw error;
-            }
-        }
-    }
-}
-
-function ConvexClientWrapper({ children }: { children: ReactNode }) {
-    const router = useRouter();
-    const [convexClient] = useState(() => {
-        const client = new AuthAwareConvexClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
-        return client;
-    });
+    };
 
     useEffect(() => {
-        (convexClient as AuthAwareConvexClient).setRouter(router);
-    }, [router, convexClient]);
+        clientWrapper.setAuthErrorHandler(handleAuthError);
+    }, [router, clientWrapper]);
 
     return (
-      <ConvexProvider client={convexClient}>
-          {children}
+      <ConvexProvider client={clientWrapper.getClient()}>
+          <AuthErrorContext.Provider value={handleAuthError}>
+              {children}
+          </AuthErrorContext.Provider>
       </ConvexProvider>
     );
 }
 
 export function ConvexOfflineProvider({ children }: ConvexOfflineProviderProps) {
     return (
-      <ConvexClientWrapper>
+      <ConvexAuthWrapper>
           <OfflineBanner />
           {children}
-      </ConvexClientWrapper>
+      </ConvexAuthWrapper>
     );
 }
