@@ -44,7 +44,6 @@ import {
   Download,
   Activity,
   Target,
-  Building,
   Lightbulb,
   Crown,
   Medal,
@@ -62,13 +61,11 @@ import {
   FileSpreadsheet,
   Shield,
   Award,
-  Zap,
   Eye,
   EyeOff,
   Info,
   SquareChartGantt,
   NotebookTabs,
-  CloudCog
 } from "lucide-react";
 import * as XLSX from 'xlsx'
 import html2canvas from 'html2canvas'
@@ -725,9 +722,8 @@ export default function SchoolAnalyticsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">School Analytics</h1>
         <p className="text-muted-foreground">
-          Comprehensive insights into your school's debate performance
+          Comprehensive insights into your school&#39;s debate performance
         </p>
       </div>
 
@@ -997,7 +993,7 @@ export default function SchoolAnalyticsPage() {
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">Recent Tournament Performance</CardTitle>
-                  <CardDescription>Your teams' performance in recent tournaments</CardDescription>
+                  <CardDescription>Your teams&#39; performance in recent tournaments</CardDescription>
                 </CardHeader>
                 <CardContent>
                   {isLoading ? (
@@ -1184,7 +1180,7 @@ export default function SchoolAnalyticsPage() {
                           label={({ activity_level, percentage }) => `${activity_level}: ${percentage}%`}
                         >
                           {operationalData.student_engagement.student_activity_distribution.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                            <Cell key={`cell-${entry}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                           ))}
                         </Pie>
                         <ChartTooltip content={<ChartTooltipContent />} />
@@ -1338,7 +1334,7 @@ export default function SchoolAnalyticsPage() {
                       <Crown className="h-5 w-5 text-yellow-500" />
                       School Level Progress
                     </CardTitle>
-                    <CardDescription>Your school's achievement level and experience points</CardDescription>
+                    <CardDescription>Your school&#39;s achievement level and experience points</CardDescription>
                   </CardHeader>
                   <CardContent>
                     {!achievementsData ? (

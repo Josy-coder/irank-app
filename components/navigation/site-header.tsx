@@ -80,8 +80,8 @@ export function SiteHeader() {
         </div>
 
         <div className="flex items-center gap-4">
-          <Link href="https://irankhub-docs.vercel.app">
-            <CircleHelp className="h-5 w-5 text-muted-foreground hover:text-primary hover:cursor-pointer" />
+          <Link href="https://irankhub-docs.vercel.app" target="_blank" rel="noopener noreferrer">
+              <CircleHelp className="h-4 w-4 text-muted-foreground hover:text-primary hover:cursor-pointer" />
           </Link>
           <NotificationCenter />
           <DropdownMenu>

@@ -771,6 +771,10 @@ export const verifyMagicLink = mutation({
             id: user._id,
             name: user.name,
             email: user.email,
+            role: user.role,
+            status: user.status,
+            verified: user.verified,
+            safeguarding_certificate: user.safeguarding_certificate ?? null,
           },
         };
       }

@@ -16,15 +16,20 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from "@/components/ui/command"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Eye, EyeOff, Loader2, CheckCircle, AlertCircle, UserCog, FileText, ShieldEllipsis} from "lucide-react";
+import { Eye, EyeOff, Loader2, CheckCircle, AlertCircle, UserCog, FileText, Check, ChevronsUpDown} from "lucide-react";
 import Link from "next/link"
 import Image from "next/image"
 import { motion } from "framer-motion"
@@ -34,6 +39,7 @@ import { useMutation } from "convex/react"
 import { api } from "@/convex/_generated/api"
 import { FileUpload } from "@/components/file-upload"
 import { Id } from "@/convex/_generated/dataModel"
+import { cn } from "@/lib/utils"
 
 const resetPasswordSchema = z.object({
   password: z.string()
@@ -72,6 +78,10 @@ function ResetPasswordForm() {
   const [currentStep, setCurrentStep] = useState<"password" | "security" | "safeguarding">("password")
   const [isAdminCreated, setIsAdminCreated] = useState(false)
   const [safeguardingCertificateId, setSafeguardingCertificateId] = useState<Id<"_storage"> | null>(null)
+  const [open, setOpen] = useState(false)
+
+  const [savedPassword, setSavedPassword] = useState<string>("")
+
 
   const hasVerified = useRef(false)
   const verificationAttempted = useRef(false)
@@ -82,6 +92,7 @@ function ResetPasswordForm() {
   const { verifyMagicLink, resetPassword } = useAuth()
   const updateSecurityQuestion = useMutation(api.functions.auth.updateSecurityQuestion)
   const updateSafeguardingCertificate = useMutation(api.functions.admin.users.updateSafeguardingCertificate)
+  const signIn = useMutation(api.functions.auth.signIn)
 
   const passwordForm = useForm<ResetPasswordFormValues>({
     resolver: zodResolver(resetPasswordSchema),
@@ -97,6 +108,7 @@ function ResetPasswordForm() {
       security_question: "",
       security_answer: "",
     },
+    mode: "onChange",
   })
 
   const safeguardingForm = useForm<SafeguardingFormValues>({
@@ -115,6 +127,10 @@ function ResetPasswordForm() {
     "What is your favorite color?",
     "What was your first car?",
     "What is your favorite food?",
+    "What street did you grow up on?",
+    "What was your childhood nickname?",
+    "What is the name of your favorite teacher?",
+    "What was your favorite subject in primary?",
   ]
 
   useEffect(() => {
@@ -170,6 +186,16 @@ function ResetPasswordForm() {
     verifyToken()
   }, [token, verifyMagicLink])
 
+  useEffect(() => {
+    if (currentStep === "security") {
+
+      securityForm.reset({
+        security_question: "",
+        security_answer: "",
+      })
+    }
+  }, [currentStep])
+
   const handlePasswordSubmit = async (values: ResetPasswordFormValues) => {
     if (!resetToken) {
       setError("Invalid reset session")
@@ -181,9 +207,12 @@ function ResetPasswordForm() {
 
     try {
       await resetPassword(resetToken, values.password)
+
+      setSavedPassword(values.password)
+
       if (userInfo?.role === "student") {
         setCurrentStep("security")
-      } else if (userInfo?.role === "volunteer" && isAdminCreated) {
+      } else if (userInfo?.role === "volunteer" && (isAdminCreated || userInfo?.safeguarding_certificate == null)) {
         setCurrentStep("safeguarding")
       } else {
         setSuccess(true)
@@ -203,12 +232,19 @@ function ResetPasswordForm() {
     setError(null)
 
     try {
-      await updateSecurityQuestion({
-        question: values.security_question,
-        answer: values.security_answer,
-        current_password: passwordForm.getValues("password"),
-        token: resetToken!,
+      const result = await signIn({
+        email:userInfo?.email,
+        password: savedPassword,
+        expected_role: "student",
       })
+      if (result.success) {
+        await updateSecurityQuestion({
+          question: values.security_question,
+          answer: values.security_answer,
+          current_password: savedPassword,
+          token: result.token!,
+        })
+      }
 
       setSuccess(true)
     } catch (error: any) {
@@ -408,8 +444,8 @@ function ResetPasswordForm() {
               <div className="mx-auto w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mb-4">
                 <FileText className="h-8 w-8 text-orange-600" />
               </div>
-              <CardTitle className="text-xl">Upload Safeguarding Certificate</CardTitle>
-              <CardDescription className="text-base">
+              <CardTitle className="text-lg">Upload Safeguarding Certificate</CardTitle>
+              <CardDescription className="text-sm">
                 As a volunteer, please upload your safeguarding certificate to complete your account setup.
               </CardDescription>
             </CardHeader>
@@ -426,7 +462,6 @@ function ResetPasswordForm() {
                         accept={["application/pdf", "image/jpeg", "image/jpg", "image/png"]}
                         maxSize={5 * 1024 * 1024}
                         label="Safeguarding Certificate"
-                        description="Upload your safeguarding certificate. PDF or image files accepted (max 5MB)."
                         required={true}
                         disabled={loading}
                       />
@@ -447,7 +482,7 @@ function ResetPasswordForm() {
                 <Button
                   onClick={handleSafeguardingSubmit}
                   disabled={loading || !safeguardingCertificateId}
-                  className="w-full h-11"
+                  className="w-full"
                 >
                   {loading ? (
                     <span className="flex items-center justify-center">
@@ -463,7 +498,7 @@ function ResetPasswordForm() {
                   type="button"
                   variant="outline"
                   onClick={skipCurrentStep}
-                  className="w-full h-11"
+                  className="w-full"
                   disabled={loading}
                 >
                   Skip for Now
@@ -471,7 +506,7 @@ function ResetPasswordForm() {
               </div>
 
               <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                <p className="text-sm text-blue-700">
+                <p className="text-xs text-blue-700">
                   <strong>Note:</strong> You can upload your safeguarding certificate later in your profile settings.
                   However, you may be prompted to upload it each time you sign in until it&#39;s provided.
                 </p>
@@ -504,8 +539,8 @@ function ResetPasswordForm() {
               <div className="mx-auto w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4">
                 <UserCog className="h-8 w-8 text-purple-600" />
               </div>
-              <CardTitle className="text-xl">Set Security Question</CardTitle>
-              <CardDescription className="text-base">
+              <CardTitle className="text-lg">Set Security Question</CardTitle>
+              <CardDescription className="text-sm">
                 As a student, please set up your security question for phone authentication.
               </CardDescription>
             </CardHeader>
@@ -517,22 +552,65 @@ function ResetPasswordForm() {
                     control={securityForm.control}
                     name="security_question"
                     render={({ field }) => (
-                      <FormItem>
+                      <FormItem className="flex flex-col">
                         <FormLabel>Security Question</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value} disabled={loading}>
-                          <FormControl>
-                            <SelectTrigger className="h-11">
-                              <SelectValue placeholder="Select a security question" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {securityQuestions.map((question, index) => (
-                              <SelectItem key={index} value={question}>
-                                {question}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <Popover open={open} onOpenChange={setOpen}>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant="outline"
+                                role="combobox"
+                                type="button"
+                                className={cn(
+                                  "w-full justify-between text-left font-normal",
+                                  !field.value && "text-muted-foreground"
+                                )}
+                                disabled={loading}
+                              >
+                              <span className="truncate">
+                                {field.value || "Select a security question"}
+                              </span>
+                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent
+                            className="w-[var(--radix-popover-trigger-width)] p-0"
+                            align="start"
+                            side="bottom"
+                          >
+                            <Command>
+                              <CommandInput placeholder="Search security questions..." className="h-9" />
+                              <CommandEmpty>No question found.</CommandEmpty>
+                              <CommandGroup className="max-h-64 overflow-y-auto">
+                                {securityQuestions.map((question) => (
+                                  <CommandItem
+                                    value={question}
+                                    key={question}
+                                    onSelect={() => {
+                                      field.onChange(question);
+                                      securityForm.setValue("security_question", question, {
+                                        shouldValidate: true,
+                                        shouldDirty: true,
+                                        shouldTouch: true
+                                      });
+                                      setOpen(false);
+                                    }}
+                                    className="cursor-pointer"
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        question === field.value ? "opacity-100" : "opacity-0"
+                                      )}
+                                    />
+                                    <span className="text-sm">{question}</span>
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -541,20 +619,29 @@ function ResetPasswordForm() {
                   <FormField
                     control={securityForm.control}
                     name="security_answer"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Security Answer</FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="Enter your answer"
-                            {...field}
-                            disabled={loading}
-                            className="h-11"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+                    render={({ field }) => {
+                      const currentSecurityQuestion = securityForm.watch("security_question");
+                      console.log("Watched answer:", securityForm.watch("security_answer"));
+
+                      return (
+                        <FormItem>
+                          <FormLabel>Security Answer</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="text"
+                              placeholder={currentSecurityQuestion ? "Enter your answer" : "Please select a security question first"}
+                              value={field.value || ""}
+                              onChange={(e) => {
+                                const value = e.target.value
+                                field.onChange(value)
+                                securityForm.setValue("security_answer", value)
+                              }}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }}
                   />
 
                   {error && (
@@ -565,12 +652,12 @@ function ResetPasswordForm() {
                   )}
 
                   <div className="space-y-2">
-                    <Button type="submit" disabled={loading} className="w-full h-11">
+                    <Button type="submit" disabled={loading} className="w-full">
                       {loading ? (
                         <span className="flex items-center justify-center">
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Updating...
-                        </span>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Updating...
+                      </span>
                       ) : (
                         "Set Security Question"
                       )}
@@ -580,7 +667,7 @@ function ResetPasswordForm() {
                       type="button"
                       variant="outline"
                       onClick={skipCurrentStep}
-                      className="w-full h-11"
+                      className="w-full"
                       disabled={loading}
                     >
                       Skip for Now
@@ -590,7 +677,7 @@ function ResetPasswordForm() {
               </Form>
 
               <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                <p className="text-sm text-blue-700">
+                <p className="text-xs text-blue-700">
                   <strong>Note:</strong> You can update your security question later in your profile settings.
                   It&#39;s used for phone-based authentication.
                 </p>
@@ -649,6 +736,7 @@ function ResetPasswordForm() {
                             {...field}
                             disabled={loading}
                             className="pr-10"
+                            autoComplete="new-password"
                           />
                         </FormControl>
                         <Button
@@ -682,6 +770,7 @@ function ResetPasswordForm() {
                             {...field}
                             disabled={loading}
                             className="pr-10"
+                            autoComplete="new-password"
                           />
                         </FormControl>
                         <Button
@@ -735,7 +824,7 @@ function ResetPasswordForm() {
 
             {isAdminCreated && userInfo && (
               <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                <p className="text-sm text-blue-700">
+                <p className="text-xs text-blue-700">
                   <strong>Welcome!</strong> Your account was created by an administrator.
                   {userInfo.role === "student" && " You'll be prompted to set up a security question next."}
                   {userInfo.role === "volunteer" && " You'll be prompted to upload your safeguarding certificate next."}

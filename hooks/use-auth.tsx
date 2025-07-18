@@ -466,7 +466,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (result.success) {
         toast.success(result.message)
-        router.push("/")
       }
     } catch (error: any) {
       console.error("Reset password error:", error)
