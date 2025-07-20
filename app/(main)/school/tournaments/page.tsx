@@ -6,7 +6,6 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Building } from "lucide-react"
 import { useAuth } from "@/hooks/use-auth"
 import { Id } from "@/convex/_generated/dataModel";
-import AppLoader from "@/components/app-loader";
 import dynamic from "next/dynamic";
 
 export default function SchoolTournamentsPage() {
@@ -22,7 +21,7 @@ export default function SchoolTournamentsPage() {
   const LeagueList = dynamic(() =>
       import("@/components/tournaments/league-list").then(mod => mod.LeagueList),
     {
-      loading: () => <div><AppLoader /></div>,
+      loading: () => null,
       ssr: false,
     }
   )
@@ -30,7 +29,7 @@ export default function SchoolTournamentsPage() {
   const TournamentList = dynamic(() =>
       import("@/components/tournaments/tournament-list").then(mod => mod.TournamentList),
     {
-      loading: () => <div><AppLoader /></div>,
+      loading: () => null,
       ssr: false,
     }
   )

@@ -7,7 +7,6 @@ import { Building } from "lucide-react"
 import { useAuth } from "@/hooks/use-auth"
 import { Id } from "@/convex/_generated/dataModel";
 import dynamic from "next/dynamic";
-import AppLoader from "@/components/app-loader";
 
 export default function StudentTournamentsPage() {
   const { token} = useAuth()
@@ -22,7 +21,7 @@ export default function StudentTournamentsPage() {
   const LeagueList = dynamic(() =>
       import("@/components/tournaments/league-list").then(mod => mod.LeagueList),
     {
-      loading: () => <div><AppLoader /></div>,
+      loading: () => null,
       ssr: false,
     }
   )
@@ -30,7 +29,7 @@ export default function StudentTournamentsPage() {
   const TournamentList = dynamic(() =>
       import("@/components/tournaments/tournament-list").then(mod => mod.TournamentList),
     {
-      loading: () => <div><AppLoader /></div>,
+      loading: () => null,
       ssr: false,
     }
   )

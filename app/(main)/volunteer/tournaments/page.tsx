@@ -22,7 +22,7 @@ export default function VolunteerTournamentsPage() {
   const LeagueList = dynamic(() =>
       import("@/components/tournaments/league-list").then(mod => mod.LeagueList),
     {
-      loading: () => <div><AppLoader /></div>,
+      loading: () => null,
       ssr: false,
     }
   )
@@ -30,7 +30,7 @@ export default function VolunteerTournamentsPage() {
   const TournamentList = dynamic(() =>
       import("@/components/tournaments/tournament-list").then(mod => mod.TournamentList),
     {
-      loading: () => <div><AppLoader /></div>,
+      loading: () => null,
       ssr: false,
     }
   )
