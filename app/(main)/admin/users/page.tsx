@@ -248,6 +248,16 @@ export default function UsersPage() {
     } : "skip"
   )
 
+  const isSuperAdminResult = useQuery(
+    api.functions.admin.superadmin.isSuperAdmin,
+    token && user?.role === "admin" ? {
+      token: token,
+      user_id: user.id as Id<"users">
+    } : "skip"
+  );
+
+  const isSuperAdminUser = isSuperAdminResult === true;
+
   const updateUserStatus = useMutation(api.functions.admin.users.updateUserStatus)
   const verifyUser = useMutation(api.functions.admin.users.verifyUser)
   const deleteUser = useMutation(api.functions.admin.users.deleteUser)
@@ -580,23 +590,25 @@ export default function UsersPage() {
         setShowBulkDialog(true)
       }
     },
-    {
-      label: "Activate Users",
-      icon: <CircleCheck className="h-4 w-4" />,
-      onClick: () => {
-        setBulkAction("activate")
-        setShowBulkDialog(true)
-      }
-    },
-    {
-      label: "Ban Users",
-      icon: <Ban className="h-4 w-4" />,
-      onClick: () => {
-        setBulkAction("ban")
-        setShowBulkDialog(true)
+    ...(isSuperAdminUser ? [
+      {
+        label: "Activate Users",
+        icon: <CircleCheck className="h-4 w-4" />,
+        onClick: () => {
+          setBulkAction("activate")
+          setShowBulkDialog(true)
+        }
       },
-      variant: "destructive" as const
-    },
+      {
+        label: "Ban Users",
+        icon: <Ban className="h-4 w-4" />,
+        onClick: () => {
+          setBulkAction("ban")
+          setShowBulkDialog(true)
+        },
+        variant: "destructive" as const
+      }
+    ] : []),
     {
       label: "Generate Reset Links",
       icon: <Share className="h-4 w-4" />,
@@ -769,22 +781,22 @@ export default function UsersPage() {
                                 />
                               )}
 
-                              {currentUser.status === "active" ? (
-                                <UserActionButton
-                                  icon={Ban}
-                                  label="Ban"
-                                  onClick={() => handleStatusChange(currentUser._id, "banned")}
-                                  disabled={isCurrentUser}
-                                />
-                              ) : (
-                                <UserActionButton
-                                  icon={UserCheck}
-                                  label="Activate"
-                                  onClick={() => handleStatusChange(currentUser._id, "active")}
-                                  disabled={isCurrentUser}
-                                />
-                              )}
-
+                              {isSuperAdminUser && (
+                                currentUser.status === "active" ? (
+                                  <UserActionButton
+                                    icon={Ban}
+                                    label="Ban"
+                                    onClick={() => handleStatusChange(currentUser._id, "banned")}
+                                    disabled={isCurrentUser}
+                                  />
+                                ) : (
+                                  <UserActionButton
+                                    icon={UserCheck}
+                                    label="Activate"
+                                    onClick={() => handleStatusChange(currentUser._id, "active")}
+                                    disabled={isCurrentUser}
+                                  />
+                                ))}
                               {currentUser.verified && currentUser.status === "inactive" && (
                                 <UserActionButton
                                   icon={Link}
@@ -793,17 +805,18 @@ export default function UsersPage() {
                                   disabled={isCurrentUser}
                                 />
                               )}
-
-                              <UserActionButton
-                                icon={Trash2}
-                                label="Delete"
-                                onClick={() => {
-                                  setUserToDelete(currentUser._id)
-                                  setShowDeleteDialog(true)
-                                }}
-                                variant="destructive"
-                                disabled={isCurrentUser}
-                              />
+                              {isSuperAdminUser && (
+                                <UserActionButton
+                                  icon={Trash2}
+                                  label="Delete"
+                                  onClick={() => {
+                                    setUserToDelete(currentUser._id)
+                                    setShowDeleteDialog(true)
+                                  }}
+                                  variant="destructive"
+                                  disabled={isCurrentUser}
+                                />
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>

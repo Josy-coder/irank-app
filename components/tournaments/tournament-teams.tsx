@@ -58,6 +58,7 @@ import { JoinTeamDialog } from "@/components/tournaments/join-team-dialog"
 import { ShareTeamDialog } from "@/components/tournaments/share-team-dialog"
 import { WaiverCodeDialog } from "@/components/tournaments/waiver-code-dialog";
 import { useOffline } from "@/hooks/use-offline";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface TournamentTeamsProps {
   tournament: any;
@@ -621,13 +622,20 @@ export function TournamentTeams({
                           )}
                           <TableCell>
                             <div className="space-y-2">
-                              <div className="flex items-center gap-2">
+                              <div className="flex flex-col custom:flex-row items-center gap-2">
                                 <span className="font-medium">{team.name}</span>
                                 {team.school && (
-                                  <Badge variant="outline" className="text-xs">
-                                    <School className="h-3 w-3 mr-1" />
-                                    {team.school.name}
-                                  </Badge>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Badge variant="outline" className="text-xs max-w-[160px] overflow-hidden">
+                                        <School className="h-3 w-3 mr-1 flex-shrink-0" />
+                                        <span className="truncate">{team.school.name}</span>
+                                      </Badge>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      {team.school.name}
+                                    </TooltipContent>
+                                  </Tooltip>
                                 )}
                               </div>
                               {team.invitation_code && tournament.league?.type === "Dreams Mode" && (

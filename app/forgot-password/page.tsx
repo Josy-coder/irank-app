@@ -85,7 +85,7 @@ function ForgotPasswordForm() {
           transition={{ duration: 0.3 }}
           className="w-full max-w-md"
         >
-          <Card className="border-0 shadow-xl">
+          <Card className="border border-[#E2E8F0]">
             <CardHeader className="text-center pb-6">
               <Image
                 src="/images/logo.png"
@@ -94,23 +94,23 @@ function ForgotPasswordForm() {
                 height={80}
                 className="mx-auto mb-4"
               />
-              <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+              <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-4">
                 <CheckCircle className="h-8 w-8 text-green-600" />
               </div>
-              <CardTitle className="text-xl">Check your email</CardTitle>
-              <CardDescription className="text-base">
+              <CardTitle className="text-lg">Check your email</CardTitle>
+              <CardDescription className="text-sm">
                 We&#39;ve sent a password reset link to your email address.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <div className="flex items-start space-x-3">
-                  <Mail className="h-5 w-5 text-blue-600 mt-0.5" />
+                  <Mail className="h-6 w-6 text-blue-600 mt-0.5" />
                   <div className="text-sm">
                     <p className="font-medium text-blue-900 mb-1">
                       Email sent successfully
                     </p>
-                    <p className="text-blue-700">
+                    <p className="text-blue-700 text-xs">
                       The reset link will expire in 15 minutes for security reasons.
                       If you don&#39;t see the email, check your spam folder.
                     </p>
@@ -143,7 +143,7 @@ function ForgotPasswordForm() {
                 </Button>
               </div>
 
-              <div className="text-center text-sm text-muted-foreground">
+              <div className="text-center text-xs text-muted-foreground">
                 <p>
                   Didn&#39;t receive the email? Check your spam folder or try again.
                 </p>
@@ -163,7 +163,7 @@ function ForgotPasswordForm() {
         transition={{ duration: 0.3 }}
         className="w-full max-w-md"
       >
-        <Card className="border-0 shadow-xl">
+        <Card className="border border-[#E2E8F0]">
           <CardHeader className="text-center">
             <Image
               src="/images/logo.png"
@@ -172,11 +172,11 @@ function ForgotPasswordForm() {
               height={80}
               className="mx-auto mb-4"
             />
-            <div className="mx-auto w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mb-4">
+            <div className="mx-auto w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center mb-4">
               <Mail className="h-8 w-8 text-orange-600" />
             </div>
-            <CardTitle className="text-xl">Forgot your password?</CardTitle>
-            <CardDescription className="text-base">
+            <CardTitle className="text-lg">Forgot your password?</CardTitle>
+            <CardDescription className="text-sm">
               No worries! Enter your email address and we&#39;ll send you a link to reset your password.
             </CardDescription>
           </CardHeader>
@@ -227,7 +227,7 @@ function ForgotPasswordForm() {
                 <div className="text-center">
                   <Link
                     href={`/signin/${role}`}
-                    className="inline-flex items-center text-sm text-muted-foreground hover:text-primary transition-colors"
+                    className="inline-flex items-center text-sm text-primary hover:underline transition-colors"
                   >
                     <ChevronLeft className="mr-1 h-3 w-3" />
                     Back to sign in
@@ -244,10 +244,10 @@ function ForgotPasswordForm() {
                   </svg>
                 </div>
                 <div className="text-sm">
-                  <p className="font-medium text-blue-900 mb-1">
+                  <p className="font-medium text-blue-900 text-sm mb-1">
                     {getRoleDisplayName(role)} Account Recovery
                   </p>
-                  <p className="text-blue-700">
+                  <p className="text-blue-700 text-xs">
                     Make sure to enter the email address associated with your {getRoleDisplayName(role).toLowerCase()} account.
                     The reset link will be valid for 15 minutes.
                   </p>

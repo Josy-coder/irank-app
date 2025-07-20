@@ -25,7 +25,7 @@ const SelectTrigger = React.forwardRef<
     {...props}
   >
     <SelectPrimitive.Value asChild>
-      <span className="text-foreground text-sm dark:text-accent" />
+      <span className="text-foreground text-xs dark:text-accent" />
     </SelectPrimitive.Value>
     {children}
     <SelectPrimitive.Icon asChild>

@@ -29,7 +29,6 @@ async function sendTournamentInvitation({
 }) {
   const baseUrl = process.env.FRONTEND_SITE_URL || "http://localhost:3000";
 
-  // Generate role-based URLs
   const getUserRole = (type: string) => {
     switch (type) {
       case "school": return "school";
@@ -475,11 +474,12 @@ function getTournamentInvitationEmailTemplate(
   <style>
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      line-height: 1.6;
-      color: #333333;
-      background-color: #f5f5f5;
+      line-height: 1.5;
+      color: #2c1810;
+      background-color: #f8f8f8;
       margin: 0;
       padding: 0;
+      font-size: 14px;
     }
     .container {
       max-width: 600px;
@@ -490,43 +490,49 @@ function getTournamentInvitationEmailTemplate(
       box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     }
     .header {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background-color: #f97316;
       color: white;
-      padding: 30px;
+      padding: 24px;
       text-align: center;
     }
     .header h1 {
       margin: 0;
-      font-size: 24px;
-      font-weight: 600;
+      font-size: 20px;
+      font-weight: 500;
     }
     .content {
-      padding: 30px;
+      padding: 24px;
     }
     .tournament-card {
-      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      background-color: #a16207;
       color: white;
       padding: 20px;
       border-radius: 8px;
-      margin: 20px 0;
+      margin: 16px 0;
       text-align: center;
     }
     .tournament-card h2 {
-      margin: 0 0 10px 0;
-      font-size: 20px;
+      margin: 0 0 8px 0;
+      font-size: 18px;
+      font-weight: 500;
+    }
+    .tournament-card p {
+      margin: 0;
+      font-size: 14px;
     }
     .tournament-details {
-      background-color: #f8f9fa;
-      padding: 20px;
+      background-color: #f9f9f9;
+      padding: 16px;
       border-radius: 8px;
-      margin: 20px 0;
+      margin: 16px 0;
     }
     .detail-item {
       display: flex;
       justify-content: space-between;
-      margin-bottom: 10px;
-      padding-bottom: 10px;
-      border-bottom: 1px solid #e9ecef;
+      margin-bottom: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #e5e5e5;
+      font-size: 14px;
     }
     .detail-item:last-child {
       border-bottom: none;
@@ -534,63 +540,70 @@ function getTournamentInvitationEmailTemplate(
       padding-bottom: 0;
     }
     .detail-label {
-      font-weight: 600;
-      color: #495057;
+      font-weight: 500;
+      color: #2c1810;
     }
     .detail-value {
-      color: #6c757d;
+      color: #6b5b4f;
     }
     .action-buttons {
       text-align: center;
-      margin: 30px 0;
+      margin: 24px 0;
     }
     .btn {
       display: inline-block;
-      padding: 12px 24px;
-      margin: 0 10px;
+      padding: 8px 16px;
+      margin: 0 8px;
       text-decoration: none;
       border-radius: 6px;
-      font-weight: 600;
+      font-weight: 500;
       text-align: center;
       transition: all 0.3s ease;
+      font-size: 14px;
+      height: 32px;
+      line-height: 16px;
     }
     .btn-accept {
-      background-color: #28a745;
+      background-color: #16a34a;
       color: white;
     }
     .btn-accept:hover {
-      background-color: #218838;
+      background-color: #15803d;
     }
     .btn-decline {
-      background-color: #dc3545;
+      background-color: #dc2626;
       color: white;
     }
     .btn-decline:hover {
-      background-color: #c82333;
+      background-color: #b91c1c;
     }
     .btn-view {
-      background-color: #007bff;
+      background-color: #f97316;
       color: white;
-      margin-top: 15px;
+      margin-top: 12px;
     }
     .btn-view:hover {
-      background-color: #0056b3;
+      background-color: #ea580c;
     }
     .footer {
-      background-color: #f8f9fa;
-      padding: 20px;
+      background-color: #f9f9f9;
+      padding: 16px;
       text-align: center;
-      color: #6c757d;
-      font-size: 14px;
+      color: #6b5b4f;
+      font-size: 12px;
+    }
+    .footer a {
+      color: #f97316;
+      text-decoration: none;
     }
     .expiry-notice {
-      background-color: #fff3cd;
-      border: 1px solid #ffeaa7;
-      color: #856404;
-      padding: 15px;
+      background-color: #fef3c7;
+      border: 1px solid: #fbbf24;
+      color: #92400e;
+      padding: 12px;
       border-radius: 6px;
-      margin: 20px 0;
-      font-size: 14px;
+      margin: 16px 0;
+      font-size: 12px;
     }
     @media (max-width: 600px) {
       .container {
@@ -598,11 +611,11 @@ function getTournamentInvitationEmailTemplate(
         border-radius: 0;
       }
       .content {
-        padding: 20px;
+        padding: 16px;
       }
       .btn {
         display: block;
-        margin: 10px 0;
+        margin: 8px 0;
         width: 100%;
         box-sizing: border-box;
       }
@@ -661,7 +674,7 @@ function getTournamentInvitationEmailTemplate(
     
     <div class="footer">
       <p>This invitation will expire on ${expiresAt}. You can also respond by logging into your <a href="${baseUrl}">account</a> and visiting the <a href="${baseUrl}/${invitationType}/${tournamentSlug}">tournament page.</a></p>
-      <p>© 2025 iRank. All rights reserved.</p>
+      <p>© 2025 iRankHub - iDebate Rwanda. All rights reserved.</p>
     </div>
   </div>
 </body>
@@ -747,50 +760,53 @@ function getMagicLinkEmailTemplate(purpose: string, magicLinkUrl: string): strin
   const config = configs[purpose as keyof typeof configs];
 
   return `
-    <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif; background-color: #f8fafc;">
-      <div style="background-color: white; border-radius: 12px; padding: 40px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-        <div style="text-align: center; margin-bottom: 30px;">
-          <img src="${baseUrl}/images/logo.png" alt="iRankHub Logo" style="width: 120px; height: auto;">
+    <div style="max-width: 600px; margin: 0 auto; padding: 16px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8f8f8;">
+      <div style="background-color: white; border-radius: 8px; padding: 32px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+        <div style="text-align: center; margin-bottom: 24px;">
+          <div style="width: 80px; height: 80px; background-color: #f97316; border-radius: 50%; margin: 0 auto; display: flex; align-items: center; justify-content: center; color: white; font-size: 32px; font-weight: bold;">
+            iR
+          </div>
         </div>
         
         <div style="text-align: center;">
-          <h1 style="color: #1a202c; font-size: 28px; margin-bottom: 16px; font-weight: 600;">
+          <h1 style="color: #2c1810; font-size: 24px; margin-bottom: 12px; font-weight: 500;">
             ${config.heading}
           </h1>
-          <p style="color: #4a5568; font-size: 16px; line-height: 1.6; margin-bottom: 32px;">
+          <p style="color: #6b5b4f; font-size: 14px; line-height: 1.5; margin-bottom: 24px;">
             ${config.description}
           </p>
           
-          <div style="margin: 40px 0;">
+          <div style="margin: 32px 0;">
             <a href="${magicLinkUrl}" style="
-              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              background-color: #f97316;
               color: white;
-              padding: 16px 32px;
+              padding: 12px 24px;
               text-decoration: none;
-              border-radius: 8px;
-              font-weight: 600;
-              font-size: 16px;
+              border-radius: 6px;
+              font-weight: 500;
+              font-size: 14px;
               display: inline-block;
-              box-shadow: 0 4px 14px 0 rgba(102, 126, 234, 0.39);
+              height: 32px;
+              line-height: 8px;
             ">
               ${config.buttonText}
             </a>
           </div>
           
-          <div style="background-color: #f7fafc; border-radius: 8px; padding: 20px; margin: 32px 0;">
-            <p style="color: #718096; font-size: 14px; margin: 0;">
+          <div style="background-color: #f9f9f9; border-radius: 6px; padding: 16px; margin: 24px 0;">
+            <p style="color: #6b5b4f; font-size: 12px; margin: 0;">
               <strong>Security tip:</strong> This link will expire in 15 minutes for your security.
             </p>
           </div>
           
-          <p style="color: #718096; font-size: 14px; line-height: 1.6;">
+          <p style="color: #6b5b4f; font-size: 12px; line-height: 1.5;">
             If you didn't request this, you can safely ignore this email.
           </p>
         </div>
         
-        <div style="border-top: 1px solid #e2e8f0; padding-top: 20px; margin-top: 40px; text-align: center;">
-          <p style="color: #a0aec0; font-size: 12px; margin: 0;">
-            &copy; ${new Date().getFullYear()} iRankHub. All rights reserved.
+        <div style="border-top: 1px solid #e5e5e5; padding-top: 16px; margin-top: 32px; text-align: center;">
+          <p style="color: #a16207; font-size: 12px; margin: 0;">
+            &copy; ${new Date().getFullYear()} iRankHub - iDebate Rwanda. All rights reserved.
           </p>
         </div>
       </div>
@@ -848,53 +864,56 @@ function getWelcomeEmailTemplate(name: string, role: string): string {
   const roleConfig = roleMessages[role as keyof typeof roleMessages] || roleMessages.student;
 
   return `
-    <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif; background-color: #f8fafc;">
-      <div style="background-color: white; border-radius: 12px; padding: 40px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-        <div style="text-align: center; margin-bottom: 30px;">
-          <img src="${baseUrl}/images/logo.png" alt="iRankHub Logo" style="width: 120px; height: auto;">
+    <div style="max-width: 600px; margin: 0 auto; padding: 16px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8f8f8;">
+      <div style="background-color: white; border-radius: 8px; padding: 32px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+        <div style="text-align: center; margin-bottom: 24px;">
+          <div style="width: 80px; height: 80px; background-color: #f97316; border-radius: 50%; margin: 0 auto; display: flex; align-items: center; justify-content: center; color: white; font-size: 32px; font-weight: bold;">
+            iR
+          </div>
         </div>
         
-        <div style="text-align: center; margin-bottom: 30px;">
-          <h1 style="color: #1a202c; font-size: 28px; margin-bottom: 8px; font-weight: 600;">
+        <div style="text-align: center; margin-bottom: 24px;">
+          <h1 style="color: #2c1810; font-size: 24px; margin-bottom: 8px; font-weight: 500;">
             ${roleConfig.title}
           </h1>
-          <p style="color: #4a5568; font-size: 18px; margin: 0;">
+          <p style="color: #6b5b4f; font-size: 16px; margin: 0;">
             Hello ${name}!
           </p>
         </div>
         
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 24px; margin-bottom: 30px;">
-          <p style="color: white; font-size: 16px; line-height: 1.6; margin: 0; text-align: center;">
+        <div style="background-color: #a16207; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
+          <p style="color: white; font-size: 14px; line-height: 1.5; margin: 0; text-align: center;">
             ${roleConfig.description}
           </p>
         </div>
         
-        <div style="margin-bottom: 30px;">
-          <h2 style="color: #2d3748; font-size: 20px; margin-bottom: 16px;">What you can do:</h2>
-          <ul style="color: #4a5568; font-size: 14px; line-height: 1.8; padding-left: 20px;">
-            ${roleConfig.features.map(feature => `<li style="margin-bottom: 8px;">${feature}</li>`).join('')}
+        <div style="margin-bottom: 24px;">
+          <h2 style="color: #2c1810; font-size: 18px; margin-bottom: 12px; font-weight: 500;">What you can do:</h2>
+          <ul style="color: #6b5b4f; font-size: 12px; line-height: 1.6; padding-left: 16px; margin: 0;">
+            ${roleConfig.features.map(feature => `<li style="margin-bottom: 6px;">${feature}</li>`).join('')}
           </ul>
         </div>
         
-        <div style="text-align: center; margin: 40px 0;">
+        <div style="text-align: center; margin: 32px 0;">
           <a href="${dashboardUrl}" style="
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background-color: #f97316;
             color: white;
-            padding: 16px 32px;
+            padding: 12px 24px;
             text-decoration: none;
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 16px;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 14px;
             display: inline-block;
-            box-shadow: 0 4px 14px 0 rgba(102, 126, 234, 0.39);
+            height: 32px;
+            line-height: 8px;
           ">
             Go to Dashboard
           </a>
         </div>
         
-        <div style="border-top: 1px solid #e2e8f0; padding-top: 20px; margin-top: 40px; text-align: center;">
-          <p style="color: #a0aec0; font-size: 12px; margin: 0;">
-            &copy; ${new Date().getFullYear()} iRankHub. All rights reserved.
+        <div style="border-top: 1px solid #e5e5e5; padding-top: 16px; margin-top: 32px; text-align: center;">
+          <p style="color: #a16207; font-size: 12px; margin: 0;">
+            &copy; ${new Date().getFullYear()} iRankHub - iDebate Rwanda. All rights reserved.
           </p>
         </div>
       </div>
@@ -906,52 +925,53 @@ function getAccountApprovedEmailTemplate(name: string, role: string, dashboardUr
   const baseUrl = process.env.FRONTEND_SITE_URL || 'http://localhost:3000';
 
   return `
-    <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif; background-color: #f8fafc;">
-      <div style="background-color: white; border-radius: 12px; padding: 40px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-        <div style="text-align: center; margin-bottom: 30px;">
-          <img src="${baseUrl}/images/logo.png" alt="iRankHub Logo" style="width: 120px; height: auto;">
+    <div style="max-width: 600px; margin: 0 auto; padding: 16px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8f8f8;">
+      <div style="background-color: white; border-radius: 8px; padding: 32px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+        <div style="text-align: center; margin-bottom: 24px;">
+          <div style="width: 80px; height: 80px; background-color: #f97316; border-radius: 50%; margin: 0 auto; display: flex; align-items: center; justify-content: center; color: white; font-size: 32px; font-weight: bold;">
+            iR
+          </div>
         </div>
         
-        <div style="text-align: center; margin-bottom: 30px;">
-          <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #48bb78 0%, #38a169 100%); border-radius: 50%; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center;">
-            <svg width="40" height="40" fill="white" viewBox="0 0 24 24">
-              <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-            </svg>
+        <div style="text-align: center; margin-bottom: 24px;">
+          <div style="width: 60px; height: 60px; background-color: #16a34a; border-radius: 50%; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center;">
+            <span style="color: white; font-size: 24px;">✓</span>
           </div>
-          <h1 style="color: #1a202c; font-size: 28px; margin-bottom: 8px; font-weight: 600;">
+          <h1 style="color: #2c1810; font-size: 24px; margin-bottom: 8px; font-weight: 500;">
             Account Approved!
           </h1>
-          <p style="color: #4a5568; font-size: 18px; margin: 0;">
+          <p style="color: #6b5b4f; font-size: 16px; margin: 0;">
             Hello ${name}!
           </p>
         </div>
         
-        <div style="background: linear-gradient(135deg, #48bb78 0%, #38a169 100%); border-radius: 12px; padding: 24px; margin-bottom: 30px;">
-          <p style="color: white; font-size: 16px; line-height: 1.6; margin: 0; text-align: center;">
+        <div style="background-color: #16a34a; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
+          <p style="color: white; font-size: 14px; line-height: 1.5; margin: 0; text-align: center;">
             Great news! Your ${role.replace('_', ' ')} account has been approved by our administrators. 
             You now have full access to all iRankHub features.
           </p>
         </div>
         
-        <div style="text-align: center; margin: 40px 0;">
+        <div style="text-align: center; margin: 32px 0;">
           <a href="${dashboardUrl}" style="
-            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+            background-color: #16a34a;
             color: white;
-            padding: 16px 32px;
+            padding: 12px 24px;
             text-decoration: none;
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 16px;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 14px;
             display: inline-block;
-            box-shadow: 0 4px 14px 0 rgba(72, 187, 120, 0.39);
+            height: 32px;
+            line-height: 8px;
           ">
             Access Your Dashboard
           </a>
         </div>
         
-        <div style="border-top: 1px solid #e2e8f0; padding-top: 20px; margin-top: 40px; text-align: center;">
-          <p style="color: #a0aec0; font-size: 12px; margin: 0;">
-            &copy; ${new Date().getFullYear()} iRankHub. All rights reserved.
+        <div style="border-top: 1px solid #e5e5e5; padding-top: 16px; margin-top: 32px; text-align: center;">
+          <p style="color: #a16207; font-size: 12px; margin: 0;">
+            &copy; ${new Date().getFullYear()} iRankHub - iDebate Rwanda. All rights reserved.
           </p>
         </div>
       </div>
@@ -963,47 +983,50 @@ function getPasswordResetEmailTemplate(resetUrl: string): string {
   const baseUrl = process.env.FRONTEND_SITE_URL || 'http://localhost:3000';
 
   return `
-    <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif; background-color: #f8fafc;">
-      <div style="background-color: white; border-radius: 12px; padding: 40px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-        <div style="text-align: center; margin-bottom: 30px;">
-          <img src="${baseUrl}/images/logo.png" alt="iRankHub Logo" style="width: 120px; height: auto;">
+    <div style="max-width: 600px; margin: 0 auto; padding: 16px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8f8f8;">
+      <div style="background-color: white; border-radius: 8px; padding: 32px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+        <div style="text-align: center; margin-bottom: 24px;">
+          <div style="width: 80px; height: 80px; background-color: #f97316; border-radius: 50%; margin: 0 auto; display: flex; align-items: center; justify-content: center; color: white; font-size: 32px; font-weight: bold;">
+            iR
+          </div>
         </div>
         
-        <div style="text-align: center; margin-bottom: 30px;">
-          <h1 style="color: #1a202c; font-size: 28px; margin-bottom: 16px; font-weight: 600;">
+        <div style="text-align: center; margin-bottom: 24px;">
+          <h1 style="color: #2c1810; font-size: 24px; margin-bottom: 12px; font-weight: 500;">
             Reset Your Password
           </h1>
-          <p style="color: #4a5568; font-size: 16px; line-height: 1.6;">
+          <p style="color: #6b5b4f; font-size: 14px; line-height: 1.5;">
             We received a request to reset your password. Click the button below to create a new password.
           </p>
         </div>
         
-        <div style="text-align: center; margin: 40px 0;">
+        <div style="text-align: center; margin: 32px 0;">
           <a href="${resetUrl}" style="
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background-color: #f97316;
             color: white;
-            padding: 16px 32px;
+            padding: 12px 24px;
             text-decoration: none;
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 16px;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 14px;
             display: inline-block;
-            box-shadow: 0 4px 14px 0 rgba(102, 126, 234, 0.39);
+            height: 32px;
+            line-height: 8px;
           ">
             Reset Password
           </a>
         </div>
         
-        <div style="background-color: #fef5e7; border: 1px solid #f6ad55; border-radius: 8px; padding: 16px; margin: 32px 0;">
-          <p style="color: #744210; font-size: 14px; margin: 0;">
+        <div style="background-color: #fef3c7; border: 1px solid #fbbf24; border-radius: 6px; padding: 12px; margin: 24px 0;">
+          <p style="color: #92400e; font-size: 12px; margin: 0;">
             <strong>Security Notice:</strong> This link will expire in 1 hour for your security. 
             If you didn't request this reset, please ignore this email.
           </p>
         </div>
         
-        <div style="border-top: 1px solid #e2e8f0; padding-top: 20px; margin-top: 40px; text-align: center;">
-          <p style="color: #a0aec0; font-size: 12px; margin: 0;">
-            &copy; ${new Date().getFullYear()} iRankHub. All rights reserved.
+        <div style="border-top: 1px solid #e5e5e5; padding-top: 16px; margin-top: 32px; text-align: center;">
+          <p style="color: #a16207; font-size: 12px; margin: 0;">
+            &copy; ${new Date().getFullYear()} iRankHub - iDebate Rwanda. All rights reserved.
           </p>
         </div>
       </div>
@@ -1013,9 +1036,23 @@ function getPasswordResetEmailTemplate(resetUrl: string): string {
 
 function getCustomEmailTemplate(template: string, name: string, customData?: any): string {
   return `
-    <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif;">
-      <h1>Hello ${name},</h1>
-      <div>${template}</div>
+    <div style="max-width: 600px; margin: 0 auto; padding: 16px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8f8f8;">
+      <div style="background-color: white; border-radius: 8px; padding: 32px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+        <div style="text-align: center; margin-bottom: 24px;">
+          <div style="width: 80px; height: 80px; background-color: #f97316; border-radius: 50%; margin: 0 auto; display: flex; align-items: center; justify-content: center; color: white; font-size: 32px; font-weight: bold;">
+            iR
+          </div>
+        </div>
+        
+        <h1 style="color: #2c1810; font-size: 20px; font-weight: 500; margin-bottom: 16px;">Hello ${name},</h1>
+        <div style="color: #6b5b4f; font-size: 14px; line-height: 1.5;">${template}</div>
+        
+        <div style="border-top: 1px solid #e5e5e5; padding-top: 16px; margin-top: 32px; text-align: center;">
+          <p style="color: #a16207; font-size: 12px; margin: 0;">
+            &copy; ${new Date().getFullYear()} iRankHub - iDebate Rwanda. All rights reserved.
+          </p>
+        </div>
+      </div>
     </div>
   `;
 }

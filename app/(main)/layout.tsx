@@ -151,7 +151,7 @@ export default function DashboardLayout({
                 <Breadcrumb className="hidden md:flex">
                   <BreadcrumbList>
                     {breadcrumbs.map((crumb, index) => (
-                      <div key={crumb.href} className="flex items-center">
+                      <div key={`${crumb.href}-${index}`} className="flex items-center">
                         {index > 0 && (
                           <BreadcrumbSeparator className="mx-2">
                             <span className="text-gray-400">/</span>

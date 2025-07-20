@@ -140,9 +140,9 @@ export function WaiverCodeDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[400px] md:max-w-[800px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-[350px] md:max-w-[800px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex items-center gap-1">
             <Ticket className="h-5 w-5" />
             Waiver Code Management
           </DialogTitle>
@@ -153,7 +153,7 @@ export function WaiverCodeDialog({
 
         <div className="space-y-6">
           <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
-            <h3 className="font-medium flex items-center gap-2">
+            <h3 className="font-medium text-sm flex items-center gap-1">
               <Plus className="h-4 w-4" />
               Generate New Waiver Code
             </h3>
@@ -202,7 +202,7 @@ export function WaiverCodeDialog({
           </div>
 
           {activeCodes.length > 0 && (
-            <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg border border-green-200">
+            <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg border border-green-200">
               <Users className="h-5 w-5 text-green-600" />
               <div className="text-sm text-green-800">
                 <div className="font-medium">{activeCodes.length} active waiver code{activeCodes.length > 1 ? 's' : ''}</div>
@@ -211,9 +211,7 @@ export function WaiverCodeDialog({
             </div>
           )}
 
-          <div className="space-y-4">
-            <h3 className="font-medium">All Waiver Codes</h3>
-
+          <div className="space-y-2">
             {!waiverCodes ? (
               <div className="text-center py-8">
                 <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
@@ -226,7 +224,7 @@ export function WaiverCodeDialog({
                 <div className="text-xs text-muted-foreground">Generate your first waiver code above</div>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto max-w-[300px] md:max-w-[750px]">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -313,7 +311,7 @@ export function WaiverCodeDialog({
           </div>
 
           <div className="space-y-2 p-4 rounded-lg border border-blue-200">
-            <h4 className="font-medium flex items-center gap-2">
+            <h4 className="font-medium text-sm flex items-center gap-2">
               <AlertCircle className="h-4 w-4" />
               How to Share Waiver Codes
             </h4>

@@ -19,6 +19,7 @@ import type * as functions_admin_ballots from "../functions/admin/ballots.js";
 import type * as functions_admin_dashboard from "../functions/admin/dashboard.js";
 import type * as functions_admin_invitations from "../functions/admin/invitations.js";
 import type * as functions_admin_leagues from "../functions/admin/leagues.js";
+import type * as functions_admin_superadmin from "../functions/admin/superadmin.js";
 import type * as functions_admin_teams from "../functions/admin/teams.js";
 import type * as functions_admin_tournaments from "../functions/admin/tournaments.js";
 import type * as functions_admin_users from "../functions/admin/users.js";
@@ -64,6 +65,7 @@ declare const fullApi: ApiFromModules<{
   "functions/admin/dashboard": typeof functions_admin_dashboard;
   "functions/admin/invitations": typeof functions_admin_invitations;
   "functions/admin/leagues": typeof functions_admin_leagues;
+  "functions/admin/superadmin": typeof functions_admin_superadmin;
   "functions/admin/teams": typeof functions_admin_teams;
   "functions/admin/tournaments": typeof functions_admin_tournaments;
   "functions/admin/users": typeof functions_admin_users;
