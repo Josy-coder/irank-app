@@ -13,8 +13,8 @@ import {
   Settings,
   UserCheck,
   Clock,
-  RefreshCw
-} from "lucide-react"
+  RefreshCw, Loader2
+} from "lucide-react";
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -438,7 +438,7 @@ export function NotificationCenter() {
           <ScrollArea className="h-[400px]">
             {isLoading ? (
               <div className="p-6 text-center text-muted-foreground">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto mb-2"></div>
+                <Loader2 className="animate-spin h-6 w-6 text-primary mx-auto" />
                 <p className="text-sm">Loading notifications...</p>
               </div>
             ) : recentNotifications.length === 0 ? (

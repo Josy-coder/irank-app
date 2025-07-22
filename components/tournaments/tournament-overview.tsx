@@ -128,6 +128,7 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
     image: undefined as Id<"_storage"> | undefined
   })
   const [showImageDialog, setShowImageDialog] = useState(false)
+  const [showRemoveImageDialog, setShowRemoveImageDialog] = useState(false)
   const [leagueSearch, setLeagueSearch] = useState("")
   const [showLeaguePopover, setShowLeaguePopover] = useState(false)
   const [coordinatorSearch, setCoordinatorSearch] = useState("")
@@ -165,6 +166,7 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
   const [motionInput, setMotionInput] = useState("")
 
   const getUrl = useMutation(api.files.getUrl)
+  const deleteFile = useMutation(api.files.deleteFile)
 
   const updateTournament = useMutation(api.functions.admin.tournaments.updateTournament);
 
@@ -550,9 +552,21 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
     setShowImageDialog(false)
   }
 
-  const handleRemoveImage = () => {
+  const handleRemoveImage = async () => {
     if (!isAdmin) return
+    if (basicEditForm.image) {
+      try {
+        await deleteFile({ storageId: basicEditForm.image })
+        toast.success("Image deleted successfully")
+      } catch (error) {
+        console.error("Error deleting image:", error)
+        toast.error("Failed to delete image")
+        return
+      }
+    }
     setBasicEditForm(prev => ({ ...prev, image: undefined }))
+    setImageUrl(null)
+    setShowRemoveImageDialog(false)
   }
 
   const handleDateRangeChange = (range: DateRange | DateTimeRange | undefined) => {
@@ -641,7 +655,7 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
             fill
             className="object-cover"
           />
-          <div className="absolute inset-0 bg-black/20" />
+          <div className="absolute inset-0 bg-black/50" />
           <div className="absolute bottom-4 left-4 text-white">
             <h2 className="text-xl lg:text-2xl font-bold">{tournament.name}</h2>
             {tournament.description && (
@@ -772,7 +786,11 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
                           <p className="text-sm font-medium">Image uploaded</p>
                           <p className="text-xs text-muted-foreground">Tournament banner ready</p>
                         </div>
-                        <Button variant="ghost" size="sm" onClick={handleRemoveImage}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowRemoveImageDialog(true)}
+                        >
                           <X className="h-4 w-4" />
                         </Button>
                       </div>
@@ -1723,6 +1741,25 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
                 {pendingStatusChange?.action === "publish" && "Publish"}
                 {pendingStatusChange?.action === "cancel" && "Cancel Tournament"}
                 {pendingStatusChange?.action === "reactivate" && "Reactivate"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+
+      {isAdmin && (
+        <AlertDialog open={showRemoveImageDialog} onOpenChange={setShowRemoveImageDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove Tournament Image</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to remove this tournament image? This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleRemoveImage} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                Remove Image
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

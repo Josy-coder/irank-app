@@ -113,23 +113,6 @@ export class PairingAlgorithm {
     const pairings: PairingResult[] = [];
     const availableTeams = [...this.teams];
 
-    if (availableTeams.length % 2 === 1) {
-      const byeTeam = this.selectByeTeam(availableTeams);
-      pairings.push({
-        room_name: "",
-        proposition_team_id: byeTeam._id,
-        opposition_team_id: undefined,
-        judges: [],
-        head_judge_id: undefined,
-        is_bye_round: true,
-        conflicts: [],
-        quality_score: 0,
-      });
-
-      const byeIndex = availableTeams.findIndex(t => t._id === byeTeam._id);
-      availableTeams.splice(byeIndex, 1);
-    }
-
     if (this.roundNumber === 1) {
       return this.generateRound1Pairings(availableTeams, pairings);
     } else {
@@ -138,20 +121,38 @@ export class PairingAlgorithm {
   }
 
   private generateRound1Pairings(teams: TeamData[], existingPairings: PairingResult[]): PairingResult[] {
-
     const shuffled = this.shuffleArray([...teams]);
-    const midPoint = Math.floor(shuffled.length / 2);
-    const propTeams = shuffled.slice(0, midPoint);
-    const oppTeams = shuffled.slice(midPoint);
 
-    for (let i = 0; i < propTeams.length && i < oppTeams.length; i++) {
+    let byeTeam: TeamData | null = null;
+    if (shuffled.length % 2 === 1) {
+      byeTeam = shuffled.pop()!;
+    }
+
+    const midPoint = Math.floor(shuffled.length / 2);
+    const topHalf = shuffled.slice(0, midPoint);
+    const bottomHalf = shuffled.slice(midPoint);
+
+    for (let i = 0; i < topHalf.length && i < bottomHalf.length; i++) {
       existingPairings.push({
         room_name: "",
-        proposition_team_id: propTeams[i]._id,
-        opposition_team_id: oppTeams[i]._id,
+        proposition_team_id: topHalf[i]._id,
+        opposition_team_id: bottomHalf[i]._id,
         judges: [],
         head_judge_id: undefined,
         is_bye_round: false,
+        conflicts: [],
+        quality_score: 0,
+      });
+    }
+
+    if (byeTeam) {
+      existingPairings.push({
+        room_name: "",
+        proposition_team_id: byeTeam._id,
+        opposition_team_id: undefined,
+        judges: [],
+        head_judge_id: undefined,
+        is_bye_round: true,
         conflicts: [],
         quality_score: 0,
       });
@@ -165,18 +166,34 @@ export class PairingAlgorithm {
     const sortedTeams = [...teams].sort((a, b) => {
       if (a.wins !== b.wins) return b.wins - a.wins;
       if (a.total_points !== b.total_points) return b.total_points - a.total_points;
-      return a.performance_score - b.performance_score;
+      return b.performance_score - a.performance_score;
     });
+
+    let byeTeam: TeamData | null = null;
+    if (sortedTeams.length % 2 === 1) {
+      byeTeam = this.selectByeTeam(sortedTeams);
+      const byeIndex = sortedTeams.findIndex(t => t._id === byeTeam!._id);
+      sortedTeams.splice(byeIndex, 1);
+    }
 
     const propPool: TeamData[] = [];
     const oppPool: TeamData[] = [];
 
     sortedTeams.forEach(team => {
-      const lastSide = team.side_history[team.side_history.length - 1];
-      if (lastSide === 'proposition') {
+      const propCount = team.side_history.filter(s => s === 'proposition').length;
+      const oppCount = team.side_history.filter(s => s === 'opposition').length;
+
+      if (propCount > oppCount) {
         oppPool.push(team);
-      } else {
+      } else if (oppCount > propCount) {
         propPool.push(team);
+      } else {
+
+        if (propPool.length <= oppPool.length) {
+          propPool.push(team);
+        } else {
+          oppPool.push(team);
+        }
       }
     });
 
@@ -230,6 +247,32 @@ export class PairingAlgorithm {
       }
     }
 
+    if (byeTeam) {
+      const propCount = byeTeam.side_history.filter(s => s === 'proposition').length;
+      const oppCount = byeTeam.side_history.filter(s => s === 'opposition').length;
+
+      let isProposition: boolean;
+      if (propCount < oppCount) {
+        isProposition = true;
+      } else if (oppCount < propCount) {
+        isProposition = false;
+      } else {
+
+        isProposition = this.roundNumber % 2 === 1;
+      }
+
+      existingPairings.push({
+        room_name: "",
+        proposition_team_id: isProposition ? byeTeam._id : undefined,
+        opposition_team_id: isProposition ? undefined : byeTeam._id,
+        judges: [],
+        head_judge_id: undefined,
+        is_bye_round: true,
+        conflicts: [],
+        quality_score: 0,
+      });
+    }
+
     return existingPairings;
   }
 
@@ -240,23 +283,13 @@ export class PairingAlgorithm {
     availableTeams.sort((a, b) => {
       if (a.wins !== b.wins) return b.wins - a.wins;
       if (a.total_points !== b.total_points) return b.total_points - a.total_points;
-      return a.performance_score - b.performance_score;
+      return b.performance_score - a.performance_score;
     });
 
+    let byeTeam: TeamData | null = null;
     if (availableTeams.length % 2 === 1) {
-      const byeTeam = this.selectByeTeam(availableTeams);
-      pairings.push({
-        room_name: "",
-        proposition_team_id: byeTeam._id,
-        opposition_team_id: undefined,
-        judges: [],
-        head_judge_id: undefined,
-        is_bye_round: true,
-        conflicts: [],
-        quality_score: 0,
-      });
-
-      const byeIndex = availableTeams.findIndex(t => t._id === byeTeam._id);
+      byeTeam = this.selectByeTeam(availableTeams);
+      const byeIndex = availableTeams.findIndex(t => t._id === byeTeam!._id);
       availableTeams.splice(byeIndex, 1);
     }
 
@@ -283,13 +316,12 @@ export class PairingAlgorithm {
       }
 
       if (bestOpponent) {
-
         const { propTeam, oppTeam } = this.determineSides(team1, bestOpponent);
 
         pairings.push({
           room_name: "",
-          proposition_team_id: propTeam._id,
-          opposition_team_id: oppTeam._id,
+          proposition_team_id: propTeam?._id,
+          opposition_team_id: oppTeam?._id,
           judges: [],
           head_judge_id: undefined,
           is_bye_round: false,
@@ -302,13 +334,30 @@ export class PairingAlgorithm {
       }
     }
 
+    if (byeTeam) {
+      const { propTeam, oppTeam } = this.determineSides(byeTeam, null);
+
+      pairings.push({
+        room_name: "",
+        proposition_team_id: propTeam?._id,
+        opposition_team_id: oppTeam?._id,
+        judges: [],
+        head_judge_id: undefined,
+        is_bye_round: true,
+        conflicts: [],
+        quality_score: 0,
+      });
+    }
+
     return pairings;
   }
 
   private selectByeTeam(teams: TeamData[]): TeamData {
+
     const noBye = teams.filter(team => team.bye_rounds.length === 0);
 
     if (noBye.length > 0) {
+
       return noBye.reduce((lowest, team) =>
         team.performance_score < lowest.performance_score ? team : lowest
       );
@@ -319,12 +368,28 @@ export class PairingAlgorithm {
     );
   }
 
-  private determineSides(team1: TeamData, team2: TeamData): { propTeam: TeamData; oppTeam: TeamData } {
+  private determineSides(team1: TeamData, team2: TeamData | null): { propTeam: TeamData | null; oppTeam: TeamData | null } {
+    if (!team2) {
+
+      const propCount = team1.side_history.filter(s => s === 'proposition').length;
+      const oppCount = team1.side_history.filter(s => s === 'opposition').length;
+
+      if (propCount < oppCount) {
+        return { propTeam: team1, oppTeam: null };
+      } else if (oppCount < propCount) {
+        return { propTeam: null, oppTeam: team1 };
+      } else {
+
+        const isProposition = this.roundNumber % 2 === 1;
+        return isProposition ? { propTeam: team1, oppTeam: null } : { propTeam: null, oppTeam: team1 };
+      }
+    }
+
     const team1PropCount = team1.side_history.filter(s => s === 'proposition').length;
     const team1OppCount = team1.side_history.filter(s => s === 'opposition').length;
     const team2PropCount = team2.side_history.filter(s => s === 'proposition').length;
     const team2OppCount = team2.side_history.filter(s => s === 'opposition').length;
-    
+
     const team1PropNeed = team1OppCount - team1PropCount;
     const team2PropNeed = team2OppCount - team2PropCount;
 
@@ -333,6 +398,7 @@ export class PairingAlgorithm {
     } else if (team2PropNeed > team1PropNeed) {
       return { propTeam: team2, oppTeam: team1 };
     } else {
+
       return team1.performance_score >= team2.performance_score
         ? { propTeam: team1, oppTeam: team2 }
         : { propTeam: team2, oppTeam: team1 };
@@ -359,7 +425,6 @@ export class PairingAlgorithm {
     availableJudges.forEach(judge => judgeAssignments.set(judge._id, judge.assignments_this_tournament));
 
     return pairings.map((pairing) => {
-
       const assignedJudges: Id<"users">[] = [];
       const conflicts: PairingConflict[] = [...pairing.conflicts];
 
@@ -368,13 +433,22 @@ export class PairingAlgorithm {
 
       const eligibleJudges = availableJudges.filter(judge => {
 
-        if (propTeam?.school_id && judge.school_id === propTeam.school_id) return false;
-        if (oppTeam?.school_id && judge.school_id === oppTeam.school_id) return false;
+        if (pairing.is_bye_round) {
+
+          const participatingTeam = propTeam || oppTeam;
+          if (participatingTeam?.school_id && judge.school_id === participatingTeam.school_id) {
+            return false;
+          }
+        } else {
+
+          if (propTeam?.school_id && judge.school_id === propTeam.school_id) return false;
+          if (oppTeam?.school_id && judge.school_id === oppTeam.school_id) return false;
+        }
 
         if (propTeam && judge.conflicts.includes(propTeam._id)) return false;
         return !(oppTeam && judge.conflicts.includes(oppTeam._id));
 
-
+        
       });
 
       eligibleJudges.sort((a, b) => {
@@ -501,8 +575,11 @@ export class PairingAlgorithm {
         }
       }
 
-      if (pairing.is_bye_round && pairing.proposition_team_id) {
-        const byeTeam = this.teams.find(t => t._id === pairing.proposition_team_id);
+      if (pairing.is_bye_round) {
+        const byeTeam = this.teams.find(t =>
+          t._id === pairing.proposition_team_id || t._id === pairing.opposition_team_id
+        );
+
         if (byeTeam && byeTeam.bye_rounds.length > 0) {
           conflicts.push({
             type: 'bye_violation',
@@ -523,7 +600,7 @@ export class PairingAlgorithm {
   private calculateQualityScores(pairings: PairingResult[]): PairingResult[] {
     return pairings.map(pairing => {
       if (pairing.is_bye_round) {
-        return { ...pairing, quality_score: 0 };
+        return { ...pairing, quality_score: 85 };
       }
 
       let score = 100;
@@ -575,7 +652,8 @@ export class PairingAlgorithm {
     judges: JudgeData[],
     propositionTeamId?: Id<"teams">,
     oppositionTeamId?: Id<"teams">,
-    judgeIds: Id<"users">[] = []
+    judgeIds: Id<"users">[] = [],
+    isPublicSpeaking: boolean = false
   ): PairingConflict[] {
     const conflicts: PairingConflict[] = [];
 
@@ -591,7 +669,7 @@ export class PairingAlgorithm {
       });
     }
 
-    if (propTeam && oppTeam) {
+    if (!isPublicSpeaking && propTeam && oppTeam) {
       if (propTeam.opponents_faced.includes(oppTeam._id)) {
         conflicts.push({
           type: 'repeat_opponent',
@@ -615,24 +693,39 @@ export class PairingAlgorithm {
       const judge = judges.find(j => j._id === judgeId);
       if (!judge) return;
 
-      if (propTeam?.school_id === judge.school_id) {
-        conflicts.push({
-          type: 'judge_conflict',
-          description: `Judge ${judge.name} is from the same school as proposition team`,
-          severity: 'error',
-          judge_ids: [judgeId],
-          team_ids: propTeam ? [propTeam._id] : undefined,
-        });
-      }
+      if (isPublicSpeaking) {
 
-      if (oppTeam?.school_id === judge.school_id) {
-        conflicts.push({
-          type: 'judge_conflict',
-          description: `Judge ${judge.name} is from the same school as opposition team`,
-          severity: 'error',
-          judge_ids: [judgeId],
-          team_ids: oppTeam ? [oppTeam._id] : undefined,
-        });
+        const participatingTeam = propTeam || oppTeam;
+        if (participatingTeam?.school_id === judge.school_id) {
+          conflicts.push({
+            type: 'judge_conflict',
+            description: `Judge ${judge.name} is from the same school as the participating team`,
+            severity: 'error',
+            judge_ids: [judgeId],
+            team_ids: participatingTeam ? [participatingTeam._id] : undefined,
+          });
+        }
+      } else {
+
+        if (propTeam?.school_id === judge.school_id) {
+          conflicts.push({
+            type: 'judge_conflict',
+            description: `Judge ${judge.name} is from the same school as proposition team`,
+            severity: 'error',
+            judge_ids: [judgeId],
+            team_ids: propTeam ? [propTeam._id] : undefined,
+          });
+        }
+
+        if (oppTeam?.school_id === judge.school_id) {
+          conflicts.push({
+            type: 'judge_conflict',
+            description: `Judge ${judge.name} is from the same school as opposition team`,
+            severity: 'error',
+            judge_ids: [judgeId],
+            team_ids: oppTeam ? [oppTeam._id] : undefined,
+          });
+        }
       }
 
       if (propTeam && judge.conflicts.includes(propTeam._id)) {
@@ -660,6 +753,34 @@ export class PairingAlgorithm {
   }
 }
 
+export function generateTournamentPairings(
+  teams: TeamData[],
+  judges: JudgeData[],
+  tournament: Tournament,
+  roundNumber: number
+): PairingResult[] {
+  const algorithm = new PairingAlgorithm(teams, judges, tournament, roundNumber);
+  return algorithm.generatePairings();
+}
+
+export function validatePairing(
+  teams: TeamData[],
+  judges: JudgeData[],
+  propositionTeamId?: Id<"teams">,
+  oppositionTeamId?: Id<"teams">,
+  judgeIds: Id<"users">[] = [],
+  isPublicSpeaking: boolean = false
+): PairingConflict[] {
+  return PairingAlgorithm.validatePairingConflicts(
+    teams,
+    judges,
+    propositionTeamId,
+    oppositionTeamId,
+    judgeIds,
+    isPublicSpeaking
+  );
+}
+
 export class PairingAlgorithmTests {
   static runAllTests(): void {
     console.log("🧪 Running Pairing Algorithm Tests...\n");
@@ -674,6 +795,7 @@ export class PairingAlgorithmTests {
     this.testSchoolConflictAvoidance();
     this.testQualityScoring();
     this.testMultipleRoundGeneration();
+    this.testPublicSpeakingSideAssignment();
 
     console.log("✅ All tests completed!");
   }
@@ -735,6 +857,32 @@ export class PairingAlgorithmTests {
     console.log("✅ Bye round assignment test passed\n");
   }
 
+  private static testPublicSpeakingSideAssignment(): void {
+    console.log("🔄 Testing public speaking side assignment...");
+
+    const teams = this.createMockTeams(7);
+
+    teams[0].side_history = ['proposition', 'proposition'];
+    teams[1].side_history = ['opposition', 'opposition'];
+    teams[2].side_history = ['proposition', 'opposition'];
+
+    const judges = this.createMockJudges(12);
+    const tournament = this.createMockTournament();
+
+    const algorithm = new PairingAlgorithm(teams, judges, tournament, 2);
+    const pairings = algorithm.generatePairings();
+
+    const byeRound = pairings.find(p => p.is_bye_round);
+    console.assert(byeRound !== undefined, "Should have a bye round");
+
+    console.assert(
+      byeRound!.proposition_team_id !== undefined || byeRound!.opposition_team_id !== undefined,
+      "Bye team should be assigned to a side"
+    );
+
+    console.log("✅ Public speaking side assignment test passed\n");
+  }
+
   private static testJudgeAssignment(): void {
     console.log("🔄 Testing judge assignment...");
 
@@ -773,10 +921,9 @@ export class PairingAlgorithmTests {
     teams[3].opponents_faced = [teams[2]._id];
 
     const judges = this.createMockJudges(8);
-    const tournament = this.createMockTournament();
 
     const conflicts = PairingAlgorithm.validatePairingConflicts(
-      teams, judges, teams[0]._id, teams[1]._id, []
+      teams, judges, teams[0]._id, teams[1]._id, [], false
     );
 
     console.assert(conflicts.length > 0, "Should detect same school conflict");
@@ -908,6 +1055,18 @@ export class PairingAlgorithmTests {
             oppTeam.side_history.push('opposition');
             oppTeam.opponents_faced.push(propTeam._id);
           }
+        } else {
+
+          const byeTeam = teams.find(t =>
+            t._id === pairing.proposition_team_id || t._id === pairing.opposition_team_id
+          );
+          if (byeTeam) {
+            if (pairing.proposition_team_id === byeTeam._id) {
+              byeTeam.side_history.push('proposition');
+            } else {
+              byeTeam.side_history.push('opposition');
+            }
+          }
         }
       });
     }
@@ -982,30 +1141,4 @@ export class PairingAlgorithmTests {
 
 if (typeof require !== 'undefined' && require.main === module) {
   PairingAlgorithmTests.runAllTests();
-}
-
-export function generateTournamentPairings(
-  teams: TeamData[],
-  judges: JudgeData[],
-  tournament: Tournament,
-  roundNumber: number
-): PairingResult[] {
-  const algorithm = new PairingAlgorithm(teams, judges, tournament, roundNumber);
-  return algorithm.generatePairings();
-}
-
-export function validatePairing(
-  teams: TeamData[],
-  judges: JudgeData[],
-  propositionTeamId?: Id<"teams">,
-  oppositionTeamId?: Id<"teams">,
-  judgeIds: Id<"users">[] = []
-): PairingConflict[] {
-  return PairingAlgorithm.validatePairingConflicts(
-    teams,
-    judges,
-    propositionTeamId,
-    oppositionTeamId,
-    judgeIds
-  );
 }

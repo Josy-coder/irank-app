@@ -1,7 +1,8 @@
 import { mutation, query } from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
-import { Doc, Id } from "../_generated/dataModel";
+import { Id } from "../_generated/dataModel";
+import { paginationOptsValidator } from "convex/server";
 
 interface TeamPairingData {
   _id: Id<"teams">;
@@ -52,6 +53,7 @@ interface PairingConflict {
   team_ids?: Id<"teams">[];
   judge_ids?: Id<"users">[];
 }
+
 export const getTournamentPairingData = query({
   args: {
     token: v.string(),
@@ -108,87 +110,72 @@ export const getTournamentPairingData = query({
     const judgingScores = await ctx.db.query("judging_scores").collect();
     const judgeFeedback = await ctx.db.query("judge_feedback").collect();
 
-    let crossTournamentDebates: Doc<"debates">[] = [];
-    let crossTournamentJudgingScores: Array<{
-      judge_id: Id<"users">;
-      tournament_id: Id<"tournaments">;
-      debates_judged: number;
-      avg_feedback: number;
-      consistency_score: number;
-    }> = [];
-    let leagueTournaments: Doc<"tournaments">[] = [];
+    // Enhanced conflict detection for judges
+    const enrichedJudges: JudgePairingData[] = await Promise.all(
+      judges.filter(Boolean).map(async (judge) => {
+        const school = judge!.school_id ? await ctx.db.get(judge!.school_id) : null;
 
-    if (league) {
-      leagueTournaments = await ctx.db
-        .query("tournaments")
-        .withIndex("by_league_id_status", (q) =>
-          q.eq("league_id", league._id).eq("status", "completed")
-        )
-        .collect();
+        const conflicts: Id<"teams">[] = [];
 
-      for (const leagueTournament of leagueTournaments) {
-        if (leagueTournament._id === args.tournament_id) continue;
+        // Add school conflicts
+        if (judge!.school_id) {
+          teams.filter(t => t.school_id === judge!.school_id)
+            .forEach(t => conflicts.push(t._id));
+        }
 
-        const tournamentDebates = await ctx.db
-          .query("debates")
-          .withIndex("by_tournament_id", (q) => q.eq("tournament_id", leagueTournament._id))
-          .collect();
-
-        crossTournamentDebates.push(...tournamentDebates);
-
-        const tournamentJudgingScores = judgingScores.filter(score =>
-          tournamentDebates.some(d => d._id === score.debate_id)
+        // Add feedback conflicts with improved detection
+        const poorFeedback = judgeFeedback.filter(f =>
+          f.judge_id === judge!._id &&
+          f.tournament_id === args.tournament_id && // Only current tournament
+          (f.bias_detected === true ||
+            ((f.clarity + f.fairness + f.knowledge + f.helpfulness) / 4) < 2.0) // Stricter threshold
         );
 
-        const judgeStatsMap = new Map<Id<"users">, { debates: number; feedback: number[]; scores: number[] }>();
-
-        tournamentJudgingScores.forEach(score => {
-          const current = judgeStatsMap.get(score.judge_id) || { debates: 0, feedback: [], scores: [] };
-          current.debates++;
-
-          if (score.speaker_scores) {
-            const avgScore = score.speaker_scores.reduce((sum, s) => sum + s.score, 0) / score.speaker_scores.length;
-            current.scores.push(avgScore);
-          }
-
-          judgeStatsMap.set(score.judge_id, current);
-        });
-
-        const tournamentFeedback = judgeFeedback.filter(feedback =>
-          tournamentDebates.some(d => d._id === feedback.debate_id)
-        );
-
-        tournamentFeedback.forEach(feedback => {
-          const current = judgeStatsMap.get(feedback.judge_id);
-          if (current) {
-            const avgRating = (feedback.clarity + feedback.fairness + feedback.knowledge + feedback.helpfulness) / 4;
-            current.feedback.push(avgRating);
+        poorFeedback.forEach(f => {
+          if (f.team_id && !conflicts.includes(f.team_id)) {
+            conflicts.push(f.team_id);
           }
         });
 
-        Array.from(judgeStatsMap.entries()).forEach(([judgeId, stats]) => {
-          const avgFeedback = stats.feedback.length > 0
-            ? stats.feedback.reduce((sum, f) => sum + f, 0) / stats.feedback.length
-            : 3.0;
+        const totalDebatesJudged = debates.filter(d => d.judges.includes(judge!._id)).length;
 
-          const consistencyScore = stats.scores.length > 1
-            ? Math.max(0, 100 - (stats.scores.reduce((sum, s, i, arr) => {
-              if (i === 0) return sum;
-              return sum + Math.abs(s - arr[i-1]);
-            }, 0) / (stats.scores.length - 1)) * 10)
-            : 1.0;
+        const eliminationDebates = debates.filter(d => {
+          const round = rounds.find(r => r._id === d.round_id);
+          const isElim = round && round.round_number > tournament.prelim_rounds;
+          return isElim && d.judges.includes(judge!._id);
+        }).length;
 
-          crossTournamentJudgingScores.push({
-            judge_id: judgeId,
-            tournament_id: leagueTournament._id,
-            debates_judged: stats.debates,
-            avg_feedback: avgFeedback,
-            consistency_score: consistencyScore,
-          });
-        });
-      }
-    }
+        const judgeFeedbackForJudge = judgeFeedback.filter(f =>
+          f.judge_id === judge!._id && f.tournament_id === args.tournament_id
+        );
 
+        const avgFeedbackScore = judgeFeedbackForJudge.length > 0
+          ? judgeFeedbackForJudge.reduce((sum, f) => sum + (f.clarity + f.fairness + f.knowledge + f.helpfulness) / 4, 0) / judgeFeedbackForJudge.length
+          : 3.0;
+
+        return {
+          _id: judge!._id,
+          name: judge!.name,
+          email: judge!.email,
+          school_id: judge!.school_id,
+          school_name: school?.name,
+          total_debates_judged: totalDebatesJudged,
+          elimination_debates: eliminationDebates,
+          avg_feedback_score: avgFeedbackScore,
+          conflicts,
+          assignments_this_tournament: totalDebatesJudged,
+          cross_tournament_stats: {
+            total_tournaments: 0,
+            total_debates: 0,
+            total_elimination_debates: 0,
+            avg_feedback: 3.0,
+            consistency_score: 1.0,
+          },
+        };
+      })
+    );
+
+    // Enhanced team data processing
     const enrichedTeams: TeamPairingData[] = await Promise.all(
       teams.map(async (team) => {
         const school = team.school_id ? await ctx.db.get(team.school_id) : null;
@@ -221,7 +208,6 @@ export const getTournamentPairingData = query({
             return round?.round_number || 0;
           });
 
-        // Calculate wins and points from debates directly
         let wins = 0;
         let totalPoints = 0;
 
@@ -230,70 +216,12 @@ export const getTournamentPairingData = query({
             wins++;
           }
 
-          // Add points from this team's participation
           if (debate.proposition_team_id === team._id && debate.proposition_team_points) {
             totalPoints += debate.proposition_team_points;
           } else if (debate.opposition_team_id === team._id && debate.opposition_team_points) {
             totalPoints += debate.opposition_team_points;
           }
         });
-
-        let crossTournamentPerformance = {
-          total_tournaments: 0,
-          total_wins: 0,
-          total_debates: 0,
-          avg_performance: 0,
-        };
-
-        if (league && team.school_id) {
-          // Get cross-tournament performance from other tournaments in the league
-          const schoolTeamsInLeague = new Set<Id<"teams">>();
-
-          for (const leagueTournament of leagueTournaments) {
-            const tournamentTeams = await ctx.db
-              .query("teams")
-              .withIndex("by_tournament_id_school_id", (q) =>
-                q.eq("tournament_id", leagueTournament._id).eq("school_id", team.school_id!)
-              )
-              .collect();
-
-            tournamentTeams.forEach(t => schoolTeamsInLeague.add(t._id));
-          }
-
-          // Calculate cross-tournament stats from debates
-          let crossWins = 0;
-          let crossPoints = 0;
-          let crossDebatesCount = 0;
-
-          for (const crossDebate of crossTournamentDebates) {
-            if (schoolTeamsInLeague.has(crossDebate.proposition_team_id!) ||
-              schoolTeamsInLeague.has(crossDebate.opposition_team_id!)) {
-              crossDebatesCount++;
-
-              if (crossDebate.status === "completed") {
-                if (schoolTeamsInLeague.has(crossDebate.winning_team_id!)) {
-                  crossWins++;
-                }
-
-                if (schoolTeamsInLeague.has(crossDebate.proposition_team_id!) && crossDebate.proposition_team_points) {
-                  crossPoints += crossDebate.proposition_team_points;
-                }
-                if (schoolTeamsInLeague.has(crossDebate.opposition_team_id!) && crossDebate.opposition_team_points) {
-                  crossPoints += crossDebate.opposition_team_points;
-                }
-              }
-            }
-          }
-
-          if (crossDebatesCount > 0) {
-            crossTournamentPerformance = {
-              total_tournaments: leagueTournaments.length,
-              total_wins: crossWins,
-              total_debates: crossDebatesCount,
-              avg_performance: crossPoints / crossDebatesCount,
-            };
-          }
-        }
 
         return {
           _id: team._id,
@@ -309,85 +237,12 @@ export const getTournamentPairingData = query({
           total_points: totalPoints,
           bye_rounds: byeRounds,
           performance_score: wins * 100 + totalPoints,
-          cross_tournament_performance: crossTournamentPerformance,
-        };
-      })
-    );
-
-    const enrichedJudges: JudgePairingData[] = await Promise.all(
-      judges.filter(Boolean).map(async (judge) => {
-        const school = judge!.school_id ? await ctx.db.get(judge!.school_id) : null;
-
-        const conflicts: Id<"teams">[] = [];
-
-        // Add school conflicts
-        if (judge!.school_id) {
-          teams.filter(t => t.school_id === judge!.school_id)
-            .forEach(t => conflicts.push(t._id));
-        }
-
-        // Add feedback conflicts from judge feedback
-        const poorFeedback = judgeFeedback.filter(f =>
-          f.judge_id === judge!._id &&
-          f.bias_detected === true &&
-          ((f.clarity + f.fairness + f.knowledge + f.helpfulness) / 4) < 2.5
-        );
-
-        poorFeedback.forEach(f => {
-          if (f.team_id && !conflicts.includes(f.team_id)) {
-            conflicts.push(f.team_id);
-          }
-        });
-
-        const totalDebatesJudged = debates.filter(d => d.judges.includes(judge!._id)).length;
-
-        const eliminationDebates = debates.filter(d => {
-          const round = rounds.find(r => r._id === d.round_id);
-          const isElim = round && round.round_number > tournament.prelim_rounds;
-          return isElim && d.judges.includes(judge!._id);
-        }).length;
-
-        const judgeFeedbackForJudge = judgeFeedback.filter(f => f.judge_id === judge!._id);
-        const avgFeedbackScore = judgeFeedbackForJudge.length > 0
-          ? judgeFeedbackForJudge.reduce((sum, f) => sum + (f.clarity + f.fairness + f.knowledge + f.helpfulness) / 4, 0) / judgeFeedbackForJudge.length
-          : 3.0;
-
-        let crossTournamentStats = {
-          total_tournaments: 0,
-          total_debates: 0,
-          total_elimination_debates: 0,
-          avg_feedback: 3.0,
-          consistency_score: 1.0,
-        };
-
-        if (league) {
-          const crossJudgeResults = crossTournamentJudgingScores.filter(jr => jr.judge_id === judge!._id);
-
-          if (crossJudgeResults.length > 0) {
-            const tournamentIds = new Set(crossJudgeResults.map(jr => jr.tournament_id));
-
-            crossTournamentStats = {
-              total_tournaments: tournamentIds.size,
-              total_debates: crossJudgeResults.reduce((sum, jr) => sum + jr.debates_judged, 0),
-              total_elimination_debates: 0, // Would need more complex calculation
-              avg_feedback: crossJudgeResults.reduce((sum, jr) => sum + jr.avg_feedback, 0) / crossJudgeResults.length,
-              consistency_score: crossJudgeResults.reduce((sum, jr) => sum + jr.consistency_score, 0) / crossJudgeResults.length,
-            };
-          }
-        }
-
-        return {
-          _id: judge!._id,
-          name: judge!.name,
-          email: judge!.email,
-          school_id: judge!.school_id,
-          school_name: school?.name,
-          total_debates_judged: totalDebatesJudged,
-          elimination_debates: eliminationDebates,
-          avg_feedback_score: avgFeedbackScore,
-          conflicts,
-          assignments_this_tournament: totalDebatesJudged,
-          cross_tournament_stats: crossTournamentStats,
+          cross_tournament_performance: {
+            total_tournaments: 0,
+            total_wins: 0,
+            total_debates: 0,
+            avg_performance: 0,
+          },
         };
       })
     );
@@ -403,11 +258,229 @@ export const getTournamentPairingData = query({
       current_round: currentRound,
       pairing_method: currentRound <= 5 ? "fold" : "swiss",
       can_generate_all_prelims: tournament.prelim_rounds <= 5,
-      cross_tournament_data: {
-        league_tournaments: leagueTournaments.length,
-        total_debates: crossTournamentDebates.length,
-        total_judge_results: crossTournamentJudgingScores.length,
-      }
+    };
+  },
+});
+
+export const getTournamentPairings = query({
+  args: {
+    token: v.string(),
+    tournament_id: v.id("tournaments"),
+    round_number: v.optional(v.number()),
+    search: v.optional(v.string()),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
+      token: args.token,
+    });
+
+    if (!sessionResult.valid) {
+      throw new Error("Authentication required");
+    }
+
+    let rounds;
+    if (args.round_number) {
+      const round = await ctx.db
+        .query("rounds")
+        .withIndex("by_tournament_id_round_number", (q) =>
+          q.eq("tournament_id", args.tournament_id).eq("round_number", args.round_number as number)
+        )
+        .first();
+      rounds = round ? [round] : [];
+    } else {
+      rounds = await ctx.db
+        .query("rounds")
+        .withIndex("by_tournament_id", (q) => q.eq("tournament_id", args.tournament_id))
+        .collect();
+    }
+
+    if (rounds.length === 0) {
+      return {
+        page: [],
+        isDone: true,
+        continueCursor: null
+      };
+    }
+
+    const enrichedRounds = await Promise.all(
+      rounds.map(async (round) => {
+        // Get debates with pagination support
+        let debatesQuery = ctx.db
+          .query("debates")
+          .withIndex("by_round_id", (q) => q.eq("round_id", round._id));
+
+        // Apply search filter if provided
+        if (args.search) {
+          const searchLower = args.search.toLowerCase();
+          debatesQuery = debatesQuery.filter((q) => {
+            return q.or(
+              q.eq(q.field("room_name"), args.search),
+              // We'll need to do team/judge name filtering after enrichment
+              // since we can't filter on joined data directly
+            );
+          });
+        }
+
+        const paginatedDebates = await debatesQuery.paginate(args.paginationOpts);
+
+        const enrichedDebates = await Promise.all(
+          paginatedDebates.page.map(async (debate) => {
+            const propTeam = debate.proposition_team_id ?
+              await ctx.db.get(debate.proposition_team_id) : null;
+            const oppTeam = debate.opposition_team_id ?
+              await ctx.db.get(debate.opposition_team_id) : null;
+
+            const judges = await Promise.all(
+              debate.judges.map(id => ctx.db.get(id))
+            );
+
+            const headJudge = debate.head_judge_id ?
+              await ctx.db.get(debate.head_judge_id) : null;
+
+            const propSchool = propTeam?.school_id ? await ctx.db.get(propTeam.school_id) : null;
+            const oppSchool = oppTeam?.school_id ? await ctx.db.get(oppTeam.school_id) : null;
+
+            const judgeDetails = await Promise.all(
+              judges.filter(Boolean).map(async (judge) => {
+                const school = judge!.school_id ? await ctx.db.get(judge!.school_id) : null;
+                return {
+                  ...judge!,
+                  school: school ? {
+                    _id: school._id,
+                    name: school.name,
+                    type: school.type,
+                  } : null,
+                };
+              })
+            );
+
+            // Enhanced conflict detection for display
+            const conflicts: PairingConflict[] = [];
+
+            // Check for judge-team school conflicts
+            judgeDetails.forEach(judge => {
+              if (judge.school_id) {
+                // For public speaking, only check against the participating team
+                if (debate.is_public_speaking) {
+                  if (propTeam?.school_id === judge.school_id) {
+                    conflicts.push({
+                      type: 'judge_conflict',
+                      description: `Judge ${judge.name} is from the same school as the participating team`,
+                      severity: 'error',
+                      judge_ids: [judge._id],
+                      team_ids: propTeam ? [propTeam._id] : undefined,
+                    });
+                  }
+                } else {
+                  // For regular debates, check both teams
+                  if (propTeam?.school_id === judge.school_id) {
+                    conflicts.push({
+                      type: 'judge_conflict',
+                      description: `Judge ${judge.name} is from the same school as proposition team`,
+                      severity: 'error',
+                      judge_ids: [judge._id],
+                      team_ids: propTeam ? [propTeam._id] : undefined,
+                    });
+                  }
+                  if (oppTeam?.school_id === judge.school_id) {
+                    conflicts.push({
+                      type: 'judge_conflict',
+                      description: `Judge ${judge.name} is from the same school as opposition team`,
+                      severity: 'error',
+                      judge_ids: [judge._id],
+                      team_ids: oppTeam ? [oppTeam._id] : undefined,
+                    });
+                  }
+                }
+              }
+            });
+
+            // Check for same school teams (only for regular debates)
+            if (!debate.is_public_speaking && propTeam && oppTeam &&
+              propTeam.school_id && propTeam.school_id === oppTeam.school_id) {
+              conflicts.push({
+                type: 'same_school',
+                description: `Both teams are from the same school`,
+                severity: 'warning',
+                team_ids: [propTeam._id, oppTeam._id],
+              });
+            }
+
+            return {
+              ...debate,
+              proposition_team: propTeam ? {
+                ...propTeam,
+                school: propSchool ? {
+                  _id: propSchool._id,
+                  name: propSchool.name,
+                  type: propSchool.type,
+                } : null,
+              } : null,
+              opposition_team: oppTeam ? {
+                ...oppTeam,
+                school: oppSchool ? {
+                  _id: oppSchool._id,
+                  name: oppSchool.name,
+                  type: oppSchool.type,
+                } : null,
+              } : null,
+              judge_details: judgeDetails,
+              head_judge: headJudge ? {
+                ...headJudge,
+                school: headJudge.school_id ? await ctx.db.get(headJudge.school_id) : null,
+              } : null,
+              pairing_conflicts: conflicts,
+            };
+          })
+        );
+
+        // Apply post-enrichment search filtering
+        let filteredDebates = enrichedDebates;
+        if (args.search) {
+          const searchLower = args.search.toLowerCase();
+          filteredDebates = enrichedDebates.filter(debate => {
+            const roomName = debate.room_name?.toLowerCase() || '';
+            const propTeamName = debate.proposition_team?.name?.toLowerCase() || '';
+            const oppTeamName = debate.opposition_team?.name?.toLowerCase() || '';
+            const judgeNames = debate.judge_details?.map(j => j.name?.toLowerCase()).join(' ') || '';
+
+            return roomName.includes(searchLower) ||
+              propTeamName.includes(searchLower) ||
+              oppTeamName.includes(searchLower) ||
+              judgeNames.includes(searchLower);
+          });
+        }
+
+        // Sort debates by room name
+        filteredDebates.sort((a, b) => {
+          const roomA = a.room_name || '';
+          const roomB = b.room_name || '';
+
+          const numA = parseInt(roomA.match(/\d+/)?.[0] || '999');
+          const numB = parseInt(roomB.match(/\d+/)?.[0] || '999');
+
+          if (numA !== numB) return numA - numB;
+          return roomA.localeCompare(roomB);
+        });
+
+        return {
+          ...round,
+          debates: filteredDebates,
+          pagination: {
+            isDone: paginatedDebates.isDone,
+            continueCursor: paginatedDebates.continueCursor
+          }
+        };
+      })
+    );
+
+    const sortedRounds = enrichedRounds.sort((a, b) => a.round_number - b.round_number);
+
+    return {
+      page: sortedRounds,
+      isDone: sortedRounds.length > 0 ? sortedRounds[0].pagination?.isDone ?? true : true,
+      continueCursor: sortedRounds.length > 0 ? sortedRounds[0].pagination?.continueCursor : null
     };
   },
 });
@@ -583,6 +656,76 @@ export const savePairings = mutation({
   },
 });
 
+export const updatePairing = mutation({
+  args: {
+    token: v.string(),
+    debate_id: v.id("debates"),
+    updates: v.object({
+      room_name: v.optional(v.string()),
+      judges: v.optional(v.array(v.id("users"))),
+      head_judge_id: v.optional(v.id("users")),
+      proposition_team_id: v.optional(v.id("teams")),
+      opposition_team_id: v.optional(v.id("teams")),
+    }),
+  },
+  handler: async (ctx, args) => {
+    const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
+      token: args.token,
+    });
+
+    if (!sessionResult.valid || sessionResult.user?.role !== "admin") {
+      throw new Error("Admin access required");
+    }
+
+    const debate = await ctx.db.get(args.debate_id);
+    if (!debate) {
+      throw new Error("Debate not found");
+    }
+
+    // Allow editing even for saved pairings if debate hasn't started
+    if (debate.status === "inProgress" || debate.status === "completed") {
+      throw new Error("Cannot update pairings for debates that have started or are completed");
+    }
+
+    if (args.updates.judges && args.updates.head_judge_id) {
+      if (!args.updates.judges.includes(args.updates.head_judge_id)) {
+        throw new Error("Head judge must be in the judges list");
+      }
+    }
+
+    if (args.updates.proposition_team_id && args.updates.opposition_team_id) {
+      if (args.updates.proposition_team_id === args.updates.opposition_team_id) {
+        throw new Error("Team cannot debate against itself");
+      }
+    }
+
+    const previousState = {
+      room_name: debate.room_name,
+      judges: debate.judges,
+      head_judge_id: debate.head_judge_id,
+      proposition_team_id: debate.proposition_team_id,
+      opposition_team_id: debate.opposition_team_id,
+    };
+
+    await ctx.db.patch(args.debate_id, {
+      ...args.updates,
+      updated_at: Date.now(),
+    });
+
+    await ctx.runMutation(internal.functions.audit.createAuditLog, {
+      user_id: sessionResult.user.id,
+      action: "debate_updated",
+      resource_type: "debates",
+      resource_id: args.debate_id,
+      description: `Updated pairing details`,
+      previous_state: JSON.stringify(previousState),
+      new_state: JSON.stringify(args.updates),
+    });
+
+    return { success: true };
+  },
+});
+
 export const handleTeamWithdrawal = mutation({
   args: {
     token: v.string(),
@@ -681,193 +824,6 @@ export const handleTeamWithdrawal = mutation({
   },
 });
 
-export const updatePairing = mutation({
-  args: {
-    token: v.string(),
-    debate_id: v.id("debates"),
-    updates: v.object({
-      room_name: v.optional(v.string()),
-      judges: v.optional(v.array(v.id("users"))),
-      head_judge_id: v.optional(v.id("users")),
-      proposition_team_id: v.optional(v.id("teams")),
-      opposition_team_id: v.optional(v.id("teams")),
-    }),
-  },
-  handler: async (ctx, args) => {
-    const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
-      token: args.token,
-    });
-
-    if (!sessionResult.valid || sessionResult.user?.role !== "admin") {
-      throw new Error("Admin access required");
-    }
-
-    const debate = await ctx.db.get(args.debate_id);
-    if (!debate) {
-      throw new Error("Debate not found");
-    }
-
-    if (debate.status !== "pending") {
-      throw new Error("Cannot update pairings for debates that have started");
-    }
-
-    if (args.updates.judges && args.updates.head_judge_id) {
-      if (!args.updates.judges.includes(args.updates.head_judge_id)) {
-        throw new Error("Head judge must be in the judges list");
-      }
-    }
-
-    if (args.updates.proposition_team_id && args.updates.opposition_team_id) {
-      if (args.updates.proposition_team_id === args.updates.opposition_team_id) {
-        throw new Error("Team cannot debate against itself");
-      }
-    }
-
-    const previousState = {
-      room_name: debate.room_name,
-      judges: debate.judges,
-      head_judge_id: debate.head_judge_id,
-      proposition_team_id: debate.proposition_team_id,
-      opposition_team_id: debate.opposition_team_id,
-    };
-
-    await ctx.db.patch(args.debate_id, {
-      ...args.updates,
-      updated_at: Date.now(),
-    });
-
-    await ctx.runMutation(internal.functions.audit.createAuditLog, {
-      user_id: sessionResult.user.id,
-      action: "debate_updated",
-      resource_type: "debates",
-      resource_id: args.debate_id,
-      description: `Updated pairing details`,
-      previous_state: JSON.stringify(previousState),
-      new_state: JSON.stringify(args.updates),
-    });
-
-    return { success: true };
-  },
-});
-
-export const getTournamentPairings = query({
-  args: {
-    token: v.string(),
-    tournament_id: v.id("tournaments"),
-    round_number: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
-      token: args.token,
-    });
-
-    if (!sessionResult.valid) {
-      throw new Error("Authentication required");
-    }
-
-    let rounds;
-    if (args.round_number) {
-      const round = await ctx.db
-        .query("rounds")
-        .withIndex("by_tournament_id_round_number", (q) =>
-          q.eq("tournament_id", args.tournament_id).eq("round_number", args.round_number as number)
-        )
-        .first();
-      rounds = round ? [round] : [];
-    } else {
-      rounds = await ctx.db
-        .query("rounds")
-        .withIndex("by_tournament_id", (q) => q.eq("tournament_id", args.tournament_id))
-        .collect();
-    }
-
-    const enrichedRounds = await Promise.all(
-      rounds.map(async (round) => {
-        const debates = await ctx.db
-          .query("debates")
-          .withIndex("by_round_id", (q) => q.eq("round_id", round._id))
-          .collect();
-
-        const enrichedDebates = await Promise.all(
-          debates.map(async (debate) => {
-            const propTeam = debate.proposition_team_id ?
-              await ctx.db.get(debate.proposition_team_id) : null;
-            const oppTeam = debate.opposition_team_id ?
-              await ctx.db.get(debate.opposition_team_id) : null;
-
-            const judges = await Promise.all(
-              debate.judges.map(id => ctx.db.get(id))
-            );
-
-            const headJudge = debate.head_judge_id ?
-              await ctx.db.get(debate.head_judge_id) : null;
-
-            const propSchool = propTeam?.school_id ? await ctx.db.get(propTeam.school_id) : null;
-            const oppSchool = oppTeam?.school_id ? await ctx.db.get(oppTeam.school_id) : null;
-
-            const judgeDetails = await Promise.all(
-              judges.filter(Boolean).map(async (judge) => {
-                const school = judge!.school_id ? await ctx.db.get(judge!.school_id) : null;
-                return {
-                  ...judge!,
-                  school: school ? {
-                    _id: school._id,
-                    name: school.name,
-                    type: school.type,
-                  } : null,
-                };
-              })
-            );
-
-            return {
-              ...debate,
-              proposition_team: propTeam ? {
-                ...propTeam,
-                school: propSchool ? {
-                  _id: propSchool._id,
-                  name: propSchool.name,
-                  type: propSchool.type,
-                } : null,
-              } : null,
-              opposition_team: oppTeam ? {
-                ...oppTeam,
-                school: oppSchool ? {
-                  _id: oppSchool._id,
-                  name: oppSchool.name,
-                  type: oppSchool.type,
-                } : null,
-              } : null,
-              judge_details: judgeDetails,
-              head_judge: headJudge ? {
-                ...headJudge,
-                school: headJudge.school_id ? await ctx.db.get(headJudge.school_id) : null,
-              } : null,
-            };
-          })
-        );
-
-        enrichedDebates.sort((a, b) => {
-          const roomA = a.room_name || '';
-          const roomB = b.room_name || '';
-
-          const numA = parseInt(roomA.match(/\d+/)?.[0] || '999');
-          const numB = parseInt(roomB.match(/\d+/)?.[0] || '999');
-
-          if (numA !== numB) return numA - numB;
-          return roomA.localeCompare(roomB);
-        });
-
-        return {
-          ...round,
-          debates: enrichedDebates,
-        };
-      })
-    );
-
-    return enrichedRounds.sort((a, b) => a.round_number - b.round_number);
-  },
-});
-
 export const getPairingStats = query({
   args: {
     token: v.string(),
@@ -904,170 +860,38 @@ export const getPairingStats = query({
       )
       .collect();
 
-    const matchupMatrix: Record<string, Set<string>> = {};
-    teams.forEach(team => {
-      matchupMatrix[team._id] = new Set();
-    });
-
-    debates.forEach(debate => {
-      if (debate.proposition_team_id && debate.opposition_team_id && !debate.is_public_speaking) {
-        matchupMatrix[debate.proposition_team_id]?.add(debate.opposition_team_id);
-        matchupMatrix[debate.opposition_team_id]?.add(debate.proposition_team_id);
-      }
-    });
-
-    const sideBalance: Record<string, { prop: number; opp: number; balance_score: number }> = {};
-    teams.forEach(team => {
-      sideBalance[team._id] = { prop: 0, opp: 0, balance_score: 0 };
-    });
-
-    debates.forEach(debate => {
-      if (!debate.is_public_speaking) {
-        if (debate.proposition_team_id) {
-          sideBalance[debate.proposition_team_id].prop++;
-        }
-        if (debate.opposition_team_id) {
-          sideBalance[debate.opposition_team_id].opp++;
-        }
-      }
-    });
-
-    Object.keys(sideBalance).forEach(teamId => {
-      const balance = sideBalance[teamId];
-      balance.balance_score = Math.abs(balance.prop - balance.opp);
-    });
-
-    const byeCount: Record<string, number> = {};
-    const byeRounds: Record<string, number[]> = {};
-    teams.forEach(team => {
-      byeCount[team._id] = 0;
-      byeRounds[team._id] = [];
-    });
-
-    debates.forEach(debate => {
-      if (debate.is_public_speaking && debate.proposition_team_id) {
-        byeCount[debate.proposition_team_id]++;
-
-        const round = rounds.find(r => r._id === debate.round_id);
-        if (round) {
-          byeRounds[debate.proposition_team_id].push(round.round_number);
-        }
-      }
-    });
-
-    const schoolConflicts: Record<string, number> = {};
-    debates.forEach(debate => {
-      if (!debate.is_public_speaking && debate.proposition_team_id && debate.opposition_team_id) {
-        const propTeam = teams.find(t => t._id === debate.proposition_team_id);
-        const oppTeam = teams.find(t => t._id === debate.opposition_team_id);
-
-        if (propTeam?.school_id && oppTeam?.school_id && propTeam.school_id === oppTeam.school_id) {
-          const schoolId = propTeam.school_id;
-          schoolConflicts[schoolId] = (schoolConflicts[schoolId] || 0) + 1;
-        }
-      }
-    });
-
-    const judgeWorkload: Record<string, {
-      total_assignments: number;
-      head_judge_count: number;
-      rounds: number[];
-      overload_score: number;
-    }> = {};
-
-    debates.forEach(debate => {
-      const round = rounds.find(r => r._id === debate.round_id);
-      const roundNumber = round?.round_number || 0;
-
-      debate.judges.forEach(judgeId => {
-        if (!judgeWorkload[judgeId]) {
-          judgeWorkload[judgeId] = {
-            total_assignments: 0,
-            head_judge_count: 0,
-            rounds: [],
-            overload_score: 0,
-          };
-        }
-
-        judgeWorkload[judgeId].total_assignments++;
-        judgeWorkload[judgeId].rounds.push(roundNumber);
-
-        if (debate.head_judge_id === judgeId) {
-          judgeWorkload[judgeId].head_judge_count++;
-        }
-      });
-    });
-
-    const averageAssignments = Object.values(judgeWorkload).length > 0
-      ? Object.values(judgeWorkload).reduce((sum, j) => sum + j.total_assignments, 0) / Object.values(judgeWorkload).length
-      : 0;
-
-    Object.keys(judgeWorkload).forEach(judgeId => {
-      const workload = judgeWorkload[judgeId];
-      workload.overload_score = Math.max(0, workload.total_assignments - averageAssignments);
-    });
-
     const qualityMetrics = {
-      repeat_matchups: Object.values(matchupMatrix).reduce((sum, opponents) =>
-        sum + Math.max(0, opponents.size - 1), 0),
-
-      side_imbalances: Object.values(sideBalance).filter(b => b.balance_score > 1).length,
-
-      multiple_byes: Object.values(byeCount).filter(count => count > 1).length,
-
-      school_conflicts: Object.values(schoolConflicts).reduce((sum, count) => sum + count, 0),
-
-      judge_overloads: Object.values(judgeWorkload).filter(j => j.overload_score > 2).length,
-
+      repeat_matchups: 0,
+      side_imbalances: 0,
+      multiple_byes: 0,
+      school_conflicts: 0,
+      judge_overloads: 0,
       total_quality_score: 0,
     };
-
-    qualityMetrics.total_quality_score =
-      (qualityMetrics.repeat_matchups * 10) +
-      (qualityMetrics.side_imbalances * 5) +
-      (qualityMetrics.multiple_byes * 20) +
-      (qualityMetrics.school_conflicts * 15) +
-      (qualityMetrics.judge_overloads * 3);
 
     return {
       total_rounds: rounds.length,
       total_teams: teams.length,
       total_debates: debates.length,
       public_speaking_rounds: debates.filter(d => d.is_public_speaking).length,
-
-      matchup_matrix: Object.fromEntries(
-        Object.entries(matchupMatrix).map(([teamId, opponents]) => [
-          teamId,
-          Array.from(opponents)
-        ])
-      ),
-
-      side_balance: sideBalance,
-      bye_distribution: byeCount,
-      bye_rounds: byeRounds,
-      school_conflicts: schoolConflicts,
-      judge_workload: judgeWorkload,
       quality_metrics: qualityMetrics,
-
       recommendations: generatePairingRecommendations(qualityMetrics, teams.length, rounds.length),
     };
   },
 });
 
-export const generateMultiplePrelimRounds = mutation({
+export const checkPreliminariesComplete = query({
   args: {
     token: v.string(),
     tournament_id: v.id("tournaments"),
-    rounds_to_generate: v.number(),
-    round_type: v.optional(v.union(v.literal("preliminary"), v.literal("elimination")))
   },
   handler: async (ctx, args) => {
-    const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
+    const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
       token: args.token,
     });
 
-    if (!sessionResult.valid || sessionResult.user?.role !== "admin") {
-      throw new Error("Admin access required");
+    if (!sessionResult.valid) {
+      throw new Error("Authentication required");
     }
 
     const tournament = await ctx.db.get(args.tournament_id);
@@ -1075,77 +899,21 @@ export const generateMultiplePrelimRounds = mutation({
       throw new Error("Tournament not found");
     }
 
-    const roundType = args.round_type || "preliminary";
-
-    if (roundType === "preliminary") {
-      if (args.rounds_to_generate > 5) {
-        throw new Error("Can only generate up to 5 preliminary rounds at once using fold system");
-      }
-
-      if (args.rounds_to_generate > tournament.prelim_rounds) {
-        throw new Error(`Tournament only has ${tournament.prelim_rounds} preliminary rounds`);
-      }
-    } else if (roundType === "elimination") {
-      const prelimRounds = await ctx.db
-        .query("rounds")
-        .withIndex("by_tournament_id", (q) => q.eq("tournament_id", args.tournament_id))
-        .filter(q => q.eq(q.field("type"), "preliminary"))
-        .collect();
-
-      const incompletePrelims = prelimRounds.filter(r => r.status !== "completed");
-      if (incompletePrelims.length > 0) {
-        throw new Error(`Cannot generate elimination rounds: ${incompletePrelims.length} preliminary rounds are not yet completed`);
-      }
-
-      if (args.rounds_to_generate > tournament.elimination_rounds) {
-        throw new Error(`Tournament only has ${tournament.elimination_rounds} elimination rounds`);
-      }
-
-      // Check if team rankings are available through debates
-      const debates = await ctx.db
-        .query("debates")
-        .withIndex("by_tournament_id", (q) => q.eq("tournament_id", args.tournament_id))
-        .collect();
-
-      const completedDebates = debates.filter(d => d.status === "completed");
-      if (completedDebates.length === 0) {
-        throw new Error("Cannot generate elimination rounds: No completed debates available for rankings");
-      }
-    }
-
-    const existingDebates = await ctx.db
-      .query("debates")
-      .withIndex("by_tournament_id", (q) => q.eq("tournament_id", args.tournament_id))
-      .collect();
-
-    const rounds = await ctx.db
+    const prelimRounds = await ctx.db
       .query("rounds")
       .withIndex("by_tournament_id", (q) => q.eq("tournament_id", args.tournament_id))
+      .filter(q => q.eq(q.field("type"), "preliminary"))
       .collect();
 
-    const targetRounds = rounds
-      .filter(r => r.type === roundType)
-      .sort((a, b) => a.round_number - b.round_number)
-      .slice(0, args.rounds_to_generate);
-
-    const roundsWithDebates = targetRounds.filter(round =>
-      existingDebates.some(debate => debate.round_id === round._id)
-    );
-
-    if (roundsWithDebates.length > 0) {
-      throw new Error(`Cannot generate multiple ${roundType} rounds: Some rounds already have pairings`);
-    }
+    const incompleteRounds = prelimRounds.filter(r => r.status !== "completed");
 
     return {
-      success: true,
-      message: `Ready to generate ${args.rounds_to_generate} ${roundType} rounds`,
-      should_generate_on_frontend: true,
-      method: roundType === "preliminary" && args.rounds_to_generate <= 5 ? "fold" : "swiss",
-      round_type: roundType,
-      target_rounds: targetRounds.map(r => ({
-        round_id: r._id,
+      total_prelims: tournament.prelim_rounds,
+      completed_prelims: prelimRounds.length - incompleteRounds.length,
+      all_complete: incompleteRounds.length === 0,
+      incomplete_rounds: incompleteRounds.map(r => ({
         round_number: r.round_number,
-        type: r.type
+        status: r.status
       }))
     };
   },
@@ -1194,179 +962,3 @@ function generatePairingRecommendations(
 
   return recommendations;
 }
-
-export const validatePairingConflicts = query({
-  args: {
-    token: v.string(),
-    tournament_id: v.id("tournaments"),
-    proposition_team_id: v.optional(v.id("teams")),
-    opposition_team_id: v.optional(v.id("teams")),
-    judges: v.array(v.id("users")),
-    round_number: v.number(),
-  },
-  handler: async (ctx, args) => {
-    const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
-      token: args.token,
-    });
-
-    if (!sessionResult.valid || sessionResult.user?.role !== "admin") {
-      throw new Error("Admin access required");
-    }
-
-    const conflicts: PairingConflict[] = [];
-
-    if (!args.proposition_team_id && !args.opposition_team_id) {
-      return conflicts;
-    }
-
-    const propTeam = args.proposition_team_id ? await ctx.db.get(args.proposition_team_id) : null;
-    const oppTeam = args.opposition_team_id ? await ctx.db.get(args.opposition_team_id) : null;
-
-    if (args.proposition_team_id === args.opposition_team_id) {
-      conflicts.push({
-        type: 'same_school',
-        description: 'Team cannot debate against itself',
-        severity: 'error',
-        team_ids: [args.proposition_team_id!],
-      });
-    }
-
-    if (propTeam && oppTeam && propTeam.school_id && propTeam.school_id === oppTeam.school_id) {
-      const school = await ctx.db.get(propTeam.school_id);
-      conflicts.push({
-        type: 'same_school',
-        description: `Both teams are from ${school?.name || 'the same school'}`,
-        severity: 'warning',
-        team_ids: [propTeam._id, oppTeam._id],
-      });
-    }
-
-    if (propTeam && oppTeam) {
-      const existingDebates = await ctx.db
-        .query("debates")
-        .withIndex("by_tournament_id", (q) => q.eq("tournament_id", args.tournament_id))
-        .collect();
-
-      const hasMetBefore = existingDebates.some(d =>
-        (d.proposition_team_id === propTeam._id && d.opposition_team_id === oppTeam._id) ||
-        (d.proposition_team_id === oppTeam._id && d.opposition_team_id === propTeam._id)
-      );
-
-      if (hasMetBefore) {
-        conflicts.push({
-          type: 'repeat_opponent',
-          description: `${propTeam.name} and ${oppTeam.name} have faced each other before`,
-          severity: 'error',
-          team_ids: [propTeam._id, oppTeam._id],
-        });
-      }
-    }
-
-    for (const judgeId of args.judges) {
-      const judge = await ctx.db.get(judgeId);
-      if (!judge) continue;
-
-      if (judge.school_id) {
-        if (propTeam?.school_id === judge.school_id) {
-          const school = await ctx.db.get(judge.school_id);
-          conflicts.push({
-            type: 'judge_conflict',
-            description: `Judge ${judge.name} is from the same school as proposition team (${school?.name})`,
-            severity: 'error',
-            judge_ids: [judgeId],
-            team_ids: propTeam ? [propTeam._id] : undefined,
-          });
-        }
-
-        if (oppTeam?.school_id === judge.school_id) {
-          const school = await ctx.db.get(judge.school_id);
-          conflicts.push({
-            type: 'judge_conflict',
-            description: `Judge ${judge.name} is from the same school as opposition team (${school?.name})`,
-            severity: 'error',
-            judge_ids: [judgeId],
-            team_ids: oppTeam ? [oppTeam._id] : undefined,
-          });
-        }
-      }
-
-      const poorFeedback = await ctx.db
-        .query("judge_feedback")
-        .withIndex("by_judge_id", (q) => q.eq("judge_id", judgeId))
-        .filter(q => q.eq(q.field("bias_detected"), true))
-        .collect();
-
-      const conflictTeams = poorFeedback.filter(f =>
-        (propTeam && f.team_id === propTeam._id) ||
-        (oppTeam && f.team_id === oppTeam._id)
-      );
-
-      conflictTeams.forEach(feedback => {
-        const teamName = feedback.team_id === propTeam?._id ? propTeam?.name : oppTeam?.name;
-        conflicts.push({
-          type: 'feedback_conflict',
-          description: `Judge ${judge.name} has received bias complaints from ${teamName}`,
-          severity: 'warning',
-          judge_ids: [judgeId],
-          team_ids: [feedback.team_id],
-        });
-      });
-    }
-
-    if (args.judges.length === 0) {
-      conflicts.push({
-        type: 'judge_conflict',
-        description: 'No judges assigned to this debate',
-        severity: 'error',
-      });
-    } else if (args.judges.length % 2 === 0 && args.judges.length > 1) {
-      conflicts.push({
-        type: 'judge_conflict',
-        description: `Even number of judges (${args.judges.length}) may cause tie decisions`,
-        severity: 'warning',
-        judge_ids: args.judges,
-      });
-    }
-
-    return conflicts;
-  },
-});
-
-export const checkPreliminariesComplete = query({
-  args: {
-    token: v.string(),
-    tournament_id: v.id("tournaments"),
-  },
-  handler: async (ctx, args) => {
-    const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
-      token: args.token,
-    });
-
-    if (!sessionResult.valid) {
-      throw new Error("Authentication required");
-    }
-
-    const tournament = await ctx.db.get(args.tournament_id);
-    if (!tournament) {
-      throw new Error("Tournament not found");
-    }
-
-    const prelimRounds = await ctx.db
-      .query("rounds")
-      .withIndex("by_tournament_id", (q) => q.eq("tournament_id", args.tournament_id))
-      .filter(q => q.eq(q.field("type"), "preliminary"))
-      .collect();
-
-    const incompleteRounds = prelimRounds.filter(r => r.status !== "completed");
-
-    return {
-      total_prelims: tournament.prelim_rounds,
-      completed_prelims: prelimRounds.length - incompleteRounds.length,
-      all_complete: incompleteRounds.length === 0,
-      incomplete_rounds: incompleteRounds.map(r => ({
-        round_number: r.round_number,
-        status: r.status
-      }))
-    };
-  },
-});

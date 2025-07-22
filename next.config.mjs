@@ -8,7 +8,7 @@ const nextConfig = {
         remotePatterns: [
             {
                 protocol: 'https',
-                hostname: 'wandering-kudu-451.convex.cloud',
+                hostname: 'wonderful-oyster-582.convex.cloud',
             },
         ],
     },

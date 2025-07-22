@@ -268,7 +268,16 @@ export default function CreateTournamentPage() {
     setShowImageDialog(false)
   }
 
-  const handleRemoveImage = () => {
+  const handleRemoveImage = async () => {
+    if (formData.image) {
+      try {
+        await deleteFile({ storageId: formData.image })
+        setUploadedImages(prev => prev.filter(id => id !== formData.image))
+      } catch (error) {
+       console.error("Error deleting image:", error)
+        toast.error("Failed to delete image. Try again later")
+      }
+    }
     setFormData(prev => ({ ...prev, image: undefined }))
     setImageUrl(null)
   }
@@ -481,7 +490,7 @@ export default function CreateTournamentPage() {
             fill
             className="object-cover"
           />
-          <div className="absolute inset-0 bg-black/20" />
+          <div className="absolute inset-0 bg-black/40" />
           <div className="absolute top-4 right-4">
             <Button
               variant="secondary"
