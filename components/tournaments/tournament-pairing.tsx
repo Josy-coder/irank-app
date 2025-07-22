@@ -1,35 +1,32 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
   AlertCircle,
   AlertTriangle,
   ArrowLeftRight,
-  Edit3,
-  Info,
-  Loader2,
-  Redo2,
-  RefreshCw,
-  Save,
-  Settings,
-  Shuffle,
-  Target,
-  Undo2,
-  Users,
-  Zap,
-  UserMinus,
-  Crown,
-  X,
-  GripVertical,
+  Calendar,
   ChevronDown,
   ChevronRight,
-  Search,
-  Download,
-  Share,
+  Crown,
+  Edit3,
   FileSpreadsheet,
-  FileText
+  FileText,
+  GripVertical,
+  Info,
+  Loader2,
+  RefreshCw,
+  Save,
+  Search,
+  Settings,
+  Share,
+  Shuffle,
+  Target,
+  UserMinus,
+  Users,
+  X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -46,11 +43,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "sonner";
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 import { generateTournamentPairings, validatePairing } from "@/lib/pairing-algorithm";
 import { Id } from "@/convex/_generated/dataModel";
@@ -104,13 +100,14 @@ interface TournamentPairingsProps {
 }
 
 interface MoveAction {
-  type: 'swap_sides' | 'move_team' | 'update_room' | 'update_judges' | 'generate' | 'clear';
+  type: 'swap_sides' | 'move_team' | 'update_room' | 'update_judges' | 'generate' | 'clear' | 'bulk_generate';
   debateIndex?: number;
   oldValue: any;
   newValue: any;
   description: string;
   timestamp: number;
   pairingsSnapshot: PairingDraft[];
+  roundNumber?: number;
 }
 
 const ConfirmDialog = ({
@@ -173,7 +170,6 @@ const getJudgeConflicts = (judge: any, debate: any) => {
   const conflicts: string[] = [];
 
   if (judge.school_id) {
-    // Only check school conflicts for actual debates (not public speaking)
     if (!debate.is_public_speaking) {
       if (debate.proposition_team?.school?._id === judge.school_id) {
         conflicts.push('Same school as Proposition team');
@@ -182,7 +178,6 @@ const getJudgeConflicts = (judge: any, debate: any) => {
         conflicts.push('Same school as Opposition team');
       }
     } else {
-      // For public speaking, only check against the participating team
       if (debate.proposition_team?.school?._id === judge.school_id) {
         conflicts.push('Same school as participating team');
       }
@@ -507,56 +502,161 @@ const JudgeSelectionDialog = ({
 const SharePairingsDialog = ({
                                pairings,
                                tournament,
-                               roundNumber
+                               roundNumber,
+                               allRounds,
+                               onExportMultipleRounds
                              }: {
   pairings: any[],
   tournament: any,
-  roundNumber: number
+  roundNumber: number,
+  allRounds?: any[],
+  onExportMultipleRounds?: (selectedRounds: number[]) => Promise<any[]>
 }) => {
   const [open, setOpen] = useState(false);
+  const [exportType, setExportType] = useState<'single' | 'multiple'>('single');
+  const [selectedRounds, setSelectedRounds] = useState<number[]>([roundNumber]);
+  const [isExporting, setIsExporting] = useState(false);
 
-  const exportToExcel = () => {
-    const data = pairings.map((pairing, index) => ({
-      'Room': pairing.room_name || `Room ${index + 1}`,
-      'Proposition Team': pairing.proposition_team?.name || 'N/A',
-      'Opposition Team': pairing.opposition_team?.name || pairing.is_public_speaking ? 'Public Speaking' : 'N/A',
-      'Judges': pairing.judge_details?.map((j: any) => j.name).join(', ') || 'No judges',
-      'Head Judge': pairing.head_judge?.name || 'N/A',
-      'Type': pairing.is_public_speaking ? 'Public Speaking' : 'Debate',
-      'Conflicts': pairing.pairing_conflicts?.length || 0
-    }));
+  const exportToExcel = async () => {
+    setIsExporting(true);
+    try {
+      let dataToExport = pairings;
+      let fileName = `${tournament.name}_Round_${roundNumber}_Pairings.xlsx`;
 
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `Round ${roundNumber}`);
+      if (exportType === 'multiple' && onExportMultipleRounds) {
+        dataToExport = await onExportMultipleRounds(selectedRounds);
+        fileName = `${tournament.name}_Rounds_${selectedRounds.join('-')}_Pairings.xlsx`;
+      }
 
-    XLSX.writeFile(wb, `${tournament.name}_Round_${roundNumber}_Pairings.xlsx`);
-    toast.success("Excel file downloaded!");
+      const wb = XLSX.utils.book_new();
+
+      if (exportType === 'multiple') {
+        const roundGroups = dataToExport.reduce((acc, pairing) => {
+          const round = pairing.round_number || roundNumber;
+          if (!acc[round]) acc[round] = [];
+          acc[round].push({
+            'Room': pairing.room_name || `Room ${acc[round].length + 1}`,
+            'Proposition Team': pairing.proposition_team?.name || 'N/A',
+            'Opposition Team': pairing.opposition_team?.name || (pairing.is_public_speaking ? 'Public Speaking' : 'N/A'),
+            'Judges': pairing.judge_details?.map((j: any) => j.name).join(', ') || 'No judges',
+            'Head Judge': pairing.head_judge?.name || 'N/A',
+            'Type': pairing.is_public_speaking ? 'Public Speaking' : 'Debate',
+            'Conflicts': pairing.pairing_conflicts?.length || 0
+          });
+          return acc;
+        }, {});
+
+        Object.entries(roundGroups).forEach(([round, data]) => {
+          const ws = XLSX.utils.json_to_sheet(data as any[]);
+          XLSX.utils.book_append_sheet(wb, ws, `Round ${round}`);
+        });
+      } else {
+        const data = dataToExport.map((pairing, index) => ({
+          'Room': pairing.room_name || `Room ${index + 1}`,
+          'Proposition Team': pairing.proposition_team?.name || 'N/A',
+          'Opposition Team': pairing.opposition_team?.name || (pairing.is_public_speaking ? 'Public Speaking' : 'N/A'),
+          'Judges': pairing.judge_details?.map((j: any) => j.name).join(', ') || 'No judges',
+          'Head Judge': pairing.head_judge?.name || 'N/A',
+          'Type': pairing.is_public_speaking ? 'Public Speaking' : 'Debate',
+          'Conflicts': pairing.pairing_conflicts?.length || 0
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(data);
+        XLSX.utils.book_append_sheet(wb, ws, `Round ${roundNumber}`);
+      }
+
+      XLSX.writeFile(wb, fileName);
+      toast.success("Excel file downloaded!");
+    } catch (error) {
+      toast.error("Failed to export Excel file");
+    } finally {
+      setIsExporting(false);
+    }
   };
 
-  const exportToPDF = () => {
-    const doc = new jsPDF();
+  const exportToPDF = async () => {
+    setIsExporting(true);
+    try {
+      let dataToExport = pairings;
+      let fileName = `${tournament.name}_Round_${roundNumber}_Pairings.pdf`;
 
-    doc.setFontSize(16);
-    doc.text(`${tournament.name} - Round ${roundNumber} Pairings`, 20, 20);
+      if (exportType === 'multiple' && onExportMultipleRounds) {
+        dataToExport = await onExportMultipleRounds(selectedRounds);
+        fileName = `${tournament.name}_Rounds_${selectedRounds.join('-')}_Pairings.pdf`;
+      }
 
-    const tableData = pairings.map((pairing, index) => [
-      pairing.room_name || `Room ${index + 1}`,
-      pairing.proposition_team?.name || 'N/A',
-      pairing.opposition_team?.name || (pairing.is_public_speaking ? 'Public Speaking' : 'N/A'),
-      pairing.judge_details?.map((j: any) => j.name).join(', ') || 'No judges'
-    ]);
+      const doc = new jsPDF();
 
-    (doc as any).autoTable({
-      head: [['Room', 'Proposition', 'Opposition', 'Judges']],
-      body: tableData,
-      startY: 30,
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [66, 139, 202] }
-    });
+      doc.setFontSize(16);
+      if (exportType === 'multiple') {
+        doc.text(`${tournament.name} - Rounds ${selectedRounds.join(', ')} Pairings`, 20, 20);
+      } else {
+        doc.text(`${tournament.name} - Round ${roundNumber} Pairings`, 20, 20);
+      }
 
-    doc.save(`${tournament.name}_Round_${roundNumber}_Pairings.pdf`);
-    toast.success("PDF file downloaded!");
+      let yPosition = 40;
+
+      if (exportType === 'multiple') {
+        const roundGroups = dataToExport.reduce((acc, pairing) => {
+          const round = pairing.round_number || roundNumber;
+          if (!acc[round]) acc[round] = [];
+          acc[round].push(pairing);
+          return acc;
+        }, {});
+
+        Object.entries(roundGroups as Record<string, any[]>).forEach(([round, roundPairings]: [string, any[]]) => {
+          if (yPosition > 250) {
+            doc.addPage();
+            yPosition = 20;
+          }
+
+          doc.setFontSize(14);
+          doc.text(`Round ${round}`, 20, yPosition);
+          yPosition += 10;
+
+          const tableData = roundPairings.map((pairing, index) => [
+            pairing.room_name || `Room ${index + 1}`,
+            pairing.proposition_team?.name || 'N/A',
+            pairing.opposition_team?.name || (pairing.is_public_speaking ? 'Public Speaking' : 'N/A'),
+            pairing.judge_details?.map((j: any) => j.name).join(', ') || 'No judges'
+          ]);
+
+          autoTable(doc, {
+            head: [['Room', 'Proposition', 'Opposition', 'Judges']],
+            body: tableData,
+            startY: yPosition,
+            styles: { fontSize: 8 },
+            headStyles: { fillColor: [66, 139, 202] },
+            margin: { left: 20, right: 20 }
+          });
+
+          yPosition = (doc as any).lastAutoTable.finalY + 20;
+        });
+      } else {
+        const tableData = dataToExport.map((pairing, index) => [
+          pairing.room_name || `Room ${index + 1}`,
+          pairing.proposition_team?.name || 'N/A',
+          pairing.opposition_team?.name || (pairing.is_public_speaking ? 'Public Speaking' : 'N/A'),
+          pairing.judge_details?.map((j: any) => j.name).join(', ') || 'No judges'
+        ]);
+
+        autoTable(doc, {
+          head: [['Room', 'Proposition', 'Opposition', 'Judges']],
+          body: tableData,
+          startY: yPosition,
+          styles: { fontSize: 8 },
+          headStyles: { fillColor: [66, 139, 202] },
+          margin: { left: 20, right: 20 }
+        });
+      }
+
+      doc.save(fileName);
+      toast.success("PDF file downloaded!");
+    } catch (error) {
+      toast.error("Failed to export PDF file");
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const shareOnWhatsApp = () => {
@@ -574,22 +674,95 @@ const SharePairingsDialog = ({
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
           <Share className="h-4 w-4 mr-1" />
-          Share
+          Export
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Share Pairings</DialogTitle>
+          <DialogTitle>Export Pairings</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
+          {allRounds && allRounds.length > 1 && (
+            <div className="space-y-3">
+              <Label>Export Type</Label>
+              <div className="space-y-2">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    id="single"
+                    name="exportType"
+                    checked={exportType === 'single'}
+                    onChange={() => setExportType('single')}
+                  />
+                  <Label htmlFor="single">Current Round ({roundNumber})</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    id="multiple"
+                    name="exportType"
+                    checked={exportType === 'multiple'}
+                    onChange={() => setExportType('multiple')}
+                  />
+                  <Label htmlFor="multiple">Multiple Rounds</Label>
+                </div>
+              </div>
+
+              {exportType === 'multiple' && (
+                <div className="space-y-2">
+                  <Label>Select Rounds</Label>
+                  <div className="grid grid-cols-4 gap-2 max-h-32 overflow-y-auto">
+                    {allRounds.map((round) => (
+                      <div key={round.round_number} className="flex items-center space-x-1">
+                        <Checkbox
+                          id={`round-${round.round_number}`}
+                          checked={selectedRounds.includes(round.round_number)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setSelectedRounds(prev => [...prev, round.round_number].sort((a, b) => a - b));
+                            } else {
+                              setSelectedRounds(prev => prev.filter(r => r !== round.round_number));
+                            }
+                          }}
+                        />
+                        <Label htmlFor={`round-${round.round_number}`} className="text-xs">
+                          R{round.round_number}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                  {selectedRounds.length === 0 && (
+                    <p className="text-sm text-red-500">Please select at least one round</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
-            <Button onClick={exportToExcel} className="flex items-center gap-2">
-              <FileSpreadsheet className="h-4 w-4" />
-              Export to Excel
+            <Button
+              onClick={exportToExcel}
+              disabled={isExporting || (exportType === 'multiple' && selectedRounds.length === 0)}
+              className="flex items-center gap-2"
+            >
+              {isExporting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FileSpreadsheet className="h-4 w-4" />
+              )}
+              Excel
             </Button>
-            <Button onClick={exportToPDF} className="flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              Export to PDF
+            <Button
+              onClick={exportToPDF}
+              disabled={isExporting || (exportType === 'multiple' && selectedRounds.length === 0)}
+              className="flex items-center gap-2"
+            >
+              {isExporting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FileText className="h-4 w-4" />
+              )}
+              PDF
             </Button>
           </div>
           <Button onClick={shareOnWhatsApp} className="w-full flex items-center gap-2" variant="outline">
@@ -654,7 +827,7 @@ const PairingsTableRow = ({
           <Button
             variant="ghost"
             size="sm"
-            className="p-0 h-4 w-4"
+            className="p-0 h-4 w-2"
             onClick={() => onToggleExpand(index)}
           >
             {isExpanded ? (
@@ -865,57 +1038,6 @@ const PairingsTableRow = ({
                     </div>
                   </div>
                 )}
-
-              {!debate.is_public_speaking && (debate.proposition_team || debate.opposition_team) && (
-                <div>
-                  <h4 className="font-medium mb-2">Team Details</h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    {debate.proposition_team && (
-                      <div className="p-2 bg-background rounded border">
-                        <div className="font-medium text-green-700 mb-1">{debate.proposition_team.name}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {debate.proposition_team.school?.name} • {debate.proposition_team.members?.length} members
-                        </div>
-                        {canViewConflicts && (
-                          <div className="text-xs text-muted-foreground mt-1">
-                            Payment: {debate.proposition_team.payment_status}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {debate.opposition_team && (
-                      <div className="p-2 bg-background rounded border">
-                        <div className="font-medium text-red-700 mb-1">{debate.opposition_team.name}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {debate.opposition_team.school?.name} • {debate.opposition_team.members?.length} members
-                        </div>
-                        {canViewConflicts && (
-                          <div className="text-xs text-muted-foreground mt-1">
-                            Payment: {debate.opposition_team.payment_status}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {debate.is_public_speaking && debate.proposition_team && (
-                <div>
-                  <h4 className="font-medium mb-2">Public Speaking Team</h4>
-                  <div className="p-2 bg-background rounded border">
-                    <div className="font-medium text-blue-700 mb-1">{debate.proposition_team.name}</div>
-                    <div className="text-sm text-muted-foreground">
-                      {debate.proposition_team.school?.name} • {debate.proposition_team.members?.length} members
-                    </div>
-                    {canViewConflicts && (
-                      <div className="text-xs text-muted-foreground mt-1">
-                        Payment: {debate.proposition_team.payment_status}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
           </TableCell>
         </TableRow>
@@ -954,7 +1076,6 @@ const PairingsTable = ({
                          pairingData,
                          tournament,
                          searchQuery,
-                         pagination,
                          hasNextPage,
                          loadMore,
                          isLoadingMore
@@ -971,7 +1092,6 @@ const PairingsTable = ({
     setExpandedRows(newExpanded);
   };
 
-  // Filter pairings based on search query
   const filteredPairings = useMemo(() => {
     if (!searchQuery.trim()) return displayPairings;
 
@@ -1013,7 +1133,7 @@ const PairingsTable = ({
       <Table>
         <TableHeader className="sticky top-0 bg-background z-10">
           <TableRow>
-            <TableHead className="w-4"></TableHead>
+            <TableHead className="w-6"></TableHead>
             <TableHead className="w-32">Room</TableHead>
             <TableHead className="w-80">Proposition</TableHead>
             <TableHead className="w-80">Opposition</TableHead>
@@ -1161,8 +1281,9 @@ export default function TournamentPairings({
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
   const [isRecalculating, setIsRecalculating] = useState(false);
+  const [isBulkGenerating, setIsBulkGenerating] = useState(false);
+  const [bulkGenerationProgress, setBulkGenerationProgress] = useState({ current: 0, total: 0 });
 
-  // Pagination state
   const [pagination, setPagination] = useState({ cursor: null as string | null });
   const [hasNextPage, setHasNextPage] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -1215,13 +1336,13 @@ export default function TournamentPairings({
     } : "skip"
   ), "tournament-pairings");
 
-  const pairingStats = useQuery(
+  const pairingStats = useOffline(useQuery(
     api.functions.pairings.getPairingStats,
     canViewStats ? {
       token,
       tournament_id: tournament._id,
     } : "skip"
-  );
+  ),"tournament-pairing-stats");
 
   const savePairingsMutation = useMutation(api.functions.pairings.savePairings);
   const updatePairingMutation = useMutation(api.functions.pairings.updatePairing);
@@ -1234,9 +1355,14 @@ export default function TournamentPairings({
   }, [existingPairings]);
 
   const addToUndoStack = useCallback((action: MoveAction) => {
-    setUndoStack(prev => [...prev.slice(-19), action]); // Keep last 20 actions
-    setRedoStack([]); // Clear redo stack when new action is performed
-  }, []);
+    const actionWithState = {
+      ...action,
+      pairingsSnapshot: [...draftPairings]
+    };
+
+    setUndoStack(prev => [...prev.slice(-19), actionWithState]);
+    setRedoStack([]);
+  }, [draftPairings]);
 
   const saveDraft = useCallback((newPairings: PairingDraft[], immediate = false) => {
     if (!canEditPairings || (!autoSaveDrafts && !immediate)) return;
@@ -1268,7 +1394,6 @@ export default function TournamentPairings({
   const loadMore = useCallback(() => {
     if (isLoadingMore || !hasNextPage) return;
     setIsLoadingMore(true);
-    // Implement pagination loading logic here
     setTimeout(() => {
       setIsLoadingMore(false);
     }, 1000);
@@ -1379,6 +1504,167 @@ export default function TournamentPairings({
     return { totalDebates, byeRounds, conflicts, errors };
   }, [isDraft, draftPairings, currentDebates]);
 
+  const getFoldRounds = useCallback(() => {
+    if (pairingMethod === 'swiss') return [];
+    if (pairingMethod === 'fold') return Array.from({ length: tournament.prelim_rounds }, (_, i) => i + 1);
+
+    const maxFoldRounds = Math.min(5, tournament.prelim_rounds);
+    return Array.from({ length: maxFoldRounds }, (_, i) => i + 1);
+  }, [pairingMethod, tournament.prelim_rounds]);
+
+  const canGenerateAllFoldRounds = useMemo(() => {
+    const foldRounds = getFoldRounds();
+    return foldRounds.length > 1 && foldRounds.includes(currentRound);
+  }, [getFoldRounds, currentRound]);
+
+  const generateAllFoldRounds = useCallback(async () => {
+    if (!canGeneratePairings || !pairingData || !pairingData.teams || !pairingData.judges) {
+      toast.error("Tournament data not loaded");
+      return;
+    }
+
+    const foldRounds = getFoldRounds();
+    if (foldRounds.length <= 1) {
+      toast.error("Cannot generate all rounds: only one fold round available");
+      return;
+    }
+
+    setConfirmDialog({
+      open: true,
+      title: `Generate All Fold Rounds (${foldRounds.join(', ')})`,
+      description: `This will generate pairings for ${foldRounds.length} rounds at once using the fold system. This cannot be undone. Continue?`,
+      onConfirm: async () => {
+        setIsBulkGenerating(true);
+        setBulkGenerationProgress({ current: 0, total: foldRounds.length });
+
+        try {
+          const teams = pairingData.teams.map((team: any) => ({
+            _id: team._id,
+            name: team.name,
+            school_id: team.school_id,
+            school_name: team.school_name,
+            side_history: [],
+            opponents_faced: [],
+            wins: team.wins || 0,
+            total_points: team.total_points || 0,
+            bye_rounds: [],
+            performance_score: team.performance_score || 0,
+            cross_tournament_performance: team.cross_tournament_performance || {
+              total_tournaments: 0,
+              total_wins: 0,
+              total_debates: 0,
+              avg_performance: 0,
+            },
+          }));
+
+          const judges = pairingData.judges.map((judge: any) => ({
+            _id: judge._id,
+            name: judge.name,
+            school_id: judge.school_id,
+            school_name: judge.school_name,
+            total_debates_judged: judge.total_debates_judged || 0,
+            elimination_debates: judge.elimination_debates || 0,
+            avg_feedback_score: judge.avg_feedback_score || 3.0,
+            conflicts: judge.conflicts || [],
+            assignments_this_tournament: judge.assignments_this_tournament || 0,
+            cross_tournament_stats: judge.cross_tournament_stats || {
+              total_tournaments: 0,
+              total_debates: 0,
+              total_elimination_debates: 0,
+              avg_feedback: 3.0,
+              consistency_score: 1.0,
+            },
+          }));
+
+          const allRoundPairings: { round: number; pairings: any[] }[] = [];
+
+          for (let i = 0; i < foldRounds.length; i++) {
+            const roundNumber = foldRounds[i];
+            setBulkGenerationProgress({ current: i + 1, total: foldRounds.length });
+
+            const result = generateTournamentPairings(teams, judges, tournament, roundNumber);
+
+            result.forEach(pairing => {
+              if (!pairing.is_bye_round) {
+                const propTeam = teams.find(t => t._id === pairing.proposition_team_id) as any;
+
+                const oppTeam = teams.find(t => t._id === pairing.opposition_team_id) as any
+
+                if (propTeam && oppTeam) {
+                  propTeam.side_history.push('proposition');
+                  propTeam.opponents_faced.push(oppTeam._id);
+
+                  oppTeam.side_history.push('opposition');
+                  oppTeam.opponents_faced.push(propTeam._id);
+                }
+              } else {
+                const byeTeam = teams.find(t =>
+                  t._id === pairing.proposition_team_id || t._id === pairing.opposition_team_id
+                ) as any
+                if (byeTeam) {
+                  if (pairing.proposition_team_id === byeTeam._id) {
+                    byeTeam.side_history.push('proposition');
+                  } else {
+                    byeTeam.side_history.push('opposition');
+                  }
+                  byeTeam.bye_rounds.push(roundNumber);
+                }
+              }
+            });
+
+            allRoundPairings.push({
+              round: roundNumber,
+              pairings: result.map(pairing => ({
+                room_name: pairing.room_name,
+                proposition_team_id: pairing.proposition_team_id,
+                opposition_team_id: pairing.opposition_team_id,
+                judges: pairing.judges,
+                head_judge_id: pairing.head_judge_id,
+                is_bye_round: pairing.is_bye_round,
+              }))
+            });
+          }
+
+          for (const { round, pairings } of allRoundPairings) {
+            try {
+              await savePairingsMutation({
+                token,
+                tournament_id: tournament._id,
+                round_number: round,
+                pairings,
+              });
+            } catch (error: any) {
+              throw new Error(`Failed to save Round ${round}: ${error.message}`);
+            }
+          }
+
+          foldRounds.forEach(round => {
+            localStorage.removeItem(`pairings_draft_${tournament._id}_${round}`);
+          });
+
+          setIsDraft(false);
+          setDraftPairings([]);
+          setUndoStack([]);
+          setRedoStack([]);
+
+          toast.success(`Generated and saved ${foldRounds.length} rounds!`, {
+            description: "All fold rounds have been created and participants notified",
+          });
+
+        } catch (error: any) {
+          toast.error("Failed to generate all rounds", {
+            description: error.message || "An unexpected error occurred",
+          });
+        } finally {
+          setIsBulkGenerating(false);
+          setBulkGenerationProgress({ current: 0, total: 0 });
+        }
+      },
+      variant: "default",
+      confirmText: `Generate ${foldRounds.length} Rounds`,
+    });
+  }, [canGeneratePairings, pairingData, getFoldRounds, tournament, token, savePairingsMutation]);
+
   const generatePairings = useCallback(async () => {
     if (!canGeneratePairings || !pairingData || !pairingData.teams || !pairingData.judges) {
       if (!canGeneratePairings) {
@@ -1404,14 +1690,14 @@ export default function TournamentPairings({
     setGenerationProgress(0);
 
     try {
-      // Save current state to undo stack before generating
       const previousAction: MoveAction = {
         type: 'generate',
         oldValue: draftPairings,
         newValue: [],
         description: `Generate pairings for Round ${currentRound}`,
         timestamp: Date.now(),
-        pairingsSnapshot: [...draftPairings]
+        pairingsSnapshot: [...draftPairings],
+        roundNumber: currentRound
       };
       addToUndoStack(previousAction);
 
@@ -1507,6 +1793,48 @@ export default function TournamentPairings({
       setGenerationProgress(0);
     }
   }, [canGeneratePairings, pairingData, draftPairings, currentRound, pairingMethod, tournament, stats, prelimsCheck, addToUndoStack, saveDraft]);
+
+  const convertToDraft = useCallback(() => {
+    if (!canEditPairings || isDraft || currentDebates.length === 0) return;
+
+    setConfirmDialog({
+      open: true,
+      title: "Edit Saved Pairings",
+      description: "This will convert the saved pairings to draft mode for editing. You'll need to save them again after making changes.",
+      onConfirm: () => {
+        const convertedPairings: PairingDraft[] = currentDebates.map((debate: any) => ({
+          room_name: debate.room_name || '',
+          proposition_team_id: debate.proposition_team_id,
+          opposition_team_id: debate.opposition_team_id,
+          judges: debate.judges || [],
+          head_judge_id: debate.head_judge_id,
+          is_bye_round: debate.is_public_speaking || false,
+          conflicts: debate.pairing_conflicts || [],
+          quality_score: 85,
+        }));
+
+        const convertAction: MoveAction = {
+          type: 'generate',
+          oldValue: [],
+          newValue: convertedPairings,
+          description: `Converted saved pairings to draft for editing`,
+          timestamp: Date.now(),
+          pairingsSnapshot: [],
+          roundNumber: currentRound
+        };
+        addToUndoStack(convertAction);
+
+        setDraftPairings(convertedPairings);
+        setIsDraft(true);
+        saveDraft(convertedPairings, true);
+
+        toast.success("Pairings converted to draft mode", {
+          description: "You can now edit the pairings. Remember to save when done.",
+        });
+      },
+      confirmText: "Convert to Draft",
+    });
+  }, [canEditPairings, isDraft, currentDebates, addToUndoStack, saveDraft, currentRound]);
 
   const savePairings = useCallback(async () => {
     if (!canSavePairings || !savePairingsMutation) {
@@ -1606,6 +1934,64 @@ export default function TournamentPairings({
     });
   };
 
+  const undo = useCallback(() => {
+    if (!canEditPairings || undoStack.length === 0 || !isDraft) return;
+
+    const lastAction = undoStack[undoStack.length - 1];
+
+    const redoAction: MoveAction = {
+      type: lastAction.type,
+      debateIndex: lastAction.debateIndex,
+      oldValue: lastAction.newValue,
+      newValue: lastAction.oldValue,
+      description: `Redo: ${lastAction.description}`,
+      timestamp: Date.now(),
+      pairingsSnapshot: [...draftPairings],
+      roundNumber: lastAction.roundNumber
+    };
+
+    setRedoStack(prev => [...prev, redoAction]);
+    setUndoStack(prev => prev.slice(0, -1));
+
+    const previousState = lastAction.pairingsSnapshot;
+    setDraftPairings(previousState);
+    saveDraft(previousState, true);
+
+    toast.success("Undone", {
+      description: lastAction.description,
+      duration: 1500,
+    });
+  }, [canEditPairings, undoStack, draftPairings, isDraft, saveDraft]);
+
+  const redo = useCallback(() => {
+    if (!canEditPairings || redoStack.length === 0 || !isDraft) return;
+
+    const nextAction = redoStack[redoStack.length - 1];
+
+    const undoAction: MoveAction = {
+      type: nextAction.type,
+      debateIndex: nextAction.debateIndex,
+      oldValue: nextAction.newValue,
+      newValue: nextAction.oldValue,
+      description: nextAction.description.replace('Redo: ', ''),
+      timestamp: Date.now(),
+      pairingsSnapshot: [...draftPairings],
+      roundNumber: nextAction.roundNumber
+    };
+
+    setUndoStack(prev => [...prev, undoAction]);
+    setRedoStack(prev => prev.slice(0, -1));
+
+    const nextState = nextAction.pairingsSnapshot;
+    setDraftPairings(nextState);
+    saveDraft(nextState, true);
+
+    toast.success("Redone", {
+      description: nextAction.description,
+      duration: 1500,
+    });
+  }, [canEditPairings, redoStack, draftPairings, isDraft, saveDraft]);
+
   const handleTeamDragStart = useCallback((e: React.DragEvent, team: Team, debateIndex: number, position: string) => {
     if (!canEditPairings || !isDraft) {
       e.preventDefault();
@@ -1678,7 +2064,6 @@ export default function TournamentPairings({
     setIsRecalculating(true);
 
     try {
-      // Save current state for undo
       const moveAction: MoveAction = {
         type: 'move_team',
         debateIndex: toDebateIndex,
@@ -1689,7 +2074,8 @@ export default function TournamentPairings({
         newValue: draggedTeam.team.name,
         description: `Moved ${draggedTeam.team.name} to ${toPosition} in debate ${toDebateIndex + 1}`,
         timestamp: Date.now(),
-        pairingsSnapshot: [...draftPairings]
+        pairingsSnapshot: [...draftPairings],
+        roundNumber: currentRound
       };
       addToUndoStack(moveAction);
 
@@ -1699,7 +2085,6 @@ export default function TournamentPairings({
         ? newPairings[toDebateIndex].proposition_team_id
         : newPairings[toDebateIndex].opposition_team_id;
 
-      // Handle the move
       if (draggedTeam.fromPosition === 'prop') {
         newPairings[draggedTeam.fromDebateIndex].proposition_team_id = destTeamId;
       } else {
@@ -1712,7 +2097,6 @@ export default function TournamentPairings({
         newPairings[toDebateIndex].opposition_team_id = draggedTeam.team._id;
       }
 
-      // Recalculate conflicts for affected debates
       const affectedDebates = new Set([draggedTeam.fromDebateIndex, toDebateIndex]);
       affectedDebates.forEach(index => {
         if (newPairings[index] && pairingData) {
@@ -1744,9 +2128,9 @@ export default function TournamentPairings({
       setDraggedTeam(null);
       setDropZoneActive(null);
     }
-  }, [draggedTeam, isDraft, canEditPairings, draftPairings, pairingData, saveDraft, addToUndoStack]);
+  }, [draggedTeam, isDraft, canEditPairings, draftPairings, pairingData, saveDraft, addToUndoStack, currentRound]);
 
-  const swapSides = async (debateIndex: number) => {
+  const swapSides = useCallback(async (debateIndex: number) => {
     if (!isDraft || !canEditPairings) return;
 
     setIsRecalculating(true);
@@ -1755,12 +2139,20 @@ export default function TournamentPairings({
       const moveAction: MoveAction = {
         type: 'swap_sides',
         debateIndex,
-        oldValue: 'swapped',
-        newValue: 'swapped',
+        oldValue: {
+          prop: draftPairings[debateIndex].proposition_team_id,
+          opp: draftPairings[debateIndex].opposition_team_id
+        },
+        newValue: {
+          prop: draftPairings[debateIndex].opposition_team_id,
+          opp: draftPairings[debateIndex].proposition_team_id
+        },
         description: `Swapped sides in debate ${debateIndex + 1}`,
         timestamp: Date.now(),
-        pairingsSnapshot: [...draftPairings]
+        pairingsSnapshot: [...draftPairings],
+        roundNumber: currentRound
       };
+
       addToUndoStack(moveAction);
 
       const newPairings = [...draftPairings];
@@ -1787,22 +2179,32 @@ export default function TournamentPairings({
         duration: 2000,
       });
 
+    } catch (error) {
+      console.error('Error during swap:', error);
+      toast.error("Failed to swap sides", {
+        description: "Please try again",
+      });
     } finally {
       setIsRecalculating(false);
     }
-  };
+  }, [isDraft, canEditPairings, draftPairings, pairingData, saveDraft, addToUndoStack, currentRound]);
 
-  const updateRoomName = (debateIndex: number, newName: string) => {
+  const updateRoomName = useCallback((debateIndex: number, newName: string) => {
     if (!isDraft || !canEditRoomNames) return;
+
+    const oldName = draftPairings[debateIndex].room_name;
+
+    if (oldName === newName) return;
 
     const moveAction: MoveAction = {
       type: 'update_room',
       debateIndex,
-      oldValue: draftPairings[debateIndex].room_name,
+      oldValue: oldName,
       newValue: newName,
-      description: `Renamed room to "${newName}"`,
+      description: `Renamed room from "${oldName || 'Untitled'}" to "${newName}"`,
       timestamp: Date.now(),
-      pairingsSnapshot: [...draftPairings]
+      pairingsSnapshot: [...draftPairings],
+      roundNumber: currentRound
     };
     addToUndoStack(moveAction);
 
@@ -1811,9 +2213,9 @@ export default function TournamentPairings({
 
     setDraftPairings(newPairings);
     saveDraft(newPairings);
-  };
+  }, [isDraft, canEditRoomNames, draftPairings, addToUndoStack, saveDraft, currentRound]);
 
-  const updateDebateJudges = async (debateIndex: number, newJudges: Id<"users">[], newHeadJudge?: Id<"users">) => {
+  const updateDebateJudges = useCallback(async (debateIndex: number, newJudges: Id<"users">[], newHeadJudge?: Id<"users">) => {
     if (!isDraft || !canEditJudges) return;
 
     const debate = draftPairings[debateIndex];
@@ -1834,7 +2236,8 @@ export default function TournamentPairings({
         newValue: { judges: newJudges, headJudge: newHeadJudge },
         description: `Updated judges in debate ${debateIndex + 1}`,
         timestamp: Date.now(),
-        pairingsSnapshot: [...draftPairings]
+        pairingsSnapshot: [...draftPairings],
+        roundNumber: currentRound
       };
       addToUndoStack(moveAction);
 
@@ -1870,7 +2273,7 @@ export default function TournamentPairings({
     } finally {
       setIsRecalculating(false);
     }
-  };
+  }, [isDraft, canEditJudges, draftPairings, pairingData, saveDraft, addToUndoStack, currentRound]);
 
   const updateSavedPairing = async (debateId: Id<"debates">, updates: any) => {
     if (!canEditPairings || !updatePairingMutation) {
@@ -1895,68 +2298,8 @@ export default function TournamentPairings({
     }
   };
 
-  const undo = useCallback(() => {
-    if (!canEditPairings || undoStack.length === 0) return;
-
-    const lastAction = undoStack[undoStack.length - 1];
-
-    // Add current state to redo stack
-    const redoAction: MoveAction = {
-      ...lastAction,
-      pairingsSnapshot: [...draftPairings]
-    };
-    setRedoStack(prev => [...prev, redoAction]);
-
-    // Remove action from undo stack
-    setUndoStack(prev => prev.slice(0, -1));
-
-    // Restore previous state
-    setDraftPairings(lastAction.pairingsSnapshot);
-    saveDraft(lastAction.pairingsSnapshot, true);
-
-    toast.success("Undone", {
-      description: lastAction.description,
-      duration: 1500,
-    });
-  }, [canEditPairings, undoStack, draftPairings, saveDraft]);
-
-  const redo = useCallback(() => {
-    if (!canEditPairings || redoStack.length === 0) return;
-
-    const nextAction = redoStack[redoStack.length - 1];
-
-    // Add current state to undo stack
-    const undoAction: MoveAction = {
-      ...nextAction,
-      pairingsSnapshot: [...draftPairings]
-    };
-    setUndoStack(prev => [...prev, undoAction]);
-
-    // Remove action from redo stack
-    setRedoStack(prev => prev.slice(0, -1));
-
-    // Restore next state
-    setDraftPairings(nextAction.pairingsSnapshot);
-    saveDraft(nextAction.pairingsSnapshot, true);
-
-    toast.success("Redone", {
-      description: nextAction.description,
-      duration: 1500,
-    });
-  }, [canEditPairings, redoStack, draftPairings, saveDraft]);
-
-  const getTeamById = (teamId?: string): Team | undefined => {
-    if (!teamId || !pairingData) return undefined;
-    return pairingData.teams.find((t: Team) => t._id === teamId);
-  };
-
-  const getJudgeById = (judgeId?: string): Judge | undefined => {
-    if (!judgeId || !pairingData) return undefined;
-    return pairingData.judges.find((j: Judge) => j._id === judgeId);
-  };
-
   const clearDraft = useCallback(() => {
-    if (!canEditPairings || !isDraft) return;
+    if (!canEditPairings || !isDraft || draftPairings.length === 0) return;
 
     setConfirmDialog({
       open: true,
@@ -1965,11 +2308,12 @@ export default function TournamentPairings({
       onConfirm: () => {
         const clearAction: MoveAction = {
           type: 'clear',
-          oldValue: draftPairings,
-          newValue: [],
-          description: "Cleared all draft pairings",
+          oldValue: draftPairings.length,
+          newValue: 0,
+          description: `Cleared ${draftPairings.length} draft pairings`,
           timestamp: Date.now(),
-          pairingsSnapshot: [...draftPairings]
+          pairingsSnapshot: [...draftPairings],
+          roundNumber: currentRound
         };
         addToUndoStack(clearAction);
 
@@ -2049,7 +2393,8 @@ export default function TournamentPairings({
         newValue: toDebateIndex,
         description: `Moved judge ${draggedJudge.judge.name} from debate ${draggedJudge.fromDebateIndex + 1} to debate ${toDebateIndex + 1}`,
         timestamp: Date.now(),
-        pairingsSnapshot: [...draftPairings]
+        pairingsSnapshot: [...draftPairings],
+        roundNumber: currentRound
       };
       addToUndoStack(moveAction);
 
@@ -2094,7 +2439,7 @@ export default function TournamentPairings({
       setDraggedJudge(null);
       setJudgeDropZoneActive(null);
     }
-  }, [draggedJudge, isDraft, canEditJudges, draftPairings, pairingData, saveDraft, addToUndoStack]);
+  }, [draggedJudge, isDraft, canEditJudges, draftPairings, pairingData, saveDraft, addToUndoStack, currentRound]);
 
   React.useEffect(() => {
     if (!canUseKeyboardShortcuts || !isDraft) return;
@@ -2125,6 +2470,21 @@ export default function TournamentPairings({
     window.addEventListener('keydown', handleKeyboard);
     return () => window.removeEventListener('keydown', handleKeyboard);
   }, [canUseKeyboardShortcuts, isDraft, undo, redo, savePairings, generatePairings]);
+
+  useEffect(() => {
+    setUndoStack([]);
+    setRedoStack([]);
+  }, [currentRound, isDraft]);
+
+  const getTeamById = (teamId?: string): Team | undefined => {
+    if (!teamId || !pairingData) return undefined;
+    return pairingData.teams.find((t: Team) => t._id === teamId);
+  };
+
+  const getJudgeById = (judgeId?: string): Judge | undefined => {
+    if (!judgeId || !pairingData) return undefined;
+    return pairingData.judges.find((j: Judge) => j._id === judgeId);
+  };
 
   const LoadingSkeleton = () => (
     <div className="space-y-2">
@@ -2173,7 +2533,7 @@ export default function TournamentPairings({
     })) :
     currentDebates;
 
-  if (!canViewPairings) {
+  if (!canViewPairings || !pairingData) {
     return <LoadingSkeleton />;
   }
 
@@ -2267,8 +2627,7 @@ export default function TournamentPairings({
                         const elimIndex = roundNumber - tournament.prelim_rounds - 1;
                         const nameStartIndex = elimNames.length - tournament.elimination_rounds;
 
-                        const labelName = elimNames[nameStartIndex + elimIndex] ?? `Elim Round ${elimIndex + 1}`;
-                        label = labelName;
+                        label = elimNames[nameStartIndex + elimIndex] ?? `Elim Round ${elimIndex + 1}`;
                       }
 
                       return (
@@ -2292,10 +2651,20 @@ export default function TournamentPairings({
                 </SelectContent>
               </Select>
 
+              {!isDraft && currentDebates.length > 0 && canEditPairings && (
+                <Button
+                  onClick={convertToDraft}
+                  variant="outline"
+                >
+                  <Edit3 className="h-4 w-4" />
+                  <span className="hidden custom:block ml-1">Edit</span>
+                </Button>
+              )}
+
               {canGeneratePairings && (
                 <Button
                   onClick={generatePairings}
-                  disabled={isGenerating}
+                  disabled={isGenerating || isBulkGenerating}
                 >
                   {isGenerating ? (
                     <>
@@ -2308,6 +2677,16 @@ export default function TournamentPairings({
                       <span className="hidden custom:block"> Generate </span>
                     </>
                   )}
+                </Button>
+              )}
+
+              {canGenerateAllFoldRounds && !isDraft && !isBulkGenerating && (
+                <Button
+                  onClick={generateAllFoldRounds}
+                  disabled={isGenerating}
+                >
+                  <Calendar className="h-4 w-4" />
+                  <span className="hidden custom:block ml-1">All Fold</span>
                 </Button>
               )}
 
@@ -2371,9 +2750,8 @@ export default function TournamentPairings({
           )}
         </div>
 
-        {/* Search Bar */}
         {displayPairings.length > 0 && (
-          <div className="px-4 pb-2">
+          <div className="p-4 pb-2">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <Input
@@ -2386,9 +2764,9 @@ export default function TournamentPairings({
           </div>
         )}
 
-        {/* Stats Cards */}
+        
         {displayPairings.length > 0 && (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 p-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 custom:grid-cols-4 gap-4 p-4">
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-2">
@@ -2435,32 +2813,12 @@ export default function TournamentPairings({
           </div>
         )}
 
-        {/* Action Controls */}
+        
         {canEditPairings && isDraft && displayPairings.length > 0 && (
           <Card className="mx-4 mb-4">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <Button
-                    variant="outline"
-                    onClick={undo}
-                    disabled={undoStack.length === 0}
-                    size="sm"
-                  >
-                    <Undo2 className="h-4 w-4 mr-1" />
-                    <span className="hidden md:block">Undo</span>
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    onClick={redo}
-                    disabled={redoStack.length === 0}
-                    size="sm"
-                  >
-                    <Redo2 className="h-4 w-4 mr-1" />
-                    <span className="hidden md:block">Redo</span>
-                  </Button>
-
                   <Button
                     variant="outline"
                     onClick={clearDraft}
@@ -2475,7 +2833,7 @@ export default function TournamentPairings({
                   {canViewHistory && undoStack.length > 0 && (
                     <Dialog>
                       <DialogTrigger asChild>
-                        <Button variant="outline" size="sm">
+                        <Button variant="outline" size="sm" disabled={undoStack.length === 0}>
                           <RefreshCw className="h-4 w-4 mr-1" />
                           <span className="hidden md:block">History ({undoStack.length})</span>
                         </Button>
@@ -2486,15 +2844,35 @@ export default function TournamentPairings({
                         </DialogHeader>
                         <ScrollArea className="h-96">
                           <div className="space-y-2">
-                            {undoStack.slice().reverse().map((action, index) => (
-                              <div key={action.timestamp} className="flex items-center gap-3 p-2 border rounded">
-                                <div className="text-sm font-mono bg-muted px-2 py-1 rounded">
-                                  {new Date(action.timestamp).toLocaleTimeString()}
-                                </div>
-                                <div className="flex-1 text-sm">{action.description}</div>
-                                <Badge variant="outline">{action.type}</Badge>
+                            {undoStack.length === 0 ? (
+                              <div className="text-center text-muted-foreground py-8">
+                                No actions performed yet
                               </div>
-                            ))}
+                            ) : (
+                              undoStack.slice().reverse().map((action, index) => (
+                                <div key={action.timestamp} className="flex items-center gap-3 p-3 border rounded">
+                                  <div className="text-sm font-mono bg-muted px-2 py-1 rounded min-w-[80px]">
+                                    {new Date(action.timestamp).toLocaleTimeString()}
+                                  </div>
+                                  <div className="flex-1">
+                                    <div className="text-sm font-medium">{action.description}</div>
+                                    <div className="text-xs text-muted-foreground">
+                                      Type: {action.type.replace('_', ' ')}
+                                      {action.debateIndex !== undefined && ` • Debate: ${action.debateIndex + 1}`}
+                                      {action.roundNumber && ` • Round: ${action.roundNumber}`}
+                                    </div>
+                                  </div>
+                                  <Badge variant="outline" className="text-xs">
+                                    {action.type}
+                                  </Badge>
+                                  {index === 0 && (
+                                    <Badge variant="default" className="text-xs">
+                                      Latest
+                                    </Badge>
+                                  )}
+                                </div>
+                              ))
+                            )}
                           </div>
                         </ScrollArea>
                       </DialogContent>
@@ -2581,7 +2959,7 @@ export default function TournamentPairings({
           </Card>
         )}
 
-        {/* Round Information Alert */}
+        
         {currentRound > 5 && tournament.prelim_rounds > 5 && (
           <div className="mx-4 mb-4">
             <Alert>
@@ -2595,7 +2973,7 @@ export default function TournamentPairings({
           </div>
         )}
 
-        {/* Pairings Table */}
+        
         <div className="p-4">
           <PairingsTable
             displayPairings={displayPairings}
@@ -2636,7 +3014,7 @@ export default function TournamentPairings({
           />
         </div>
 
-        {/* No Pairings State */}
+        
         {displayPairings.length === 0 && !debouncedSearchQuery && (
           <Card className="m-4">
             <CardContent className="text-center py-12">
@@ -2650,22 +3028,43 @@ export default function TournamentPairings({
                 }
               </p>
               {canGeneratePairings && (
-                <div className="space-y-2">
-                  <Button onClick={generatePairings} disabled={isGenerating}>
-                    {isGenerating ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        Generating... {generationProgress}%
-                      </>
-                    ) : (
-                      <>
-                        <Shuffle className="h-4 w-4 mr-2" />
-                        Generate Pairings
-                      </>
-                    )}
-                  </Button>
+                <div className="space-y-4">
+                  <div className="flex gap-2 justify-center">
+                    <Button onClick={generatePairings} disabled={isGenerating || isBulkGenerating}>
+                      {isGenerating ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          Generating... {generationProgress}%
+                        </>
+                      ) : (
+                        <>
+                          <Shuffle className="h-4 w-4 mr-2" />
+                          Generate Round {currentRound}
+                        </>
+                      )}
+                    </Button>
 
-                  {tournament.prelim_rounds <= 5 && currentRound === 1 && (
+                    {canGenerateAllFoldRounds && (
+                      <Button
+                        onClick={generateAllFoldRounds}
+                        disabled={isGenerating || isBulkGenerating}
+                      >
+                        {isBulkGenerating ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Generating {bulkGenerationProgress.current}/{bulkGenerationProgress.total}
+                          </>
+                        ) : (
+                          <>
+                            <Calendar className="h-4 w-4 mr-2" />
+                            Generate All Fold Rounds
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </div>
+
+                  {tournament.prelim_rounds <= 5 && currentRound === 1 && canGenerateAllFoldRounds && (
                     <div className="text-xs text-muted-foreground max-w-md mx-auto">
                       💡 With {tournament.prelim_rounds} preliminary rounds, you can generate all rounds at once using the fold system for optimal fairness
                     </div>
@@ -2682,33 +3081,47 @@ export default function TournamentPairings({
           </Card>
         )}
 
-        {/* Generation Loading Overlay */}
-        {isGenerating && canGeneratePairings && (
+        
+        {(isGenerating || isBulkGenerating) && canGeneratePairings && (
           <div className="fixed inset-0 bg-background/50 backdrop-blur-sm z-50 flex items-center justify-center">
             <Card className="w-96">
               <CardContent className="p-6">
                 <div className="text-center space-y-4">
                   <Loader2 className="h-8 w-8 animate-spin mx-auto" />
                   <div>
-                    <h3 className="font-medium">Generating Pairings</h3>
+                    <h3 className="font-medium">
+                      {isBulkGenerating ? 'Generating All Fold Rounds' : 'Generating Pairings'}
+                    </h3>
                     <p className="text-sm text-muted-foreground">
-                      Creating optimal matchups for Round {currentRound}...
+                      {isBulkGenerating
+                        ? `Creating pairings for ${bulkGenerationProgress.total} rounds...`
+                        : `Creating optimal matchups for Round ${currentRound}...`
+                      }
                     </p>
                   </div>
                   <div className="w-full bg-muted rounded-full h-2">
                     <div
                       className="bg-primary h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${generationProgress}%` }}
+                      style={{
+                        width: isBulkGenerating
+                          ? `${(bulkGenerationProgress.current / bulkGenerationProgress.total) * 100}%`
+                          : `${generationProgress}%`
+                      }}
                     />
                   </div>
-                  <div className="text-sm font-medium">{generationProgress}%</div>
+                  <div className="text-sm font-medium">
+                    {isBulkGenerating
+                      ? `Round ${bulkGenerationProgress.current} of ${bulkGenerationProgress.total}`
+                      : `${generationProgress}%`
+                    }
+                  </div>
                 </div>
               </CardContent>
             </Card>
           </div>
         )}
 
-        {/* Keyboard Shortcuts Help */}
+        
         {canUseKeyboardShortcuts && isDraft && displayPairings.length > 0 && (
           <div className="fixed bottom-4 right-4 z-40">
             <Dialog>
@@ -2726,8 +3139,6 @@ export default function TournamentPairings({
                   <div>
                     <h4 className="font-medium mb-2">Keyboard Shortcuts</h4>
                     <div className="text-sm space-y-1">
-                      <div><kbd className="px-2 py-1 bg-muted rounded text-xs">Ctrl+Z</kbd> - Undo</div>
-                      <div><kbd className="px-2 py-1 bg-muted rounded text-xs">Ctrl+Y</kbd> - Redo</div>
                       <div><kbd className="px-2 py-1 bg-muted rounded text-xs">Ctrl+S</kbd> - Save Pairings</div>
                       <div><kbd className="px-2 py-1 bg-muted rounded text-xs">Ctrl+G</kbd> - Generate Pairings</div>
                     </div>
@@ -2760,7 +3171,7 @@ export default function TournamentPairings({
           </div>
         )}
 
-        {/* Auto-save Indicator */}
+        
         {autoSaveDrafts && isDraft && lastSavedTimestamp && canEditPairings && (
           <div className="fixed bottom-4 left-4 z-40">
             <div className="bg-muted/80 text-muted-foreground px-3 py-1 rounded-full text-xs flex items-center gap-2">

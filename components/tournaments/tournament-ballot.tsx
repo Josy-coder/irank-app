@@ -113,6 +113,20 @@ const getPositionsForFormat = (format: string, teamSize: number) => {
 function BallotSkeleton() {
   return (
     <div className="space-y-4">
+      <div className="flex flex-col lg:flex-row lg:items-center bg-brown rounded-t-md lg:justify-between gap-4 p-3">
+        <div>
+          <Skeleton className="h-6 w-48 mb-2" />
+          <Skeleton className="h-4 w-64" />
+        </div>
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-8 w-24" />
+          <Skeleton className="h-8 w-18" />
+          <Skeleton className="h-8 w-24" />
+          <Skeleton className="h-8 w-32" />
+          <Skeleton className="h-8 w-8" />
+        </div>
+      </div>
+
       {Array.from({ length: 6 }).map((_, i) => (
         <div key={i} className="flex items-center space-x-4 p-4 border rounded-lg">
           <Skeleton className="h-12 w-12 rounded" />
@@ -2915,17 +2929,7 @@ export default function TournamentBallots({
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <Card>
-          <div className="flex bg-brown rounded-t-md flex-col lg:flex-row lg:items-center lg:justify-between gap-4 p-3">
-            <div>
-              <h2 className="text-xl text-white font-bold">Tournament Ballots</h2>
-              <div className="text-xs text-gray-300">Loading...</div>
-            </div>
-          </div>
-          <div className="p-4">
-            <BallotSkeleton />
-          </div>
-        </Card>
+        <BallotSkeleton />
       </div>
     );
   }
