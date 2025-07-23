@@ -162,11 +162,10 @@ export const submitBallot = mutation({
       team_id: v.id("teams"),
       position: v.string(),
       score: v.number(),
-      content_knowledge: v.number(),
-      argumentation_logic: v.number(),
-      presentation_style: v.number(),
-      teamwork_strategy: v.number(),
-      rebuttal_response: v.number(),
+      role_fulfillment: v.number(),
+      argumentation_clash: v.number(),
+      content_development: v.number(),
+      style_strategy_delivery: v.number(),
       comments: v.optional(v.string()),
       bias_detected: v.optional(v.boolean()),
       bias_explanation: v.optional(v.string()),
@@ -232,26 +231,24 @@ export const submitBallot = mutation({
     }
 
     const validateScore = (score: number, field: string): void => {
-      if (score < 0 || score > 10) {
-        throw new Error(`${field} must be between 0 and 10`);
+      if (score < 0 || score > 25) {
+        throw new Error(`${field} must be between 0 and 25`);
       }
     };
 
     const processedSpeakerScores = args.speaker_scores.map(speaker => {
-      validateScore(speaker.content_knowledge, "content_knowledge");
-      validateScore(speaker.argumentation_logic, "argumentation_logic");
-      validateScore(speaker.presentation_style, "presentation_style");
-      validateScore(speaker.teamwork_strategy, "teamwork_strategy");
-      validateScore(speaker.rebuttal_response, "rebuttal_response");
+      validateScore(speaker.role_fulfillment, "role_fulfillment");
+      validateScore(speaker.argumentation_clash, "argumentation_clash");
+      validateScore(speaker.content_development, "content_development");
+      validateScore(speaker.style_strategy_delivery, "style_strategy_delivery");
 
-      const rawScore: number = speaker.content_knowledge + speaker.argumentation_logic +
-        speaker.presentation_style + speaker.teamwork_strategy +
-        speaker.rebuttal_response;
+      const rubricScore: number = speaker.role_fulfillment + speaker.argumentation_clash +
+        speaker.content_development + speaker.style_strategy_delivery;
 
       const attendanceBonus: number = 5;
-      const totalRaw: number = rawScore + attendanceBonus;
+      const totalRaw: number = rubricScore + attendanceBonus;
 
-      let finalScore: number = (totalRaw / 55) * 30;
+      let finalScore: number = (totalRaw / 105) * 30;
 
       if (finalScore < 16.3) {
         finalScore = 16.3;

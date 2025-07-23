@@ -82,6 +82,21 @@ export const getAllTournamentBallots = query({
           })
         );
 
+        const judgesBallots = await Promise.all(
+          debate.judges.map(async (judgeId: Id<"users">) => {
+            const submission: Doc<"judging_scores"> | null = await ctx.db
+              .query("judging_scores")
+              .withIndex("by_debate_id_judge_id", (q) =>
+                q.eq("debate_id", debate._id).eq("judge_id", judgeId)
+              )
+              .first();
+            return {
+              judge_id: judgeId,
+              ballot: submission,
+            };
+          })
+        );
+
         const completionPercentage: number = debate.judges.length > 0
           ? (submissions.filter(s => s.feedback_submitted).length / debate.judges.length) * 100
           : 0;
@@ -92,6 +107,7 @@ export const getAllTournamentBallots = query({
           proposition_team: propTeam,
           opposition_team: oppTeam,
           judges,
+          judges_ballots: judgesBallots,
           submissions_count: submissions.length,
           final_submissions_count: submissions.filter(s => s.feedback_submitted).length,
           completion_percentage: completionPercentage,
@@ -176,11 +192,10 @@ export const updateBallot = mutation({
         team_id: v.id("teams"),
         position: v.string(),
         score: v.number(),
-        content_knowledge: v.number(),
-        argumentation_logic: v.number(),
-        presentation_style: v.number(),
-        teamwork_strategy: v.number(),
-        rebuttal_response: v.number(),
+        role_fulfillment: v.number(),
+        argumentation_clash: v.number(),
+        content_development: v.number(),
+        style_strategy_delivery: v.number(),
         comments: v.optional(v.string()),
         bias_detected: v.optional(v.boolean()),
         bias_explanation: v.optional(v.string()),
@@ -203,10 +218,46 @@ export const updateBallot = mutation({
       throw new Error("Ballot not found");
     }
 
+    const validateScore = (score: number, field: string): void => {
+      if (score < 0 || score > 25) {
+        throw new Error(`${field} must be between 0 and 25`);
+      }
+    };
+
+    let processedSpeakerScores: typeof args.updates.speaker_scores = [];
+
+    if (args.updates.speaker_scores) {
+      processedSpeakerScores = args.updates.speaker_scores.map(speaker => {
+        validateScore(speaker.role_fulfillment, "role_fulfillment");
+        validateScore(speaker.argumentation_clash, "argumentation_clash");
+        validateScore(speaker.content_development, "content_development");
+        validateScore(speaker.style_strategy_delivery, "style_strategy_delivery");
+
+        const rubricScore = speaker.role_fulfillment +
+          speaker.argumentation_clash +
+          speaker.content_development +
+          speaker.style_strategy_delivery;
+
+        const attendanceBonus = 5;
+        const totalRaw = rubricScore + attendanceBonus;
+
+        let finalScore = (totalRaw / 105) * 30;
+        if (finalScore < 16.3) finalScore = 16.3;
+
+        return {
+          ...speaker,
+          score: Math.round(finalScore * 10) / 10,
+        };
+      });
+    }
+
+
     await ctx.db.patch(args.ballot_id, {
       ...args.updates,
+      speaker_scores: args.updates.speaker_scores ? processedSpeakerScores : undefined,
       updated_at: Date.now(),
     });
+
 
     if (args.updates.feedback_submitted) {
       await updateDebateResults(ctx, ballot.debate_id);
@@ -303,5 +354,127 @@ export const unflagBallot = mutation({
     });
 
     return { success: true };
+  },
+});
+
+export const submitBallot = mutation({
+  args: {
+    token: v.string(),
+    debate_id: v.id("debates"),
+    judge_id: v.id("users"),
+    winning_team_id: v.id("teams"),
+    winning_position: v.union(v.literal("proposition"), v.literal("opposition")),
+    speaker_scores: v.array(v.object({
+      speaker_id: v.id("users"),
+      team_id: v.id("teams"),
+      position: v.string(),
+      score: v.number(),
+      role_fulfillment: v.number(),
+      argumentation_clash: v.number(),
+      content_development: v.number(),
+      style_strategy_delivery: v.number(),
+      comments: v.optional(v.string()),
+      bias_detected: v.optional(v.boolean()),
+      bias_explanation: v.optional(v.string()),
+    })),
+    notes: v.optional(v.string()),
+    is_final_submission: v.boolean(),
+  },
+  handler: async (ctx, args): Promise<{ success: boolean; ballot_id: Id<"judging_scores"> }> => {
+    const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
+      token: args.token,
+    });
+
+    if (!sessionResult.valid || !sessionResult.user || sessionResult.user.role !== "admin") {
+      throw new Error("Admin access required");
+    }
+
+    const debate: Doc<"debates"> | null = await ctx.db.get(args.debate_id);
+    if (!debate) {
+      throw new Error("Debate not found");
+    }
+
+    if (!debate.judges.includes(args.judge_id)) {
+      throw new Error("Judge not assigned to this debate");
+    }
+
+    const existingSubmission: Doc<"judging_scores"> | null = await ctx.db
+      .query("judging_scores")
+      .withIndex("by_debate_id_judge_id", (q) =>
+        q.eq("debate_id", args.debate_id).eq("judge_id", args.judge_id)
+      )
+      .first();
+
+    if (existingSubmission?.feedback_submitted) {
+      throw new Error("Final ballot already submitted for this judge");
+    }
+
+    const validateScore = (score: number, field: string): void => {
+      if (score < 0 || score > 25) {
+        throw new Error(`${field} must be between 0 and 25`);
+      }
+    };
+
+    const processedSpeakerScores = args.speaker_scores.map(speaker => {
+      validateScore(speaker.role_fulfillment, "role_fulfillment");
+      validateScore(speaker.argumentation_clash, "argumentation_clash");
+      validateScore(speaker.content_development, "content_development");
+      validateScore(speaker.style_strategy_delivery, "style_strategy_delivery");
+
+      const rubricScore: number = speaker.role_fulfillment + speaker.argumentation_clash +
+        speaker.content_development + speaker.style_strategy_delivery;
+
+      const attendanceBonus: number = 5;
+      const totalRaw: number = rubricScore + attendanceBonus;
+
+      let finalScore: number = (totalRaw / 105) * 30;
+
+      if (finalScore < 16.3) {
+        finalScore = 16.3;
+      }
+
+      return {
+        ...speaker,
+        score: Math.round(finalScore * 10) / 10,
+      };
+    });
+
+    const ballotData = {
+      debate_id: args.debate_id,
+      judge_id: args.judge_id,
+      winning_team_id: args.winning_team_id,
+      winning_position: args.winning_position,
+      speaker_scores: processedSpeakerScores,
+      notes: args.notes,
+      submitted_at: Date.now(),
+      feedback_submitted: args.is_final_submission,
+      created_at: Date.now(),
+    };
+
+    let ballotId: Id<"judging_scores">;
+
+    if (existingSubmission) {
+      await ctx.db.patch(existingSubmission._id, {
+        ...ballotData,
+        updated_at: Date.now(),
+      });
+      ballotId = existingSubmission._id;
+    } else {
+      ballotId = await ctx.db.insert("judging_scores", ballotData);
+    }
+
+    if (args.is_final_submission) {
+      await updateDebateResults(ctx, args.debate_id);
+    }
+
+    await ctx.runMutation(internal.functions.audit.createAuditLog, {
+      user_id: sessionResult.user.id,
+      action: "ballot_submitted",
+      resource_type: "judging_scores",
+      resource_id: ballotId,
+      description: `Admin ${args.is_final_submission ? 'submitted' : 'updated'} ballot for judge ${args.judge_id}`,
+    });
+
+    return { success: true, ballot_id: ballotId };
   },
 });

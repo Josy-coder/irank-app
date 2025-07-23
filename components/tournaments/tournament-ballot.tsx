@@ -67,21 +67,56 @@ interface TournamentBallotsProps {
 }
 
 const SCORING_CATEGORIES = [
-  { key: "content_knowledge", label: "Content & Knowledge", icon: Brain, description: "Understanding of topic and evidence quality", color: "text-blue-600" },
-  { key: "argumentation_logic", label: "Argumentation & Logic", icon: Target, description: "Logical flow and reasoning strength", color: "text-green-600" },
-  { key: "presentation_style", label: "Presentation Style", icon: Users2, description: "Speaking clarity and delivery", color: "text-purple-600" },
-  { key: "teamwork_strategy", label: "Teamwork & Strategy", icon: Users, description: "Team coordination and strategic thinking", color: "text-orange-600" },
-  { key: "rebuttal_response", label: "Rebuttal & Response", icon: Shield, description: "Handling of opposing arguments", color: "text-red-600" },
+  {
+    key: "role_fulfillment",
+    label: "Role Fulfillment",
+    icon: Target,
+    description: "WSDC role expectations, setup, structure, and position understanding",
+    color: "text-blue-600",
+    maxScore: 25
+  },
+  {
+    key: "argumentation_clash",
+    label: "Argumentation & Clash",
+    icon: Shield,
+    description: "Logic, development, rebuttal, defense, and weighing",
+    color: "text-green-600",
+    maxScore: 25
+  },
+  {
+    key: "content_development",
+    label: "Content Development",
+    icon: Brain,
+    description: "Fresh ideas, examples, analysis, and case evolution",
+    color: "text-purple-600",
+    maxScore: 25
+  },
+  {
+    key: "style_strategy_delivery",
+    label: "Style, Strategy & Delivery",
+    icon: Users2,
+    description: "Clarity, persuasion, prioritization, and strategic adaptation",
+    color: "text-orange-600",
+    maxScore: 25
+  },
 ];
 
 const getPositionsForFormat = (format: string, teamSize: number) => {
   switch (format) {
     case "WorldSchools":
-      return Array.from({ length: teamSize }, (_, i) => ({
-        id: `speaker_${i + 1}`,
-        label: `Speaker ${i + 1}`,
-        team: i < teamSize / 2 ? "prop" : "opp"
+
+      const speakersPerTeam = Math.floor(teamSize / 2);
+      const propPositions = Array.from({ length: speakersPerTeam }, (_, i) => ({
+        id: `prop_speaker_${i + 1}`,
+        label: `Proposition Speaker ${i + 1}`,
+        team: "prop"
       }));
+      const oppPositions = Array.from({ length: speakersPerTeam }, (_, i) => ({
+        id: `opp_speaker_${i + 1}`,
+        label: `Opposition Speaker ${i + 1}`,
+        team: "opp"
+      }));
+      return [...propPositions, ...oppPositions];
     case "BritishParliamentary":
       return [
         { id: "PM", label: "Prime Minister", team: "prop" },
@@ -93,8 +128,8 @@ const getPositionsForFormat = (format: string, teamSize: number) => {
       ];
     case "PublicForum":
       return [
-        { id: "speaker_1", label: "Speaker 1", team: "prop" },
-        { id: "speaker_2", label: "Speaker 2", team: "opp" },
+        { id: "prop_speaker_1", label: "Proposition Speaker 1", team: "prop" },
+        { id: "opp_speaker_1", label: "Opposition Speaker 1", team: "opp" },
       ];
     case "LincolnDouglas":
       return [
@@ -102,11 +137,19 @@ const getPositionsForFormat = (format: string, teamSize: number) => {
         { id: "negative", label: "Negative", team: "opp" },
       ];
     default:
-      return Array.from({ length: teamSize }, (_, i) => ({
-        id: `speaker_${i + 1}`,
-        label: `Speaker ${i + 1}`,
-        team: i < teamSize / 2 ? "prop" : "opp"
+
+      const defaultSpeakersPerTeam = Math.floor(teamSize / 2);
+      const defaultPropPositions = Array.from({ length: defaultSpeakersPerTeam }, (_, i) => ({
+        id: `prop_speaker_${i + 1}`,
+        label: `Proposition Speaker ${i + 1}`,
+        team: "prop"
       }));
+      const defaultOppPositions = Array.from({ length: defaultSpeakersPerTeam }, (_, i) => ({
+        id: `opp_speaker_${i + 1}`,
+        label: `Opposition Speaker ${i + 1}`,
+        team: "opp"
+      }));
+      return [...defaultPropPositions, ...defaultOppPositions];
   }
 };
 
@@ -165,10 +208,13 @@ function getDebateStatusIcon(status: string) {
 }
 
 function calculateFinalScore(scores: Record<string, number>): number {
-  const rawScore = Object.values(scores).reduce((sum, score) => sum + score, 0);
+
+  const rubricScore = Object.values(scores).reduce((sum, score) => sum + score, 0);
+
   const attendanceBonus = 5;
-  const totalRaw = rawScore + attendanceBonus;
-  let finalScore = (totalRaw / 55) * 30;
+  const totalRaw = rubricScore + attendanceBonus;
+
+  let finalScore = (totalRaw / 105) * 30;
 
   if (finalScore < 16.3) {
     finalScore = 16.3;
@@ -176,6 +222,7 @@ function calculateFinalScore(scores: Record<string, number>): number {
 
   return Math.round(finalScore * 10) / 10;
 }
+
 
 function DebateTimer({ debate, onUpdateDebate, compact = false }: any) {
   const [currentTime, setCurrentTime] = useState(0);
@@ -597,10 +644,6 @@ function ArgumentFlow({ debate, onAddArgument, onUpdateArgumentFlow }: any) {
 
                 <p className="text-sm mb-2">{arg.content}</p>
 
-                <div className="text-xs text-muted-foreground">
-                  <span>Speaker: {arg.speaker || 'Unknown'}</span>
-                </div>
-
                 {arg.rebutted_by && arg.rebutted_by.length > 0 && (
                   <div className="mt-2 pt-2 border-t">
                     <span className="text-xs text-muted-foreground">Links to:</span>
@@ -1019,15 +1062,14 @@ function SpeakerPositionManager({ speakers, positions, onUpdatePositions, tourna
   const [speakerPositions, setSpeakerPositions] = useState<Record<string, string>>(positions || {});
 
   const availablePositions = useMemo(() => {
-    const basePositions = getPositionsForFormat(tournament.format || "WorldSchools", tournament.team_size || 6);
-    return basePositions.filter(pos => {
-      if (teamId === debate.proposition_team?._id) {
-        return pos.team === "prop";
-      } else {
-        return pos.team === "opp";
-      }
-    });
-  }, [tournament.format, tournament.team_size, teamId]);
+
+    const speakerCount = speakers.length;
+
+    return Array.from({ length: speakerCount }, (_, i) => ({
+      id: `speaker_${i + 1}`,
+      label: `Speaker ${i + 1}`,
+    }));
+  }, [speakers.length]);
 
   const handlePositionChange = (speakerId: string, newPosition: string) => {
     const newPositions = { ...speakerPositions };
@@ -1083,7 +1125,6 @@ function SpeakerPositionManager({ speakers, positions, onUpdatePositions, tourna
   );
 }
 
-
 export function useNames(token: string, userIds: string[]) {
   return useOffline(useQuery(api.functions.ballots.getUserNames, {
     token,
@@ -1091,7 +1132,7 @@ export function useNames(token: string, userIds: string[]) {
   }), "speaker names");
 }
 
-function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, token }: any) {
+function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, token, userRole }: any) {
   const { validateFeedback, checkBias, isValidating, isBiasChecking } = useGemini();
   const [scores, setScores] = useState<Record<string, Record<string, number>>>({});
   const [teamWinner, setTeamWinner] = useState<string>("");
@@ -1108,6 +1149,45 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
   const [factChecks, setFactChecks] = useState<any[]>(debate.fact_checks || []);
   const [sharedNotes, setSharedNotes] = useState<any[]>(debate.shared_notes || []);
   const [selectedTeam, setSelectedTeam] = useState<string>("");
+  const [selectedJudgeId, setSelectedJudgeId] = useState<string>("");
+
+  useEffect(() => {
+    if (userRole === "admin" && debate.judges?.length > 0 && !selectedJudgeId) {
+      setSelectedJudgeId(debate.judges[0]._id || debate.judges[0]);
+    }
+  }, [userRole, debate.judges, selectedJudgeId]);
+
+  useEffect(() => {
+    if (userRole === "admin" && selectedJudgeId && debate.judges_ballots) {
+      const selectedJudgeBallot = debate.judges_ballots.find(
+        (jb: any) => jb.judge_id === selectedJudgeId
+      )?.ballot;
+
+      if (selectedJudgeBallot) {
+        const loadedScores: Record<string, Record<string, number>> = {};
+
+        selectedJudgeBallot.speaker_scores?.forEach((score: any) => {
+          loadedScores[score.speaker_id] = {
+            role_fulfillment: score.role_fulfillment || 0,
+            argumentation_clash: score.argumentation_clash || 0,
+            content_development: score.content_development || 0,
+            style_strategy_delivery: score.style_strategy_delivery || 0,
+          };
+        });
+
+        setScores(loadedScores);
+        setTeamWinner(selectedJudgeBallot.winning_team_id || "");
+        setWinningPosition(selectedJudgeBallot.winning_position || "");
+        setNotes(selectedJudgeBallot.notes || "");
+      } else {
+        setScores({});
+        setSpeakerComments({});
+        setTeamWinner("");
+        setWinningPosition("");
+        setNotes("");
+      }
+    }
+  }, [userRole, selectedJudgeId, debate.judges_ballots]);
 
   const isHeadJudge = debate.head_judge_id === debate.my_submission?.judge_id;
   const canEdit = !ballot?.feedback_submitted;
@@ -1159,11 +1239,10 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
       const loadedScores: Record<string, Record<string, number>> = {};
       ballot.speaker_scores?.forEach((score: any) => {
         loadedScores[score.speaker_id] = {
-          content_knowledge: score.content_knowledge || 0,
-          argumentation_logic: score.argumentation_logic || 0,
-          presentation_style: score.presentation_style || 0,
-          teamwork_strategy: score.teamwork_strategy || 0,
-          rebuttal_response: score.rebuttal_response || 0,
+          role_fulfillment: score.role_fulfillment || 0,
+          argumentation_clash: score.argumentation_clash || 0,
+          content_development: score.content_development || 0,
+          style_strategy_delivery: score.style_strategy_delivery || 0,
         };
         setSpeakerComments(prev => ({
           ...prev,
@@ -1239,7 +1318,21 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
   };
 
   const handleSubmit = async (isFinal: boolean = false) => {
-    if (!canEdit && !isHeadJudge) return;
+    if (userRole === "volunteer") {
+      const isAssignedJudge = debate.judges?.some((j: any) => (j._id || j) === userId);
+      if (!isAssignedJudge) {
+        toast.error("You are not assigned to judge this debate");
+        return;
+      }
+
+      if (ballot?.feedback_submitted) {
+        toast.error("You have already submitted a final ballot for this debate");
+        return;
+      }
+    } else if (userRole !== "admin") {
+      toast.error("You don't have permission to submit ballots");
+      return;
+    }
 
     setIsSubmitting(true);
 
@@ -1268,25 +1361,58 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
           score: finalScore,
           ...categoryScores,
           comments: speakerComments[speakerId] || "",
-          clarity: 0,
-          fairness: 0,
-          knowledge: 0,
-          helpfulness: 0,
           bias_detected: biasResult?.hasBias || false,
           bias_explanation: biasResult?.suggestions?.join("; ") || "",
         };
       });
 
-      await onSubmitBallot({
-        debate_id: debate._id,
-        winning_team_id: teamWinner as Id<"teams">,
-        winning_position: winningPosition as "proposition" | "opposition",
-        speaker_scores: speakerScores,
-        notes,
-        is_final_submission: isFinal,
-        fact_checks: factChecks.length > 0 ? factChecks : undefined,
-        argument_flow: argumentFlow.length > 0 ? argumentFlow : undefined,
-      });
+      if (userRole === "admin") {
+        const existingBallot = debate.judges_ballots?.find(
+          (jb: any) => jb.judge_id === selectedJudgeId
+        )?.ballot;
+
+        if (existingBallot) {
+
+          await onSubmitBallot({
+            type: "admin_update",
+            ballot_id: existingBallot._id,
+            updates: {
+              winning_team_id: teamWinner as Id<"teams">,
+              winning_position: winningPosition as "proposition" | "opposition",
+              speaker_scores: speakerScores,
+              notes,
+              feedback_submitted: isFinal,
+            }
+          });
+        } else {
+
+          await onSubmitBallot({
+            type: "admin_submit",
+            token,
+            debate_id: debate._id,
+            judge_id: selectedJudgeId as Id<"users">,
+            winning_team_id: teamWinner as Id<"teams">,
+            winning_position: winningPosition as "proposition" | "opposition",
+            speaker_scores: speakerScores,
+            notes,
+            is_final_submission: isFinal,
+          });
+        }
+      } else {
+
+        await onSubmitBallot({
+          type: "volunteer_submit",
+          token,
+          debate_id: debate._id,
+          winning_team_id: teamWinner as Id<"teams">,
+          winning_position: winningPosition as "proposition" | "opposition",
+          speaker_scores: speakerScores,
+          notes,
+          is_final_submission: isFinal,
+          fact_checks: factChecks.length > 0 ? factChecks : undefined,
+          argument_flow: argumentFlow.length > 0 ? argumentFlow : undefined,
+        });
+      }
 
       toast.success(isFinal ? "Ballot submitted successfully!" : "Ballot draft saved!");
 
@@ -1327,8 +1453,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
           <DrawerHeader>
             <DrawerTitle className="flex items-center justify-between gap-1">
               <div className="flex items-center gap-1">
-                <Edit3 className="h-3 w-3" />
-                <span className="text-sm">Judge Ballot - {debate.room_name}</span>
+                <span className="text-sm">Ballot - {debate.room_name}</span>
                 {isHeadJudge && (
                   <Badge variant="default" className="ml-2">
                     <Crown className="h-3 w-3 mr-1" />
@@ -1363,9 +1488,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
                         className="p-3 h-auto"
                       >
                         <div className="text-center">
-                          <h4 className={`font-medium text-xs mb-1 ${
-                            team.position === "proposition" ? "text-green-700" : "text-red-700"
-                          }`}>
+                          <h4 className="font-medium text-xs mb-1">
                             {team.position === "proposition" ? "Proposition" : "Opposition"}
                           </h4>
                           <p className="font-semibold text-sm">{team.name}</p>
@@ -1436,13 +1559,13 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
                                         <Input
                                           type="number"
                                           min="0"
-                                          max="10"
+                                          max="25"
                                           value={speakerScores[category.key] || 0}
                                           onChange={(e) => updateScore(speakerId, category.key, parseInt(e.target.value) || 0)}
                                           disabled={!canEdit}
                                           className="w-16 text-center"
                                         />
-                                        <span className="text-xs text-muted-foreground">/10</span>
+                                        <span className="text-xs text-muted-foreground">/25</span>
                                       </div>
                                     </div>
                                   );
@@ -1531,6 +1654,61 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
                 </TabsContent>
 
                 <TabsContent value="winner" className="space-y-4 mt-4">
+                  {userRole === "admin" && debate.judges?.length > 0 && (
+                    <Card className="p-4">
+                      <div className="space-y-3">
+                        <Label className="text-base font-medium">Submitting as Judge</Label>
+                        <Select value={selectedJudgeId} onValueChange={setSelectedJudgeId}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select judge" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {debate.judges.map((judge: any) => {
+                              const existingBallot = debate.judges_ballots?.find(
+                                (jb: any) => jb.judge_id === (judge._id || judge)
+                              )?.ballot;
+                              return (
+                                <SelectItem key={judge._id || judge} value={judge._id || judge}>
+                                  <div className="flex items-center gap-2">
+                                    <span>{judge.name || `Judge ${(judge._id || judge).slice(-4)}`}</span>
+                                    {judge.is_head_judge && <Crown className="h-3 w-3" />}
+                                    {existingBallot && (
+                                      <Badge variant={existingBallot.feedback_submitted ? "default" : "secondary"} className="text-xs">
+                                        {existingBallot.feedback_submitted ? "Final" : "Draft"}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
+                        {(() => {
+                          const selectedJudgeBallot = debate.judges_ballots?.find(
+                            (jb: any) => jb.judge_id === selectedJudgeId
+                          )?.ballot;
+                          return selectedJudgeBallot ? (
+                            <Alert>
+                              <AlertCircle className="h-4 w-4" />
+                              <AlertDescription className="text-xs">
+                                {selectedJudgeBallot.feedback_submitted
+                                  ? "This judge has a final ballot. You can update it."
+                                  : "This judge has a draft ballot. You can update it."
+                                }
+                              </AlertDescription>
+                            </Alert>
+                          ) : (
+                            <Alert>
+                              <Plus className="h-4 w-4" />
+                              <AlertDescription className="text-xs">
+                                No ballot exists for this judge. You can create a new one.
+                              </AlertDescription>
+                            </Alert>
+                          );
+                        })()}
+                      </div>
+                    </Card>
+                  )}
                   {canEdit && availableTeams.length > 0 && (
                     <div className="space-y-4">
                       <Label className="text-base font-medium">Select Winning Team</Label>
@@ -1602,7 +1780,14 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
                 </Button>
                 <Button
                   onClick={() => handleSubmit(true)}
-                  disabled={isSubmitting || !teamWinner || isValidating || availableTeams.length === 0}
+                  disabled={
+                    isSubmitting ||
+                    !teamWinner ||
+                    isValidating ||
+                    availableTeams.length === 0 ||
+                    (userRole === "volunteer" && ballot?.feedback_submitted) ||
+                    (userRole === "admin" && !selectedJudgeId)
+                  }
                   className="w-full"
                 >
                   {isSubmitting ? "Submitting..." : "Submit Final Ballot"}
@@ -1619,8 +1804,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Edit3 className="h-5 w-5" />
-            Judge Ballot - {debate.room_name}
+            Ballot - {debate.room_name}
           </CardTitle>
           {isHeadJudge && (
             <Badge variant="default" className="w-fit">
@@ -1643,9 +1827,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
                     className="p-4 h-auto"
                   >
                     <div className="text-center">
-                      <h4 className={`font-medium mb-2 ${
-                        team.position === "proposition" ? "text-green-700" : "text-red-700"
-                      }`}>
+                      <h4 className="font-medium mb-2">
                         {team.position === "proposition" ? "Proposition" : "Opposition"}
                       </h4>
                       <p className="font-semibold">{team.name}</p>
@@ -1701,8 +1883,8 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
                               </div>
                             </div>
 
-                            
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               {SCORING_CATEGORIES.map((category) => {
                                 const CategoryIcon = category.icon;
                                 const score = speakerScores[category.key] || 0;
@@ -1717,22 +1899,22 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
                                         <Input
                                           type="number"
                                           min="0"
-                                          max="10"
+                                          max="25"
                                           value={score}
                                           onChange={(e) => updateScore(speakerId, category.key, parseInt(e.target.value) || 0)}
                                           disabled={!canEdit}
                                           className="w-20"
                                         />
-                                        <span className="text-sm text-muted-foreground">/ 10</span>
+                                        <span className="text-sm text-muted-foreground">/ 25</span>
                                       </div>
-                                      <Progress value={(score / 10) * 100} className="w-full" />
+                                      <Progress value={(score / 25) * 100} className="w-full" />
                                     </div>
                                     <p className="text-xs text-muted-foreground">{category.description}</p>
+
                                   </div>
                                 );
                               })}
                             </div>
-
                             
                             <div className="space-y-2">
                               <div className="flex items-center justify-between">
@@ -1828,7 +2010,62 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
             <div className="space-y-4">
               <DebateTimer debate={debate} onTimeUpdate={() => {}} />
 
-              
+              {userRole === "admin" && debate.judges?.length > 0 && (
+                <Card className="p-4">
+                  <div className="space-y-3">
+                    <Label className="text-base font-medium">Submitting as Judge</Label>
+                    <Select value={selectedJudgeId} onValueChange={setSelectedJudgeId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select judge" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {debate.judges.map((judge: any) => {
+                          const existingBallot = debate.judges_ballots?.find(
+                            (jb: any) => jb.judge_id === (judge._id || judge)
+                          )?.ballot;
+                          return (
+                            <SelectItem key={judge._id || judge} value={judge._id || judge}>
+                              <div className="flex items-center gap-2">
+                                <span>{judge.name || `Judge ${(judge._id || judge).slice(-4)}`}</span>
+                                {judge.is_head_judge && <Crown className="h-3 w-3" />}
+                                {existingBallot && (
+                                  <Badge variant={existingBallot.feedback_submitted ? "default" : "secondary"} className="text-xs">
+                                    {existingBallot.feedback_submitted ? "Final" : "Draft"}
+                                  </Badge>
+                                )}
+                              </div>
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                    {(() => {
+                      const selectedJudgeBallot = debate.judges_ballots?.find(
+                        (jb: any) => jb.judge_id === selectedJudgeId
+                      )?.ballot;
+                      return selectedJudgeBallot ? (
+                        <Alert>
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription className="text-xs">
+                            {selectedJudgeBallot.feedback_submitted
+                              ? "This judge has a final ballot. You can update it."
+                              : "This judge has a draft ballot. You can update it."
+                            }
+                          </AlertDescription>
+                        </Alert>
+                      ) : (
+                        <Alert>
+                          <Plus className="h-4 w-4" />
+                          <AlertDescription className="text-xs">
+                            No ballot exists for this judge. You can create a new one.
+                          </AlertDescription>
+                        </Alert>
+                      );
+                    })()}
+                  </div>
+                </Card>
+              )}
+
               {selectedTeam && selectedTeamData && (
                 <SpeakerPositionManager
                   speakers={selectedTeamSpeakers.map((id: string) => ({ id, name: getSpeakerName(id) }))}
@@ -1919,7 +2156,15 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
               </Button>
               <Button
                 onClick={() => handleSubmit(true)}
-                disabled={isSubmitting || !teamWinner || isValidating || availableTeams.length === 0}
+                disabled={
+                  isSubmitting ||
+                  !teamWinner ||
+                  isValidating ||
+                  availableTeams.length === 0 ||
+                  (userRole === "volunteer" && ballot?.feedback_submitted) ||
+                  (userRole === "admin" && !selectedJudgeId)
+                }
+                className="w-full"
               >
                 {isSubmitting ? "Submitting..." : "Submit Final Ballot"}
               </Button>
@@ -2208,6 +2453,9 @@ function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot, onF
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {debate.proposition_team && (
             <div className="flex items-center gap-2">
+              {debate.winning_team_id === debate.proposition_team._id && (
+                <Crown className="h-4 w-4 text-yellow-500" />
+              )}
               <Badge variant="outline" className="text-green-700 border-green-700">Prop</Badge>
               <div className="min-w-0 flex-1">
                 <p className="font-medium truncate">{debate.proposition_team.name}</p>
@@ -2217,9 +2465,6 @@ function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot, onF
                   </p>
                 )}
               </div>
-              {debate.winning_team_id === debate.proposition_team._id && (
-                <Crown className="h-4 w-4 text-yellow-500" />
-              )}
             </div>
           )}
 
@@ -2311,13 +2556,6 @@ function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot, onF
                     : debate.opposition_team?.name
                   } wins
                 </span>
-                <Badge variant="outline" className={
-                  debate.winning_position === "proposition"
-                    ? "text-green-700 border-green-700"
-                    : "text-red-700 border-red-700"
-                }>
-                  {debate.winning_position}
-                </Badge>
               </div>
             </div>
           </div>
@@ -2350,7 +2588,8 @@ function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot, onF
 function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
   const [selectedJudge, setSelectedJudge] = useState<string>("all");
 
-  const ballotDetails = debate?.ballot_details || [];
+  const ballotDetails = debate?.judges_ballots || [];
+  console.log("Ballot Details:", debate);
   const filteredBallots = selectedJudge === "all"
     ? ballotDetails
     : ballotDetails.filter((b: any) => b.judge_id === selectedJudge);
@@ -2586,8 +2825,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
                           </div>
                         </div>
 
-                        
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
                           {SCORING_CATEGORIES.map((category) => {
                             const CategoryIcon = category.icon;
                             const categoryScore = score[category.key] || 0;
@@ -2597,8 +2835,8 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
                                   <CategoryIcon className={`h-3 w-3 ${category.color}`} />
                                   <span className="text-xs font-medium">{category.label.split(' ')[0]}</span>
                                 </div>
-                                <div className="text-sm font-bold">{categoryScore}/10</div>
-                                <Progress value={(categoryScore / 10) * 100} className="h-1 mt-1" />
+                                <div className="text-sm font-bold">{categoryScore}/25</div>
+                                <Progress value={(categoryScore / 25) * 100} className="h-1 mt-1" />
                               </div>
                             );
                           })}
@@ -2774,6 +3012,7 @@ export default function TournamentBallots({
   const ballotsQuery = useOffline(useQuery(queryFn, queryArgs), "tournament-ballots");
 
   const submitBallot = useMutation(api.functions.volunteers.ballots.submitBallot);
+  const submitBallotAdmin = useMutation(api.functions.admin.ballots.submitBallot);
   const updateBallot = useMutation(api.functions.admin.ballots.updateBallot);
   const flagBallotAdmin = useMutation(api.functions.admin.ballots.flagBallotForReview);
   const flagBallotVolunteer = useMutation(api.functions.volunteers.ballots.flagBallot);
@@ -2898,14 +3137,18 @@ export default function TournamentBallots({
 
   const handleSubmitBallot = async (ballotData: any) => {
     try {
-      if (userRole === "volunteer") {
-        await submitBallot(ballotData);
-      } else if (userRole === "admin") {
+      if (ballotData.type === "volunteer_submit") {
+        const { type, ...cleanBallot } = ballotData;
+        await submitBallot(cleanBallot);
+      } else if (ballotData.type === "admin_update") {
         await updateBallot({
           token,
           ballot_id: ballotData.ballot_id,
-          updates: ballotData,
+          updates: ballotData.updates,
         });
+      } else if (ballotData.type === "admin_submit") {
+        const { type, ...cleanBallot } = ballotData;
+        await submitBallotAdmin(cleanBallot);
       }
       setShowJudgingInterface(false);
       setJudgingDebate(null);
