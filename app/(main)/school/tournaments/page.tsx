@@ -5,17 +5,52 @@ import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Building } from "lucide-react"
 import { useAuth } from "@/hooks/use-auth"
-import { Id } from "@/convex/_generated/dataModel";
-import dynamic from "next/dynamic";
+import { Id } from "@/convex/_generated/dataModel"
+import dynamic from "next/dynamic"
+import { useMutation } from "convex/react"
+import { api } from "@/convex/_generated/api"
+import { toast } from "sonner"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
-export default function SchoolTournamentsPage() {
-  const { token} = useAuth()
-  const [selectedLeagueId, setSelectedLeagueId] = useState<Id<"leagues"> | undefined>(undefined);
+import { ViewLeagueDetailsDialog } from "@/components/tournaments/view-league-details-dialog"
+
+interface League {
+  _id: Id<"leagues">
+  name: string
+  type: "Local" | "International" | "Dreams Mode"
+  description?: string
+  geographic_scope?: any
+  status: "active" | "inactive" | "banned"
+  created_at: number
+  _creationTime: number
+  hasTournaments?: boolean
+}
+
+export default function AdminTournamentsPage() {
+  const { token } = useAuth()
+  const [selectedLeagueId, setSelectedLeagueId] = useState<Id<"leagues"> | undefined>(undefined)
   const [mobileLeaguesOpen, setMobileLeaguesOpen] = useState(false)
+
+  const [showDetailsDialog, setShowDetailsDialog] = useState(false)
+  const [selectedLeague, setSelectedLeague] = useState<League | null>(null)
 
   const handleLeagueSelect = (leagueId: Id<"leagues"> | undefined) => {
     setSelectedLeagueId(leagueId)
     setMobileLeaguesOpen(false)
+  }
+
+  const handleViewDetails = (league: League) => {
+    setSelectedLeague(league)
+    setShowDetailsDialog(true)
   }
 
   const LeagueList = dynamic(() =>
@@ -54,12 +89,13 @@ export default function SchoolTournamentsPage() {
                 <Building className="h-6 w-6" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="bottom" className="w-full bg-background p-0">
+            <SheetContent side="bottom" className="w-full bg-background">
               <LeagueList
                 userRole="school_admin"
                 token={token}
                 selectedLeagueId={selectedLeagueId}
                 onLeagueSelect={handleLeagueSelect}
+                onViewDetails={handleViewDetails}
                 className="h-full"
               />
             </SheetContent>
@@ -74,6 +110,7 @@ export default function SchoolTournamentsPage() {
                 token={token}
                 selectedLeagueId={selectedLeagueId}
                 onLeagueSelect={handleLeagueSelect}
+                onViewDetails={handleViewDetails}
                 className="h-full"
               />
             </div>
@@ -104,6 +141,17 @@ export default function SchoolTournamentsPage() {
             </Button>
           </div>
         </div>
+      )}
+
+
+      {selectedLeague && (
+        <ViewLeagueDetailsDialog
+          open={showDetailsDialog}
+          onOpenChange={setShowDetailsDialog}
+          league={selectedLeague}
+          token={token}
+          userRole="school_admin"
+        />
       )}
     </div>
   )

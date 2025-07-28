@@ -51,6 +51,8 @@ interface LeagueListProps {
   selectedLeagueId?: Id<"leagues">
   onLeagueSelect?: (leagueId: Id<"leagues"> | undefined) => void
   className?: string
+  onViewDetails?: (league: League) => void
+  onDeleteLeague?: (league: League) => void
 }
 
 function LeagueListSkeleton() {
@@ -82,7 +84,7 @@ function getTypeIcon(type: string) {
   }
 }
 
-export function LeagueList({ userRole, token, selectedLeagueId, onLeagueSelect, className }: LeagueListProps) {
+export function LeagueList({ userRole, token, selectedLeagueId, onLeagueSelect, className, onDeleteLeague, onViewDetails }: LeagueListProps) {
   const [searchTerm, setSearchTerm] = useState("")
   const [leagues, setLeagues] = useState<League[]>([])
   const [hasMore, setHasMore] = useState(true)
@@ -162,13 +164,11 @@ export function LeagueList({ userRole, token, selectedLeagueId, onLeagueSelect, 
   }
 
   const handleViewDetails = (league: League) => {
-    setSelectedLeague(league)
-    setShowDetailsDialog(true)
+    onViewDetails?.(league) // Use the callback instead
   }
 
   const handleDeleteClick = (league: League) => {
-    setLeagueToDelete(league)
-    setShowDeleteDialog(true)
+    onDeleteLeague?.(league) // Use the callback instead
   }
 
   const handleDeleteConfirm = async () => {
@@ -354,41 +354,6 @@ export function LeagueList({ userRole, token, selectedLeagueId, onLeagueSelect, 
             token={token}
           />
 
-          {selectedLeague && (
-            <ViewLeagueDetailsDialog
-              open={showDetailsDialog}
-              onOpenChange={setShowDetailsDialog}
-              league={selectedLeague}
-              token={token}
-              userRole={userRole}
-            />
-          )}
-
-          <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete League</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Are you sure you want to delete &#34;{leagueToDelete?.name}&#34;? This action cannot be undone.
-                  {leagueToDelete?.hasTournaments && (
-                    <span className="block mt-2 text-destructive font-medium">
-                      This league has tournaments and cannot be deleted.
-                    </span>
-                  )}
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={handleDeleteConfirm}
-                  className="bg-red-600 hover:bg-red-700"
-                  disabled={leagueToDelete?.hasTournaments}
-                >
-                  Delete League
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
         </>
       )}
     </div>
