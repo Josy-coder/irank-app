@@ -60,6 +60,7 @@ import { Id } from "@/convex/_generated/dataModel";
 import { useGemini } from "@/hooks/use-gemini";
 import { useOffline } from "@/hooks/use-offline";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useDebounce } from "@/hooks/use-debounce";
 
 interface TournamentBallotsProps {
   tournament: any;
@@ -1859,7 +1860,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
 
                             <CollapsibleContent>
                               <div className="px-6 pb-6 space-y-4 border-t">
-                                
+
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
                                   {SCORING_CATEGORIES.map((category) => {
                                     const CategoryIcon = category.icon;
@@ -1891,7 +1892,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
                                   })}
                                 </div>
 
-                                
+
                                 <div className="space-y-2">
                                   <div className="flex items-center justify-between">
                                     <Label className="text-sm">Individual Speaker Feedback</Label>
@@ -3237,6 +3238,7 @@ export default function TournamentBallots({
                                             userRole,
                                             token,
                                             userId,
+                                            schoolId
                                           }: TournamentBallotsProps) {
   const [selectedRound, setSelectedRound] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -3248,6 +3250,13 @@ export default function TournamentBallots({
   const [flaggingDebate, setFlaggingDebate] = useState<any>(null);
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
   const [isMobile, setIsMobile] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [pagination, setPagination] = useState({ cursor: null as string | null });
+  const [hasNextPage, setHasNextPage] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [allBallots, setAllBallots] = useState<any[]>([]);
+
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
   let queryFn: any;
   let queryArgs: any;
@@ -3259,6 +3268,11 @@ export default function TournamentBallots({
       tournament_id: tournament._id,
       round_number: selectedRound || undefined,
       status_filter: statusFilter !== "all" ? statusFilter as any : undefined,
+      search: debouncedSearchQuery || undefined,
+      paginationOpts: {
+        numItems: 20,
+        cursor: pagination.cursor,
+      },
     };
   } else if (userRole === "volunteer") {
     queryFn = api.functions.volunteers.ballots.getJudgeAssignedDebates;
@@ -3266,6 +3280,11 @@ export default function TournamentBallots({
       token,
       tournament_id: tournament._id,
       round_number: selectedRound || undefined,
+      search: debouncedSearchQuery || undefined,
+      paginationOpts: {
+        numItems: 20,
+        cursor: pagination.cursor,
+      },
     };
   } else {
     queryFn = api.functions.ballots.getTournamentBallots;
@@ -3273,6 +3292,11 @@ export default function TournamentBallots({
       token,
       tournament_id: tournament._id,
       round_number: selectedRound || undefined,
+      search: debouncedSearchQuery || undefined,
+      paginationOpts: {
+        numItems: 20,
+        cursor: pagination.cursor,
+      },
     };
   }
 
@@ -3285,8 +3309,26 @@ export default function TournamentBallots({
   const flagBallotVolunteer = useMutation(api.functions.volunteers.ballots.flagBallot);
   const unflagBallot = useMutation(api.functions.admin.ballots.unflagBallot);
 
-  const ballots = useMemo(() => ballotsQuery || [], [ballotsQuery]);
+  const ballots = useMemo(() => {
+    if (!ballotsQuery?.page) return [];
+
+    if (pagination.cursor === null) {
+      setAllBallots(ballotsQuery.page);
+      return ballotsQuery.page;
+    } else {
+      const updatedBallots = [...allBallots, ...ballotsQuery.page];
+      setAllBallots(updatedBallots);
+      return updatedBallots;
+    }
+  }, [ballotsQuery, pagination.cursor]);
+
   const isLoading = ballotsQuery === undefined;
+
+  useEffect(() => {
+    if (ballotsQuery) {
+      setHasNextPage(!ballotsQuery.isDone);
+    }
+  }, [ballotsQuery]);
 
   useEffect(() => {
     const checkIsMobile = () => setIsMobile(window.innerWidth < 768);
@@ -3300,6 +3342,11 @@ export default function TournamentBallots({
       setViewMode("table");
     }
   }, [isMobile, ballots.length]);
+
+  useEffect(() => {
+    setPagination({ cursor: null });
+    setAllBallots([]);
+  }, [selectedRound, statusFilter, debouncedSearchQuery]);
 
   const availableRounds = useMemo<number[]>(() => {
     if (!ballots || ballots.length === 0) return [];
@@ -3325,6 +3372,17 @@ export default function TournamentBallots({
     });
   }, [ballots, statusFilter]);
 
+  const loadMore = () => {
+    if (!hasNextPage || isLoadingMore) return;
+
+    setIsLoadingMore(true);
+    setPagination({
+      cursor: ballotsQuery?.continueCursor || null
+    });
+
+    setTimeout(() => setIsLoadingMore(false), 1000);
+  };
+
   const handleViewDetails = (debate: any) => {
     setSelectedDebate(debate);
     setShowDetailsDialog(true);
@@ -3348,7 +3406,6 @@ export default function TournamentBallots({
   const handleSubmitFlag = async (debate: any, reason: string, selectedBallotIds: string[]) => {
     try {
       if (userRole === "admin") {
-
         for (const ballotId of selectedBallotIds) {
           await flagBallotAdmin({
             token,
@@ -3363,7 +3420,6 @@ export default function TournamentBallots({
             : "Ballot flagged successfully"
         );
       } else if (userRole === "volunteer") {
-
         const ballotId = selectedBallotIds[0];
         if (!ballotId) {
           toast.error("No ballot found to flag");
@@ -3494,7 +3550,6 @@ export default function TournamentBallots({
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
-            
             {!isMobile && (
               <div className="flex border rounded-md bg-background">
                 <Button
@@ -3546,12 +3601,22 @@ export default function TournamentBallots({
         </div>
 
         <div className="p-4">
+          <div className="relative mb-4">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+            <Input
+              placeholder="Search by room, team, or judge..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+
           {filteredBallots.length === 0 ? (
             <div className="text-center py-12">
               <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
               <h3 className="font-medium mb-2">No ballots found</h3>
               <p className="text-muted-foreground text-center text-sm max-w-sm mx-auto">
-                {selectedRound || statusFilter !== "all"
+                {selectedRound || statusFilter !== "all" || searchQuery
                   ? "Try adjusting your filters to see more results"
                   : userRole === "volunteer"
                     ? "You don't have any judging assignments yet"
@@ -3561,7 +3626,6 @@ export default function TournamentBallots({
             </div>
           ) : (
             <>
-              
               {viewMode === "table" && !isMobile ? (
                 <div className="border rounded-md">
                   <Table>
@@ -3587,31 +3651,66 @@ export default function TournamentBallots({
                           onUnflagBallot={handleUnflagBallot}
                         />
                       ))}
+                      {isLoadingMore && (
+                        <TableRow>
+                          <TableCell colSpan={userRole === "admin" ? 5 : 4} className="text-center py-4">
+                            <div className="flex items-center justify-center gap-2">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <span>Loading more ballots...</span>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
                     </TableBody>
                   </Table>
+                  {hasNextPage && !isLoadingMore && (
+                    <div className="p-4 text-center border-t">
+                      <Button onClick={loadMore} variant="outline">
+                        <ChevronDown className="h-4 w-4 mr-2" />
+                        Load More
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ) : (
-                /* Card view for mobile and desktop with fewer items */
-                <div className="grid gap-4 lg:grid-cols-2">
-                  {filteredBallots.map((debate: any) => (
-                    <BallotCard
-                      key={debate._id}
-                      debate={debate}
-                      userRole={userRole}
-                      userId={userId}
-                      onViewDetails={handleViewDetails}
-                      onEditBallot={handleEditBallot}
-                      onFlagBallot={handleFlagBallot}
-                      onUnflagBallot={handleUnflagBallot}
-                    />
-                  ))}
+                <div className="space-y-4">
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    {filteredBallots.map((debate: any) => (
+                      <BallotCard
+                        key={debate._id}
+                        debate={debate}
+                        userRole={userRole}
+                        userId={userId}
+                        onViewDetails={handleViewDetails}
+                        onEditBallot={handleEditBallot}
+                        onFlagBallot={handleFlagBallot}
+                        onUnflagBallot={handleUnflagBallot}
+                      />
+                    ))}
+                  </div>
+                  {isLoadingMore && (
+                    <div className="text-center py-4">
+                      <div className="flex items-center justify-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Loading more ballots...</span>
+                      </div>
+                    </div>
+                  )}
+                  {hasNextPage && !isLoadingMore && (
+                    <div className="text-center py-4">
+                      <Button onClick={loadMore} variant="outline">
+                        <ChevronDown className="h-4 w-4 mr-2" />
+                        Load More
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </>
           )}
         </div>
       </Card>
-      
+
       {showJudgingInterface && judgingDebate && (
         <>
           {window.innerWidth < 768 ? (
@@ -3651,7 +3750,7 @@ export default function TournamentBallots({
           )}
         </>
       )}
-      
+
       <BallotDetailsDialog
         debate={selectedDebate}
         isOpen={showDetailsDialog}

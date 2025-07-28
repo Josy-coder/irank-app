@@ -2,6 +2,7 @@ import { mutation, query } from "../../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../../_generated/api";
 import { Id, Doc } from "../../_generated/dataModel";
+import { paginationOptsValidator } from "convex/server";
 
 export const getAllTournamentBallots = query({
   args: {
@@ -14,8 +15,10 @@ export const getAllTournamentBallots = query({
       v.literal("completed"),
       v.literal("noShow")
     )),
+    search: v.optional(v.string()),
+    paginationOpts: paginationOptsValidator,
   },
-  handler: async (ctx, args): Promise<any[]> => {
+  handler: async (ctx, args): Promise<any> => {
     const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
       token: args.token,
     });
@@ -34,22 +37,30 @@ export const getAllTournamentBallots = query({
         .first();
 
       if (round) {
-        debates = await ctx.db
+        let debatesQuery = ctx.db
           .query("debates")
-          .withIndex("by_round_id", (q) => q.eq("round_id", round._id))
-          .collect();
+          .withIndex("by_round_id", (q) => q.eq("round_id", round._id));
+
+        if (args.status_filter) {
+          debatesQuery = debatesQuery.filter(d => d.eq(d.field("status"), args.status_filter));
+        }
+
+        const paginatedResult = await debatesQuery.paginate(args.paginationOpts);
+        debates = paginatedResult.page;
       } else {
         debates = [];
       }
     } else {
-      debates = await ctx.db
+      let debatesQuery = ctx.db
         .query("debates")
-        .withIndex("by_tournament_id", (q) => q.eq("tournament_id", args.tournament_id))
-        .collect();
-    }
+        .withIndex("by_tournament_id", (q) => q.eq("tournament_id", args.tournament_id));
 
-    if (args.status_filter) {
-      debates = debates.filter(d => d.status === args.status_filter);
+      if (args.status_filter) {
+        debatesQuery = debatesQuery.filter(d => d.eq(d.field("status"), args.status_filter));
+      }
+
+      const paginatedResult = await debatesQuery.paginate(args.paginationOpts);
+      debates = paginatedResult.page;
     }
 
     const enrichedDebates = await Promise.all(
@@ -118,10 +129,37 @@ export const getAllTournamentBallots = query({
       })
     );
 
-    return enrichedDebates.sort((a, b) => {
+    let filteredDebates = enrichedDebates;
+    if (args.search && args.search.trim()) {
+      const searchLower = args.search.toLowerCase();
+      filteredDebates = enrichedDebates.filter(debate => {
+        const roomName = debate.room_name?.toLowerCase() || '';
+        const propTeamName = debate.proposition_team?.name?.toLowerCase() || '';
+        const oppTeamName = debate.opposition_team?.name?.toLowerCase() || '';
+        const judgeNames = debate.judges?.map(j => j.name?.toLowerCase()).join(' ') || '';
+
+        return roomName.includes(searchLower) ||
+          propTeamName.includes(searchLower) ||
+          oppTeamName.includes(searchLower) ||
+          judgeNames.includes(searchLower);
+      });
+    }
+
+    const sortedDebates = filteredDebates.sort((a, b) => {
       if (!a.round || !b.round) return 0;
       return a.round.round_number - b.round.round_number;
     });
+
+    const hasMore = args.round_number
+      ? false
+      : sortedDebates.length === args.paginationOpts.numItems;
+
+    return {
+      page: sortedDebates,
+      isDone: !hasMore,
+      continueCursor: hasMore ? `cursor_${Date.now()}` : null,
+      totalCount: sortedDebates.length,
+    };
   },
 });
 
@@ -251,13 +289,11 @@ export const updateBallot = mutation({
       });
     }
 
-
     await ctx.db.patch(args.ballot_id, {
       ...args.updates,
       speaker_scores: args.updates.speaker_scores ? processedSpeakerScores : undefined,
       updated_at: Date.now(),
     });
-
 
     if (args.updates.feedback_submitted) {
       await updateDebateResults(ctx, ballot.debate_id);

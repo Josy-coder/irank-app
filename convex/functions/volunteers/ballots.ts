@@ -2,14 +2,17 @@ import { mutation, query } from "../../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../../_generated/api";
 import { Doc, Id } from "../../_generated/dataModel";
+import { paginationOptsValidator } from "convex/server";
 
 export const getJudgeAssignedDebates = query({
   args: {
     token: v.string(),
     tournament_id: v.id("tournaments"),
     round_number: v.optional(v.number()),
+    search: v.optional(v.string()),
+    paginationOpts: paginationOptsValidator,
   },
-  handler: async (ctx, args): Promise<any[]> => {
+  handler: async (ctx, args): Promise<any> => {
     const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
       token: args.token,
     });
@@ -30,7 +33,7 @@ export const getJudgeAssignedDebates = query({
         .first();
 
       if (round) {
-        const allDebatesInRound = await ctx.db
+        let allDebatesInRound = await ctx.db
           .query("debates")
           .withIndex("by_round_id", (q) => q.eq("round_id", round._id))
           .collect();
@@ -89,10 +92,40 @@ export const getJudgeAssignedDebates = query({
       })
     );
 
-    return enrichedDebates.sort((a, b) => {
+    let filteredDebates = enrichedDebates;
+    if (args.search && args.search.trim()) {
+      const searchLower = args.search.toLowerCase();
+      filteredDebates = enrichedDebates.filter(debate => {
+        const roomName = debate.room_name?.toLowerCase() || '';
+        const propTeamName = debate.proposition_team?.name?.toLowerCase() || '';
+        const oppTeamName = debate.opposition_team?.name?.toLowerCase() || '';
+
+        const judges = debate.judges || [];
+        const judgeNames = judges.map(() => 'judge').join(' ').toLowerCase();
+
+        return roomName.includes(searchLower) ||
+          propTeamName.includes(searchLower) ||
+          oppTeamName.includes(searchLower) ||
+          judgeNames.includes(searchLower);
+      });
+    }
+
+    const sortedDebates = filteredDebates.sort((a, b) => {
       if (!a.round || !b.round) return 0;
       return a.round.round_number - b.round.round_number;
     });
+
+    const startIndex = (args.paginationOpts.cursor ? parseInt(args.paginationOpts.cursor.split('_')[1]) || 0 : 0);
+    const endIndex = startIndex + args.paginationOpts.numItems;
+    const paginatedDebates = sortedDebates.slice(startIndex, endIndex);
+    const hasMore = endIndex < sortedDebates.length;
+
+    return {
+      page: paginatedDebates,
+      isDone: !hasMore,
+      continueCursor: hasMore ? `cursor_${endIndex}` : null,
+      totalCount: sortedDebates.length,
+    };
   },
 });
 
