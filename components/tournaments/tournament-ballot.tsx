@@ -60,7 +60,6 @@ import { Id } from "@/convex/_generated/dataModel";
 import { useGemini } from "@/hooks/use-gemini";
 import { useOffline } from "@/hooks/use-offline";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useDebounce } from "@/hooks/use-debounce";
 
 interface TournamentBallotsProps {
   tournament: any;
@@ -1431,7 +1430,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
 
               <div className="flex-1 overflow-y-auto px-4">
                 <TabsContent value="scoring" className="space-y-4 mt-4">
-                  
+
                   <div className="grid grid-cols-2 gap-2">
                     {availableTeams.map((team) => (
                       <Button
@@ -1450,10 +1449,10 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
                     ))}
                   </div>
 
-                  
+
                   {selectedTeam && selectedTeamData && (
                     <>
-                      
+
                       <SpeakerPositionManager
                         speakers={selectedTeamSpeakers.map((id: string) => ({ id, name: getSpeakerName(id) }))}
                         positions={speakerPositions}
@@ -1464,7 +1463,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
                         teamName={selectedTeamData.name}
                       />
 
-                      
+
                       <Card className="p-3">
                         <div className="space-y-2">
                           <Label className="text-sm font-medium">Team Feedback - {selectedTeamData.name}</Label>
@@ -1479,7 +1478,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
                         </div>
                       </Card>
 
-                      
+
                       {selectedTeamSpeakers.map((speakerId: string) => {
                         const speakerScores = scores[speakerId] || {};
                         const finalScore = calculateFinalScore(speakerScores);
@@ -1696,7 +1695,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
             </Tabs>
           </div>
 
-          
+
           <div className="border-t bg-background p-4 space-y-3">
             {validationResult && !validationResult.isAppropriate && (
               <Alert variant="destructive">
@@ -1768,9 +1767,9 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
+
             <div className="lg:col-span-2 space-y-6">
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {availableTeams.map((team) => (
                   <Button
@@ -1792,10 +1791,10 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
                 ))}
               </div>
 
-              
+
               {selectedTeam && selectedTeamData && (
                 <>
-                  
+
                   <Card className="p-4">
                     <div className="space-y-3">
                       <Label className="text-base font-medium">Team Feedback - {selectedTeamData.name}</Label>
@@ -1947,7 +1946,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
                 </>
               )}
 
-              
+
               {canEdit && availableTeams.length > 0 && (
                 <div className="space-y-4">
                   <Label className="text-base font-medium">Winning Team</Label>
@@ -1972,7 +1971,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
                 </div>
               )}
 
-              
+
               <div className="space-y-2">
                 <Label className="text-base font-medium">General Judge Notes</Label>
                 <Textarea
@@ -1985,7 +1984,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
               </div>
             </div>
 
-            
+
             <div className="space-y-4">
               <DebateTimer debate={debate} onTimeUpdate={() => {}} />
 
@@ -2078,7 +2077,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
             </div>
           </div>
 
-          
+
           {validationResult && (
             <div className="mt-6">
               {validationResult.isAppropriate ? (
@@ -2116,7 +2115,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
             </div>
           )}
 
-          
+
           {canEdit && (
             <div className="flex gap-2 pt-6 border-t">
               <Button
@@ -2344,7 +2343,6 @@ function BallotRow({ debate, userRole, userId, onViewDetails, onEditBallot, onFl
   );
 }
 
-
 function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot, onFlagBallot, onUnflagBallot }: any) {
   const StatusIcon = getDebateStatusIcon(debate.status);
   const canEdit = userRole === "admin" || (userRole === "volunteer" && debate.judges?.some((j: any) => j._id === userId));
@@ -2429,7 +2427,7 @@ function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot, onF
       </CardHeader>
 
       <CardContent className="space-y-4">
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {debate.proposition_team && (
             <div className="flex items-center gap-2">
@@ -2468,7 +2466,7 @@ function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot, onF
 
         <Separator />
 
-        
+
         <div>
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium">
@@ -2507,13 +2505,13 @@ function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot, onF
           </div>
         </div>
 
-        
+
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <span>Round {debate.round?.round_number}</span>
           <span>{debate.round?.type}</span>
         </div>
 
-        
+
         {userRole === "admin" && debate.judges?.length > 0 && (
           <div className="space-y-1">
             <div className="flex justify-between text-xs">
@@ -2524,7 +2522,7 @@ function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot, onF
           </div>
         )}
 
-        
+
         {debate.winning_team_id && canSeeDetails && (
           <div className="pt-2 border-t">
             <div className="flex items-center justify-between text-sm">
@@ -2541,7 +2539,7 @@ function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot, onF
           </div>
         )}
 
-        
+
         {(debate.fact_checks?.length > 0 || debate.argument_flow?.length > 0) && canSeeDetails && (
           <div className="pt-2 border-t">
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
@@ -2654,7 +2652,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
         </DialogHeader>
 
         <div className="space-y-6">
-          
+
           {ballotDetails.length > 1 && (
             <div className="flex items-center gap-2">
               <Label>View Judge:</Label>
@@ -2675,7 +2673,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
             </div>
           )}
 
-          
+
           <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
             <div className="text-center">
               <h3 className="font-semibold text-green-700">{debate?.proposition_team?.name}</h3>
@@ -2699,7 +2697,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
             </div>
           </div>
 
-          
+
           {debate?.fact_checks?.length > 0 && (
             <Card>
               <CardHeader>
@@ -2746,7 +2744,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
             </Card>
           )}
 
-          
+
           {debate?.argument_flow?.length > 0 && (
             <Card>
               <CardHeader>
@@ -2808,7 +2806,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
             </Card>
           )}
 
-          
+
           {filteredBallots.map((ballot: any, index: number) => (
             <Card key={ballot.judge_id || index}>
               <CardHeader>
@@ -2835,7 +2833,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                
+
                 <div className="p-3 bg-muted rounded-lg">
                   <div className="flex items-center justify-between">
                     <span className="font-medium">Decision:</span>
@@ -2861,7 +2859,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
                   </div>
                 </div>
 
-                
+
                 {ballot.speaker_scores?.length > 0 && (
                   <div>
                     <h4 className="font-medium mb-3">Speaker Scores</h4>
@@ -2885,7 +2883,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
                             </div>
                           </div>
 
-                          
+
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
                             {SCORING_CATEGORIES.map((category) => {
                               const CategoryIcon = category.icon;
@@ -2903,7 +2901,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
                             })}
                           </div>
 
-                          
+
                           {score.comments && (
                             <div className="pt-3 border-t">
                               <Label className="text-xs font-medium">Judge Feedback:</Label>
@@ -2911,7 +2909,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
                             </div>
                           )}
 
-                          
+
                           {score.bias_detected && (
                             <div className="pt-3 border-t">
                               <Alert variant="destructive">
@@ -2931,7 +2929,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
                   </div>
                 )}
 
-                
+
                 {ballot.notes && (
                   <div className="pt-3 border-t">
                     <Label className="text-sm font-medium">Judge Notes:</Label>
@@ -2939,7 +2937,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
                   </div>
                 )}
 
-                
+
                 <div className="text-xs text-muted-foreground pt-2 border-t flex justify-between">
                   <span>
                     Submitted: {ballot.submitted_at ? new Date(ballot.submitted_at).toLocaleString() : "Not submitted"}
@@ -2951,7 +2949,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
               </CardContent>
             </Card>
           ))}
-          
+
           {filteredBallots.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
               <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
@@ -2961,7 +2959,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
               )}
             </div>
           )}
-          
+
           {debate?.shared_notes?.length > 0 && (
             <Card>
               <CardHeader>
@@ -3087,7 +3085,7 @@ function FlagBallotDialog({ debate, isOpen, onClose, onFlag, userRole }: any) {
         </DialogHeader>
 
         <div className="space-y-4">
-          
+
           {userRole === "admin" && availableBallots.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -3162,7 +3160,7 @@ function FlagBallotDialog({ debate, isOpen, onClose, onFlag, userRole }: any) {
             </div>
           )}
 
-          
+
           {userRole === "volunteer" && availableBallots.length > 0 && (
             <div className="p-3 bg-muted rounded-lg">
               <div className="flex items-center gap-2">
@@ -3175,7 +3173,7 @@ function FlagBallotDialog({ debate, isOpen, onClose, onFlag, userRole }: any) {
             </div>
           )}
 
-          
+
           {availableBallots.length === 0 && (
             <div className="text-center py-4 text-muted-foreground">
               <AlertTriangle className="h-8 w-8 mx-auto mb-2 opacity-50" />
@@ -3239,7 +3237,6 @@ export default function TournamentBallots({
                                             userRole,
                                             token,
                                             userId,
-                                            schoolId
                                           }: TournamentBallotsProps) {
   const [selectedRound, setSelectedRound] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -3251,13 +3248,6 @@ export default function TournamentBallots({
   const [flaggingDebate, setFlaggingDebate] = useState<any>(null);
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
   const [isMobile, setIsMobile] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [pagination, setPagination] = useState({ cursor: null as string | null });
-  const [hasNextPage, setHasNextPage] = useState(false);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [allBallots, setAllBallots] = useState<any[]>([]);
-
-  const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
   let queryFn: any;
   let queryArgs: any;
@@ -3269,11 +3259,6 @@ export default function TournamentBallots({
       tournament_id: tournament._id,
       round_number: selectedRound || undefined,
       status_filter: statusFilter !== "all" ? statusFilter as any : undefined,
-      search: debouncedSearchQuery || undefined,
-      paginationOpts: {
-        numItems: 20,
-        cursor: pagination.cursor,
-      },
     };
   } else if (userRole === "volunteer") {
     queryFn = api.functions.volunteers.ballots.getJudgeAssignedDebates;
@@ -3281,11 +3266,6 @@ export default function TournamentBallots({
       token,
       tournament_id: tournament._id,
       round_number: selectedRound || undefined,
-      search: debouncedSearchQuery || undefined,
-      paginationOpts: {
-        numItems: 20,
-        cursor: pagination.cursor,
-      },
     };
   } else {
     queryFn = api.functions.ballots.getTournamentBallots;
@@ -3293,11 +3273,6 @@ export default function TournamentBallots({
       token,
       tournament_id: tournament._id,
       round_number: selectedRound || undefined,
-      search: debouncedSearchQuery || undefined,
-      paginationOpts: {
-        numItems: 20,
-        cursor: pagination.cursor,
-      },
     };
   }
 
@@ -3310,26 +3285,8 @@ export default function TournamentBallots({
   const flagBallotVolunteer = useMutation(api.functions.volunteers.ballots.flagBallot);
   const unflagBallot = useMutation(api.functions.admin.ballots.unflagBallot);
 
-  const ballots = useMemo(() => {
-    if (!ballotsQuery?.page) return [];
-
-    if (pagination.cursor === null) {
-      setAllBallots(ballotsQuery.page);
-      return ballotsQuery.page;
-    } else {
-      const updatedBallots = [...allBallots, ...ballotsQuery.page];
-      setAllBallots(updatedBallots);
-      return updatedBallots;
-    }
-  }, [ballotsQuery, pagination.cursor]);
-
+  const ballots = useMemo(() => ballotsQuery || [], [ballotsQuery]);
   const isLoading = ballotsQuery === undefined;
-
-  useEffect(() => {
-    if (ballotsQuery) {
-      setHasNextPage(!ballotsQuery.isDone);
-    }
-  }, [ballotsQuery]);
 
   useEffect(() => {
     const checkIsMobile = () => setIsMobile(window.innerWidth < 768);
@@ -3343,11 +3300,6 @@ export default function TournamentBallots({
       setViewMode("table");
     }
   }, [isMobile, ballots.length]);
-
-  useEffect(() => {
-    setPagination({ cursor: null });
-    setAllBallots([]);
-  }, [selectedRound, statusFilter, debouncedSearchQuery]);
 
   const availableRounds = useMemo<number[]>(() => {
     if (!ballots || ballots.length === 0) return [];
@@ -3373,17 +3325,6 @@ export default function TournamentBallots({
     });
   }, [ballots, statusFilter]);
 
-  const loadMore = () => {
-    if (!hasNextPage || isLoadingMore) return;
-
-    setIsLoadingMore(true);
-    setPagination({
-      cursor: ballotsQuery?.continueCursor || null
-    });
-
-    setTimeout(() => setIsLoadingMore(false), 1000);
-  };
-
   const handleViewDetails = (debate: any) => {
     setSelectedDebate(debate);
     setShowDetailsDialog(true);
@@ -3407,6 +3348,7 @@ export default function TournamentBallots({
   const handleSubmitFlag = async (debate: any, reason: string, selectedBallotIds: string[]) => {
     try {
       if (userRole === "admin") {
+
         for (const ballotId of selectedBallotIds) {
           await flagBallotAdmin({
             token,
@@ -3421,6 +3363,7 @@ export default function TournamentBallots({
             : "Ballot flagged successfully"
         );
       } else if (userRole === "volunteer") {
+
         const ballotId = selectedBallotIds[0];
         if (!ballotId) {
           toast.error("No ballot found to flag");
@@ -3551,6 +3494,7 @@ export default function TournamentBallots({
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
+
             {!isMobile && (
               <div className="flex border rounded-md bg-background">
                 <Button
@@ -3602,22 +3546,12 @@ export default function TournamentBallots({
         </div>
 
         <div className="p-4">
-          <div className="relative mb-4">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-            <Input
-              placeholder="Search by room, team, or judge..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-
           {filteredBallots.length === 0 ? (
             <div className="text-center py-12">
               <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
               <h3 className="font-medium mb-2">No ballots found</h3>
               <p className="text-muted-foreground text-center text-sm max-w-sm mx-auto">
-                {selectedRound || statusFilter !== "all" || searchQuery
+                {selectedRound || statusFilter !== "all"
                   ? "Try adjusting your filters to see more results"
                   : userRole === "volunteer"
                     ? "You don't have any judging assignments yet"
@@ -3627,6 +3561,7 @@ export default function TournamentBallots({
             </div>
           ) : (
             <>
+
               {viewMode === "table" && !isMobile ? (
                 <div className="border rounded-md">
                   <Table>
@@ -3652,59 +3587,24 @@ export default function TournamentBallots({
                           onUnflagBallot={handleUnflagBallot}
                         />
                       ))}
-                      {isLoadingMore && (
-                        <TableRow>
-                          <TableCell colSpan={userRole === "admin" ? 5 : 4} className="text-center py-4">
-                            <div className="flex items-center justify-center gap-2">
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              <span>Loading more ballots...</span>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      )}
                     </TableBody>
                   </Table>
-                  {hasNextPage && !isLoadingMore && (
-                    <div className="p-4 text-center border-t">
-                      <Button onClick={loadMore} variant="outline">
-                        <ChevronDown className="h-4 w-4 mr-2" />
-                        Load More
-                      </Button>
-                    </div>
-                  )}
                 </div>
               ) : (
-                <div className="space-y-4">
-                  <div className="grid gap-4 lg:grid-cols-2">
-                    {filteredBallots.map((debate: any) => (
-                      <BallotCard
-                        key={debate._id}
-                        debate={debate}
-                        userRole={userRole}
-                        userId={userId}
-                        onViewDetails={handleViewDetails}
-                        onEditBallot={handleEditBallot}
-                        onFlagBallot={handleFlagBallot}
-                        onUnflagBallot={handleUnflagBallot}
-                      />
-                    ))}
-                  </div>
-                  {isLoadingMore && (
-                    <div className="text-center py-4">
-                      <div className="flex items-center justify-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span>Loading more ballots...</span>
-                      </div>
-                    </div>
-                  )}
-                  {hasNextPage && !isLoadingMore && (
-                    <div className="text-center py-4">
-                      <Button onClick={loadMore} variant="outline">
-                        <ChevronDown className="h-4 w-4 mr-2" />
-                        Load More
-                      </Button>
-                    </div>
-                  )}
+                /* Card view for mobile and desktop with fewer items */
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {filteredBallots.map((debate: any) => (
+                    <BallotCard
+                      key={debate._id}
+                      debate={debate}
+                      userRole={userRole}
+                      userId={userId}
+                      onViewDetails={handleViewDetails}
+                      onEditBallot={handleEditBallot}
+                      onFlagBallot={handleFlagBallot}
+                      onUnflagBallot={handleUnflagBallot}
+                    />
+                  ))}
                 </div>
               )}
             </>
