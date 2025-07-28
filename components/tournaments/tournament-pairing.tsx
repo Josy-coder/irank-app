@@ -1330,7 +1330,7 @@ export default function TournamentPairings({
       tournament_id: tournament._id,
       round_number: currentRound,
       paginationOpts: {
-        numItems: 10,
+        numItems: 100,
         cursor: null,
       },
     } : "skip"
