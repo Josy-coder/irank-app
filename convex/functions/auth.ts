@@ -1311,10 +1311,12 @@ export const createMagicLink = internalMutation({
   },
 });
 
-export const cleanupExpired = mutation({
+export const cleanupExpired = internalMutation({
   args: {},
   handler: async (ctx) => {
     const now = Date.now();
+
+    console.log("Starting cleanup of expired auth data...");
 
     const expiredSessions = await ctx.db
       .query("auth_sessions")
@@ -1343,13 +1345,18 @@ export const cleanupExpired = mutation({
       await ctx.db.delete(token._id);
     }
 
-    return {
+    const result = {
       cleaned: {
         sessions: expiredSessions.length,
         magic_links: expiredMagicLinks.length,
         reset_tokens: expiredResetTokens.length,
-      }
+      },
+      cleanedAt: new Date().toISOString(),
     };
+
+    console.log("Auth cleanup completed:", result);
+
+    return result;
   },
 });
 

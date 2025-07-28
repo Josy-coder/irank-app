@@ -465,6 +465,14 @@ export const deleteTournament = mutation({
       throw new Error("Cannot delete tournament that has teams. Please remove all teams first.");
     }
 
+    if (tournament.image) {
+      try {
+        await ctx.storage.delete(tournament.image);
+        console.log("Tournament image deleted successfully");
+      } catch (error) {
+        console.error("Failed to delete tournament image:", error);
+      }
+    }
     const rounds = await ctx.db
       .query("rounds")
       .withIndex("by_tournament_id", (q) => q.eq("tournament_id", tournament_id))
@@ -472,14 +480,6 @@ export const deleteTournament = mutation({
 
     for (const round of rounds) {
       await ctx.db.delete(round._id);
-    }
-
-    if (tournament.image) {
-      try {
-        await ctx.storage.delete(tournament.image);
-      } catch (error) {
-        console.log("Could not delete tournament image:", error);
-      }
     }
 
     await ctx.db.delete(tournament_id);
@@ -494,6 +494,7 @@ export const deleteTournament = mutation({
         name: tournament.name,
         status: tournament.status,
         league_id: tournament.league_id,
+        image_deleted: !!tournament.image,
       }),
     });
 

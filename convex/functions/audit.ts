@@ -1,5 +1,6 @@
 import { internalMutation, query } from "../_generated/server";
 import { v } from "convex/values";
+import { internal } from "../_generated/api";
 
 const actionType = v.union(
   v.literal("user_created"),
@@ -188,5 +189,76 @@ export const getAuditLogs = query({
         nextPage: paginatedLogs.continueCursor
       };
     }
+  },
+});
+
+export const conditionalMonthlyCleanup = internalMutation({
+  args: {},
+  handler: async (ctx): Promise<
+    | { success: true; skipped: true; reason: string; currentDate: string }
+    | any
+  > => {
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(now.getDate() + 1);
+
+    const isLastDayOfMonth = tomorrow.getMonth() !== now.getMonth();
+
+    if (!isLastDayOfMonth) {
+      console.log(`Not the last day of month (${now.toISOString()}). Skipping audit cleanup.`);
+      return {
+        success: true,
+        skipped: true,
+        reason: "Not last day of month",
+        currentDate: now.toISOString(),
+      };
+    }
+
+    console.log(`Last day of month detected (${now.toISOString()}). Running audit logs cleanup...`);
+
+    return await ctx.runMutation(internal.functions.audit.monthlyAuditCleanup, {});
+  },
+});
+
+export const monthlyAuditCleanup = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = new Date();
+
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const currentMonthStartTimestamp = currentMonthStart.getTime();
+
+    console.log(`Starting audit logs cleanup. Deleting logs older than ${currentMonthStart.toISOString()}`);
+
+    const oldLogs = await ctx.db
+      .query("audit_logs")
+      .withIndex("by_timestamp", (q) => q.lt("timestamp", currentMonthStartTimestamp))
+      .collect();
+
+    let deletedCount = 0;
+    let failedCount = 0;
+
+    for (const log of oldLogs) {
+      try {
+        await ctx.db.delete(log._id);
+        deletedCount++;
+      } catch (error) {
+        console.error(`Failed to delete audit log ${log._id}:`, error);
+        failedCount++;
+      }
+    }
+
+    const result = {
+      success: true,
+      deletedCount,
+      failedCount,
+      totalFound: oldLogs.length,
+      cutoffDate: currentMonthStart.toISOString(),
+      cleanedAt: new Date().toISOString(),
+    };
+
+    console.log(`Audit logs cleanup completed:`, result);
+
+    return result;
   },
 });

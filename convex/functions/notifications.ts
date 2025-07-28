@@ -468,9 +468,11 @@ export const updatePushStatus = mutation({
   },
 });
 
-export const cleanupExpiredNotifications = mutation({
+export const cleanupExpiredNotifications = internalMutation({
   args: {},
   handler: async (ctx) => {
+    console.log("Starting cleanup of expired notifications...");
+
     const expired = await ctx.db
       .query("notifications")
       .withIndex("by_expires_at", (q) => q.lt("expires_at", Date.now()))
@@ -480,17 +482,26 @@ export const cleanupExpiredNotifications = mutation({
       expired.map((notification) => ctx.db.delete(notification._id))
     );
 
-    return { deleted: expired.length };
+    const result = {
+      deleted: expired.length,
+      cleanedAt: new Date().toISOString(),
+    };
+
+    console.log("Notifications cleanup completed:", result);
+
+    return result;
   },
 });
 
-export const cleanupInactiveSubscriptions = mutation({
+export const cleanupInactiveSubscriptions = internalMutation({
   args: {
     days: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const cutoffDays = args.days || 30;
     const cutoffTime = Date.now() - (cutoffDays * 24 * 60 * 60 * 1000);
+
+    console.log(`Starting cleanup of inactive subscriptions older than ${cutoffDays} days...`);
 
     const inactive = await ctx.db
       .query("push_subscriptions")
@@ -506,6 +517,14 @@ export const cleanupInactiveSubscriptions = mutation({
       inactive.map((subscription) => ctx.db.delete(subscription._id))
     );
 
-    return { deleted: inactive.length };
+    const result = {
+      deleted: inactive.length,
+      cutoffDays,
+      cleanedAt: new Date().toISOString(),
+    };
+
+    console.log("Subscriptions cleanup completed:", result);
+
+    return result;
   },
 });
