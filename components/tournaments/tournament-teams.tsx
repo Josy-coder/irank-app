@@ -44,8 +44,13 @@ import {
   QrCode,
   Ticket,
   CircleCheck,
-  PencilLine
+  PencilLine,
+  FileSpreadsheet, FileText, Download,
+  Loader2
 } from "lucide-react";
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { useDebounce } from "@/hooks/use-debounce"
 import { DataToolbar } from "@/components/shared/data-toolbar"
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter"
@@ -59,6 +64,8 @@ import { ShareTeamDialog } from "@/components/tournaments/share-team-dialog"
 import { WaiverCodeDialog } from "@/components/tournaments/waiver-code-dialog";
 import { useOffline } from "@/hooks/use-offline";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "../ui/label"
 
 interface TournamentTeamsProps {
   tournament: any;
@@ -208,6 +215,9 @@ export function TournamentTeams({
   const [teamToDelete, setTeamToDelete] = useState<string | null>(null);
   const [teamToShare, setTeamToShare] = useState<any>(null);
   const [bulkAction, setBulkAction] = useState<string>("");
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [exportFormat, setExportFormat] = useState<'csv' | 'pdf'>('csv');
+  const [isExporting, setIsExporting] = useState(false);
 
   const debouncedSearch = useDebounce(searchTerm, 300);
 
@@ -382,6 +392,88 @@ export function TournamentTeams({
     setShowShareDialog(true);
   };
 
+  const exportToExcel = async () => {
+    setIsExporting(true);
+    try {
+      const data = teams.map((team) => ({
+        'Team Name': team.name,
+        'School': team.school?.name || 'N/A',
+        'School Type': team.school?.type || 'N/A',
+        'Members': `${team.memberCount}/${tournament.team_size}`,
+        'Status': team.status.charAt(0).toUpperCase() + team.status.slice(1),
+        'Payment Status': tournament.league?.type !== "Dreams Mode" ?
+          team.payment_status.charAt(0).toUpperCase() + team.payment_status.slice(1) : 'N/A',
+        'Created': formatDistanceToNow(new Date(team.created_at), { addSuffix: true }),
+        'Invitation Code': team.invitation_code || 'N/A'
+      }));
+
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(data);
+      XLSX.utils.book_append_sheet(wb, ws, "Teams");
+
+      const fileName = `${tournament.name}_Teams.xlsx`;
+      XLSX.writeFile(wb, fileName);
+
+      toast.success("Excel file downloaded!");
+    } catch (error) {
+      toast.error("Failed to export Excel file");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const exportToPDF = async () => {
+    setIsExporting(true);
+    try {
+      const doc = new jsPDF();
+
+      doc.setFontSize(16);
+      doc.text(`${tournament.name} - Teams`, 20, 20);
+
+      const tableData = teams.map((team) => [
+        team.name,
+        team.school?.name || 'N/A',
+        team.school?.type || 'N/A',
+        `${team.memberCount}/${tournament.team_size}`,
+        team.status.charAt(0).toUpperCase() + team.status.slice(1),
+        tournament.league?.type !== "Dreams Mode" ?
+          team.payment_status.charAt(0).toUpperCase() + team.payment_status.slice(1) : 'N/A',
+        formatDistanceToNow(new Date(team.created_at), { addSuffix: true })
+      ]);
+
+      const columns = [
+        'Team Name',
+        'School',
+        'School Type',
+        'Members',
+        'Status',
+        ...(tournament.league?.type !== "Dreams Mode" ? ['Payment'] : []),
+        'Created'
+      ];
+
+      autoTable(doc, {
+        head: [columns],
+        body: tableData.map(row => tournament.league?.type === "Dreams Mode" ?
+          [row[0], row[1], row[2], row[3], row[4], row[6]] : // Skip payment column
+          row
+        ),
+        startY: 40,
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [66, 139, 202] },
+        margin: { left: 20, right: 20 }
+      });
+
+      const fileName = `${tournament.name}_Teams.pdf`;
+      doc.save(fileName);
+
+      toast.success("PDF file downloaded!");
+    } catch (error) {
+      toast.error("Failed to export PDF file");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const canEditTeam = (team: any) => {
     if (isAdmin) return true;
     if (isSchoolAdmin && team.school?._id === schoolId) return true;
@@ -482,7 +574,22 @@ export function TournamentTeams({
           <span className="hidden md:block">Create Team</span>
         </Button>
       )
-    }] : [])
+    }] : []),
+    {
+      key: "export",
+      component: (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 border-white/20"
+          onClick={() => setShowExportDialog(true)}
+          disabled={teams.length === 0}
+        >
+          <Download className="h-4 w-4" />
+          <span className="hidden md:block">Export</span>
+        </Button>
+      )
+    },
   ].map(action => action.component);
 
   const bulkActions = canUseBulkActions ? [
@@ -538,6 +645,66 @@ export function TournamentTeams({
     }
   ] : [];
 
+  const ExportDialog = () => (
+    <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Export Teams</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-3">
+            <Label>Export Format</Label>
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="radio"
+                  id="csv"
+                  name="exportFormat"
+                  checked={exportFormat === 'csv'}
+                  onChange={() => setExportFormat('csv')}
+                />
+                <Label htmlFor="csv">Excel (.xlsx)</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="radio"
+                  id="pdf"
+                  name="exportFormat"
+                  checked={exportFormat === 'pdf'}
+                  onChange={() => setExportFormat('pdf')}
+                />
+                <Label htmlFor="pdf">PDF (.pdf)</Label>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Button
+              onClick={exportFormat === 'csv' ? exportToExcel : exportToPDF}
+              disabled={isExporting || teams.length === 0}
+              className="flex items-center gap-2"
+            >
+              {isExporting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : exportFormat === 'csv' ? (
+                <FileSpreadsheet className="h-4 w-4" />
+              ) : (
+                <FileText className="h-4 w-4" />
+              )}
+              Export
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowExportDialog(false)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+
   const toolbar = (
     <DataToolbar
       searchTerm={canUseFilters ? searchTerm : ""}
@@ -552,6 +719,8 @@ export function TournamentTeams({
       hideSearch={!canUseFilters}
     />
   );
+
+
 
   return (
     <CardLayoutWithToolbar toolbar={toolbar}>
@@ -876,6 +1045,10 @@ export function TournamentTeams({
           token={token}
         />
       )}
+      {(canCreateTeams || teamToEdit) && (
+        <ExportDialog />
+      )}
+
     </CardLayoutWithToolbar>
   );
 }
