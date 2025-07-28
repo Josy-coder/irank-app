@@ -80,6 +80,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from "@/components/ui/alert-dialog";
+import { useDebounce } from "@/hooks/use-debounce"
 
 interface TournamentOverviewProps {
   tournament: any
@@ -132,6 +133,7 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
   const [leagueSearch, setLeagueSearch] = useState("")
   const [showLeaguePopover, setShowLeaguePopover] = useState(false)
   const [coordinatorSearch, setCoordinatorSearch] = useState("")
+  const debouncedCoordinatorSearch = useDebounce(coordinatorSearch, 300)
   const [showCoordinatorPopover, setShowCoordinatorPopover] = useState(false)
   const [showStatusDialog, setShowStatusDialog] = useState(false)
   const [pendingStatusChange, setPendingStatusChange] = useState<{
@@ -184,20 +186,16 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
   )
 
   const coordinatorsData = useQuery(
-    api.functions.admin.users.getUsers,
-    isAdmin && hasToken && coordinatorSearch !== undefined ? {
+    api.functions.admin.tournaments.getCoordinators,
+    isAdmin && hasToken ? {
       admin_token: token as string,
-      search: coordinatorSearch,
-      role: "all",
-      status: "active",
-      verified: "verified",
-      page: 1,
-      limit: 30
+      search: debouncedCoordinatorSearch || undefined,
+      limit: 50
     } : "skip"
   )
 
   const leagues = leaguesData?.leagues || []
-  const coordinators = coordinatorsData?.users || []
+  const coordinators = coordinatorsData || []
 
   useEffect(() => {
     if (tournament.image) {
@@ -870,7 +868,9 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
                             value={coordinatorSearch}
                             onValueChange={setCoordinatorSearch}
                           />
-                          <CommandEmpty>No coordinators found.</CommandEmpty>
+                          <CommandEmpty>
+                            {debouncedCoordinatorSearch ? "No coordinators found." : "Type to search coordinators..."}
+                          </CommandEmpty>
                           <CommandGroup className="max-h-64 overflow-auto">
                             {coordinators.map((coordinator) => (
                               <CommandItem
@@ -888,9 +888,19 @@ export function TournamentOverview({ tournament, userRole, token, onSlugChange }
                                   )}
                                 />
                                 <div>
-                                  <div className="font-medium">{coordinator.name}</div>
-                                  <div className="text-sm text-muted-foreground capitalize">
-                                    {coordinator.role} • {coordinator.email}
+                                  <div className="font-medium flex items-center gap-2">
+                                    {coordinator.name}
+                                    {coordinator.role === "admin" && (
+                                      <Badge variant="default" className="text-xs">
+                                        Admin
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="text-sm text-muted-foreground">
+                                    {coordinator.email}
+                                    {coordinator.school_name && (
+                                      <span> • {coordinator.school_name}</span>
+                                    )}
                                   </div>
                                 </div>
                               </CommandItem>

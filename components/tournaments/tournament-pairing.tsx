@@ -303,17 +303,17 @@ const JudgeSelectionDialog = ({
                                 debate,
                                 onUpdate,
                                 trigger,
-                                pairingData,
                                 tournament,
-                                canEditJudges
+                                canEditJudges,
+                                allVolunteers = [] // Add this prop
                               }: {
   debate: any;
   debateIndex: number;
   onUpdate: (judges: Id<"users">[], headJudge?: Id<"users">) => void;
   trigger: React.ReactNode;
-  pairingData: any;
   tournament: any;
   canEditJudges: boolean;
+  allVolunteers?: any[]; // Add this prop type
 }) => {
   const [selectedJudges, setSelectedJudges] = useState<Id<"users">[]>([]);
   const [selectedHeadJudge, setSelectedHeadJudge] = useState<Id<"users"> | undefined>(undefined);
@@ -352,14 +352,14 @@ const JudgeSelectionDialog = ({
     setOpen(false);
   };
 
-  const sortedJudges = [...(pairingData?.judges || [])].sort((a, b) => {
+  const sortedJudges = [...allVolunteers].sort((a, b) => {
     const conflictsA = getJudgeConflicts(a, debate).length;
     const conflictsB = getJudgeConflicts(b, debate).length;
 
     if (conflictsA !== conflictsB) return conflictsA - conflictsB;
 
-    const experienceA = a.total_debates_judged + (a.elimination_debates * 2);
-    const experienceB = b.total_debates_judged + (b.elimination_debates * 2);
+    const experienceA = (a.total_debates_judged || 0) + ((a.elimination_debates || 0) * 2);
+    const experienceB = (b.total_debates_judged || 0) + ((b.elimination_debates || 0) * 2);
 
     return experienceB - experienceA;
   });
@@ -402,74 +402,96 @@ const JudgeSelectionDialog = ({
 
           <ScrollArea className="h-96">
             <div className="space-y-2">
-              {sortedJudges.map((judge: any) => {
-                const conflicts = getJudgeConflicts(judge, debate);
-                const isSelected = selectedJudges.includes(judge._id);
-                const isHeadJudge = selectedHeadJudge === judge._id;
+              {sortedJudges.length === 0 ? (
+                <div className="text-center text-muted-foreground py-8">
+                  <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>No volunteers found for this tournament</p>
+                  <p className="text-xs">Make sure volunteers have accepted their invitations</p>
+                </div>
+              ) : (
+                sortedJudges.map((judge: any) => {
+                  const conflicts = getJudgeConflicts(judge, debate);
+                  const isSelected = selectedJudges.includes(judge._id);
+                  const isHeadJudge = selectedHeadJudge === judge._id;
+                  const isCurrentlyAssigned = debate.judges?.includes(judge._id);
 
-                return (
-                  <div
-                    key={judge._id}
-                    className={`flex items-center space-x-3 p-2 border rounded ${
-                      conflicts.length > 0 ? 'border-red-200 bg-red-50' : 'border-border'
-                    }`}
-                  >
-                    <Checkbox
-                      id={`judge-${judge._id}`}
-                      checked={isSelected}
-                      onCheckedChange={(checked) => handleJudgeToggle(judge._id, !!checked)}
-                      disabled={conflicts.length > 0}
-                    />
+                  return (
+                    <div
+                      key={judge._id}
+                      className={`flex items-center space-x-3 p-2 border rounded ${
+                        conflicts.length > 0 ? 'border-red-200 bg-red-50' :
+                          isCurrentlyAssigned ? 'border-blue-200 bg-blue-50' : 'border-border'
+                      }`}
+                    >
+                      <Checkbox
+                        id={`judge-${judge._id}`}
+                        checked={isSelected}
+                        onCheckedChange={(checked) => handleJudgeToggle(judge._id, !!checked)}
 
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <label htmlFor={`judge-${judge._id}`} className="text-sm font-medium cursor-pointer">
-                          {judge.name}
-                        </label>
+                      />
 
-                        {isHeadJudge && (
-                          <Badge variant="default" className="gap-1">
-                            <Crown className="h-3 w-3" />
-                            Head
-                          </Badge>
-                        )}
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <label htmlFor={`judge-${judge._id}`} className="text-sm font-medium cursor-pointer">
+                            {judge.name}
+                          </label>
 
-                        {judge.school_name && (
-                          <span className="text-xs text-muted-foreground">
-                          ({judge.school_name})
-                        </span>
-                        )}
-                      </div>
+                          {isHeadJudge && (
+                            <Badge variant="default" className="gap-1">
+                              <Crown className="h-3 w-3" />
+                              Head
+                            </Badge>
+                          )}
 
-                      <div className="text-xs text-muted-foreground">
-                        {judge.total_debates_judged} debates • {judge.elimination_debates} eliminations
-                        {judge.avg_feedback_score && (
-                          <span> • {judge.avg_feedback_score.toFixed(1)}/5 rating</span>
-                        )}
-                      </div>
+                          {isCurrentlyAssigned && !isSelected && (
+                            <Badge variant="outline" className="text-xs">
+                              Currently Assigned
+                            </Badge>
+                          )}
 
-                      {conflicts.length > 0 && (
-                        <div className="text-xs text-red-600 mt-1">
-                          Conflicts: {conflicts.join(', ')}
+                          {conflicts.length > 0 && (
+                            <Badge variant="destructive" className="text-xs">
+                              {conflicts.length} Conflict{conflicts.length > 1 ? 's' : ''}
+                            </Badge>
+                          )}
+
+                          {judge.school_name && (
+                            <span className="text-xs text-muted-foreground">
+                              ({judge.school_name})
+                            </span>
+                          )}
                         </div>
+
+                        <div className="text-xs text-muted-foreground">
+                          {judge.total_debates_judged || 0} debates • {judge.elimination_debates || 0} eliminations
+                          {judge.avg_feedback_score && (
+                            <span> • {judge.avg_feedback_score.toFixed(1)}/5 rating</span>
+                          )}
+                        </div>
+
+                        {conflicts.length > 0 && (
+                          <div className="text-xs text-red-600 mt-1">
+                            Conflicts: {conflicts.join(', ')}
+                          </div>
+                        )}
+                      </div>
+
+                      {isSelected && selectedJudges.length > 1 && (
+                        <Button
+                          variant={isHeadJudge ? "default" : "outline"}
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedHeadJudge(judge._id);
+                          }}
+                        >
+                          {isHeadJudge ? "Head Judge" : "Make Head"}
+                        </Button>
                       )}
                     </div>
-
-                    {isSelected && selectedJudges.length > 1 && (
-                      <Button
-                        variant={isHeadJudge ? "default" : "outline"}
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedHeadJudge(judge._id);
-                        }}
-                      >
-                        {isHeadJudge ? "Head Judge" : "Make Head"}
-                      </Button>
-                    )}
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </ScrollArea>
 
@@ -799,7 +821,7 @@ const PairingsTableRow = ({
                             handleJudgeDragLeave,
                             handleJudgeDrop,
                             judgeDropZoneActive,
-                            pairingData,
+                            allTournamentVolunteers,
                             tournament,
                             isDraft,
                             canEditPairings,
@@ -965,9 +987,9 @@ const PairingsTableRow = ({
                 debate={debate}
                 debateIndex={index}
                 onUpdate={(judges, headJudge) => updateDebateJudges(index, judges, headJudge)}
-                pairingData={pairingData}
                 tournament={tournament}
                 canEditJudges={canEditJudges}
+                allVolunteers={allTournamentVolunteers || []}
                 trigger={
                   <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
                     <Edit3 className="h-3 w-3" />
@@ -1073,7 +1095,7 @@ const PairingsTable = ({
                          handleJudgeDragLeave,
                          handleJudgeDrop,
                          judgeDropZoneActive,
-                         pairingData,
+                         allTournamentVolunteers,
                          tournament,
                          searchQuery,
                          hasNextPage,
@@ -1176,7 +1198,7 @@ const PairingsTable = ({
                 handleJudgeDragLeave={handleJudgeDragLeave}
                 handleJudgeDrop={handleJudgeDrop}
                 judgeDropZoneActive={judgeDropZoneActive}
-                pairingData={pairingData}
+                allTournamentVolunteers={allTournamentVolunteers || []}
                 tournament={tournament}
                 isDraft={isDraft}
                 canEditPairings={canEditPairings}
@@ -1330,7 +1352,7 @@ export default function TournamentPairings({
       tournament_id: tournament._id,
       round_number: currentRound,
       paginationOpts: {
-        numItems: 100,
+        numItems: 500,
         cursor: null,
       },
     } : "skip"
@@ -1343,6 +1365,14 @@ export default function TournamentPairings({
       tournament_id: tournament._id,
     } : "skip"
   ),"tournament-pairing-stats");
+
+  const allTournamentVolunteers = useOffline(useQuery(
+    api.functions.admin.tournaments.getAllTournamentVolunteers,
+    canEditJudges ? {
+      token,
+      tournament_id: tournament._id,
+    } : "skip"
+  ), "tournament-volunteers");
 
   const savePairingsMutation = useMutation(api.functions.pairings.savePairings);
   const updatePairingMutation = useMutation(api.functions.pairings.updatePairing);
@@ -3002,7 +3032,7 @@ export default function TournamentPairings({
             handleJudgeDragLeave={handleJudgeDragLeave}
             handleJudgeDrop={handleJudgeDrop}
             judgeDropZoneActive={judgeDropZoneActive}
-            pairingData={pairingData}
+            allTournamentVolunteers={allTournamentVolunteers}
             tournament={tournament}
             updateSavedPairing={updateSavedPairing}
             isRecalculating={isRecalculating}

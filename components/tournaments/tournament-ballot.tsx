@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -50,7 +51,9 @@ import {
   Square,
   Target,
   Timer,
-  Users2
+  Users2,
+  ChevronDown,
+  ChevronRight
 } from "lucide-react";
 import { toast } from "sonner";
 import { Id } from "@/convex/_generated/dataModel";
@@ -1098,6 +1101,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
   const [sharedNotes, setSharedNotes] = useState<any[]>(debate.shared_notes || []);
   const [selectedTeam, setSelectedTeam] = useState<string>("");
   const [selectedJudgeId, setSelectedJudgeId] = useState<string>("");
+  const [expandedSpeaker, setExpandedSpeaker] = useState<string | null>(null);
 
   useEffect(() => {
     if (userRole === "admin" && debate.judges?.length > 0 && !selectedJudgeId) {
@@ -1804,112 +1808,138 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
                     </div>
                   </Card>
 
-                  
-                  <div className="space-y-6">
+
+                  <div className="space-y-4">
                     <Label className="text-base font-medium">Individual Speaker Scores - {selectedTeamData.name}</Label>
 
                     {selectedTeamSpeakers.map((speakerId: string) => {
                       const speakerScores = scores[speakerId] || {};
                       const finalScore = calculateFinalScore(speakerScores);
                       const biasResult = biasCheckResults[speakerId];
+                      const isExpanded = expandedSpeaker === speakerId;
 
                       return (
-                        <Card key={speakerId} className="p-6">
-                          <div className="space-y-4">
-                            <div className="flex justify-between items-center">
-                              <div>
-                                <h4 className="font-medium">{getSpeakerName(speakerId)}</h4>
-                                <p className="text-sm text-muted-foreground">{selectedTeamData.name}</p>
-                                <p className="text-xs text-muted-foreground">
-                                  Position: {speakerPositions[speakerId] || "Unassigned"}
-                                </p>
-                              </div>
-                              <div className="text-right">
-                                <div className="text-3xl font-bold text-primary">{finalScore}</div>
-                                <div className="text-sm text-muted-foreground">out of 30</div>
-                                <Progress value={(finalScore / 30) * 100} className="w-20 mt-1" />
-                              </div>
-                            </div>
+                        <Collapsible
+                          key={speakerId}
+                          open={isExpanded}
+                          onOpenChange={(open) => {
+                            setExpandedSpeaker(open ? speakerId : null);
+                          }}
+                        >
+                          <Card className="overflow-hidden">
+                            <CollapsibleTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                className="w-full p-6 h-auto justify-between hover:bg-muted/50"
+                              >
+                                {isExpanded ? (
+                                  <ChevronDown className="h-4 w-4 text-foreground" />
+                                ) : (
+                                  <ChevronRight className="h-4 w-4 text-foreground" />
+                                )}
+                                <div className="flex justify-between items-center w-full">
 
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              {SCORING_CATEGORIES.map((category) => {
-                                const CategoryIcon = category.icon;
-                                const score = speakerScores[category.key] || 0;
-                                return (
-                                  <div key={category.key} className="space-y-2">
-                                    <Label className="text-sm flex items-center gap-2">
-                                      <CategoryIcon className={`h-4 w-4 ${category.color}`} />
-                                      {category.label}
-                                    </Label>
-                                    <div className="space-y-2">
-                                      <div className="flex items-center gap-2">
-                                        <Input
-                                          type="number"
-                                          min="10"
-                                          max="25"
-                                          value={score}
-                                          onChange={(e) => updateScore(speakerId, category.key, parseInt(e.target.value) || 0)}
-                                          disabled={!canEdit}
-                                          className="w-20"
-                                        />
-                                        <span className="text-sm text-muted-foreground">/ 25</span>
-                                      </div>
-                                      <Progress value={(score / 25) * 100} className="w-full" />
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">{category.description}</p>
-
+                                  <div className="text-left">
+                                    <h4 className="font-medium">{getSpeakerName(speakerId)}</h4>
+                                    <p className="text-sm text-muted-foreground">{selectedTeamData.name}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      Position: {speakerPositions[speakerId] || "Unassigned"}
+                                    </p>
                                   </div>
-                                );
-                              })}
-                            </div>
-                            
-                            <div className="space-y-2">
-                              <div className="flex items-center justify-between">
-                                <Label className="text-sm">Individual Speaker Feedback</Label>
-                                <div className="flex gap-2">
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => handleBiasCheck(speakerId)}
-                                    disabled={!speakerComments[speakerId]?.trim() || isBiasChecking}
-                                    title="Check for bias"
-                                  >
-                                    {isBiasChecking ? (
-                                      <Loader2 className="h-3 w-3 animate-spin" />
-                                    ) : (
-                                      <Shield className="h-3 w-3" />
-                                    )}
-                                  </Button>
+                                  <div className="flex items-center gap-4">
+                                    <div className="text-right">
+                                      <div className="text-2xl font-bold text-primary">{finalScore}</div>
+                                      <div className="text-sm text-muted-foreground">out of 30</div>
+                                      <Progress value={(finalScore / 30) * 100} className="w-16 mt-1" />
+                                    </div>
+                                  </div>
+                                </div>
+                              </Button>
+                            </CollapsibleTrigger>
+
+                            <CollapsibleContent>
+                              <div className="px-6 pb-6 space-y-4 border-t">
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
+                                  {SCORING_CATEGORIES.map((category) => {
+                                    const CategoryIcon = category.icon;
+                                    const score = speakerScores[category.key] || 0;
+                                    return (
+                                      <div key={category.key} className="space-y-2">
+                                        <Label className="text-sm flex items-center gap-2">
+                                          <CategoryIcon className={`h-4 w-4 ${category.color}`} />
+                                          {category.label}
+                                        </Label>
+                                        <div className="space-y-2">
+                                          <div className="flex items-center gap-2">
+                                            <Input
+                                              type="number"
+                                              min="10"
+                                              max="25"
+                                              value={score}
+                                              onChange={(e) => updateScore(speakerId, category.key, parseInt(e.target.value) || 0)}
+                                              disabled={!canEdit}
+                                              className="w-20"
+                                            />
+                                            <span className="text-sm text-muted-foreground">/ 25</span>
+                                          </div>
+                                          <Progress value={(score / 25) * 100} className="w-full" />
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">{category.description}</p>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+
+                                
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <Label className="text-sm">Individual Speaker Feedback</Label>
+                                    <div className="flex gap-2">
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => handleBiasCheck(speakerId)}
+                                        disabled={!speakerComments[speakerId]?.trim() || isBiasChecking}
+                                        title="Check for bias"
+                                      >
+                                        {isBiasChecking ? (
+                                          <Loader2 className="h-3 w-3 animate-spin" />
+                                        ) : (
+                                          <Shield className="h-3 w-3" />
+                                        )}
+                                      </Button>
+                                    </div>
+                                  </div>
+                                  <Textarea
+                                    placeholder="Specific feedback for this speaker's performance..."
+                                    value={speakerComments[speakerId] || ""}
+                                    onChange={(e) => updateSpeakerComment(speakerId, e.target.value)}
+                                    disabled={!canEdit}
+                                    rows={3}
+                                  />
+                                  {biasResult && biasResult.hasBias && (
+                                    <Alert variant="destructive">
+                                      <AlertCircle className="h-4 w-4" />
+                                      <AlertDescription>
+                                        <div className="space-y-1">
+                                          <p>Potential bias detected</p>
+                                          {biasResult.suggestions && (
+                                            <ul className="text-sm list-disc list-inside">
+                                              {biasResult.suggestions.map((suggestion: string, idx: number) => (
+                                                <li key={idx}>{suggestion}</li>
+                                              ))}
+                                            </ul>
+                                          )}
+                                        </div>
+                                      </AlertDescription>
+                                    </Alert>
+                                  )}
                                 </div>
                               </div>
-                              <Textarea
-                                placeholder="Specific feedback for this speaker's performance..."
-                                value={speakerComments[speakerId] || ""}
-                                onChange={(e) => updateSpeakerComment(speakerId, e.target.value)}
-                                disabled={!canEdit}
-                                rows={3}
-                              />
-                              {biasResult && biasResult.hasBias && (
-                                <Alert variant="destructive">
-                                  <AlertCircle className="h-4 w-4" />
-                                  <AlertDescription>
-                                    <div className="space-y-1">
-                                      <p>Potential bias detected</p>
-                                      {biasResult.suggestions && (
-                                        <ul className="text-sm list-disc list-inside">
-                                          {biasResult.suggestions.map((suggestion: string, idx: number) => (
-                                            <li key={idx}>{suggestion}</li>
-                                          ))}
-                                        </ul>
-                                      )}
-                                    </div>
-                                  </AlertDescription>
-                                </Alert>
-                              )}
-                            </div>
-                          </div>
-                        </Card>
+                            </CollapsibleContent>
+                          </Card>
+                        </Collapsible>
                       );
                     })}
                   </div>

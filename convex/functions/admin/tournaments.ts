@@ -1,6 +1,7 @@
 import { mutation, query } from "../../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../../_generated/api";
+import { Id } from "../../_generated/dataModel";
 
 function generateSlug(name: string): string {
   return name
@@ -655,5 +656,207 @@ export const getTournamentRounds = query({
       if (a.type !== "preliminary" && b.type === "preliminary") return 1;
       return a.round_number - b.round_number;
     });
+  },
+});
+
+
+export const getAllTournamentVolunteers = query({
+  args: {
+    token: v.string(),
+    tournament_id: v.id("tournaments"),
+  },
+  handler: async (ctx, args) => {
+    const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
+      token: args.token,
+    });
+
+    if (!sessionResult.valid || !sessionResult.user) {
+      throw new Error("Authentication required");
+    }
+
+    if (sessionResult.user.role !== "admin") {
+      throw new Error("Admin access required");
+    }
+
+    const tournament = await ctx.db.get(args.tournament_id);
+    if (!tournament) {
+      throw new Error("Tournament not found");
+    }
+
+    const invitations = await ctx.db
+      .query("tournament_invitations")
+      .withIndex("by_tournament_id_target_type_status", (q) =>
+        q.eq("tournament_id", args.tournament_id)
+          .eq("target_type", "volunteer")
+          .eq("status", "accepted")
+      )
+      .collect();
+
+    const volunteers = await Promise.all(
+      invitations.map(async (invitation) => {
+        const volunteer = await ctx.db.get(invitation.target_id);
+        if (!volunteer) return null;
+
+        const school = volunteer.school_id ? await ctx.db.get(volunteer.school_id) : null;
+
+        const debates = await ctx.db
+          .query("debates")
+          .withIndex("by_tournament_id", (q) => q.eq("tournament_id", args.tournament_id))
+          .collect();
+
+        const judgedDebates = debates.filter(d => d.judges.includes(volunteer._id));
+
+        const eliminationDebates = await Promise.all(
+          judgedDebates.map(async (debate) => {
+            const round = await ctx.db.get(debate.round_id);
+            return round && round.round_number > tournament.prelim_rounds;
+          })
+        );
+
+        const elimCount = eliminationDebates.filter(Boolean).length;
+
+        const feedback = await ctx.db
+          .query("judge_feedback")
+          .withIndex("by_judge_id", (q) => q.eq("judge_id", volunteer._id))
+          .filter((q) => q.eq(q.field("tournament_id"), args.tournament_id))
+          .collect();
+
+        const avgFeedbackScore = feedback.length > 0
+          ? feedback.reduce((sum, f) => sum + (f.clarity + f.fairness + f.knowledge + f.helpfulness) / 4, 0) / feedback.length
+          : 3.0;
+
+        const conflicts: Id<"teams">[] = [];
+
+        if (volunteer.school_id) {
+          const schoolTeams = await ctx.db
+            .query("teams")
+            .withIndex("by_tournament_id_school_id", (q) =>
+              q.eq("tournament_id", args.tournament_id).eq("school_id", volunteer.school_id)
+            )
+            .collect();
+
+          conflicts.push(...schoolTeams.filter(t => t.status === "active").map(t => t._id));
+        }
+
+        const poorFeedback = feedback.filter(f =>
+          f.bias_detected === true ||
+          ((f.clarity + f.fairness + f.knowledge + f.helpfulness) / 4) < 2.0
+        );
+
+        poorFeedback.forEach(f => {
+          if (f.team_id && !conflicts.includes(f.team_id)) {
+            conflicts.push(f.team_id);
+          }
+        });
+
+        return {
+          _id: volunteer._id,
+          name: volunteer.name,
+          email: volunteer.email,
+          school_id: volunteer.school_id,
+          school_name: school?.name,
+          total_debates_judged: judgedDebates.length,
+          elimination_debates: elimCount,
+          avg_feedback_score: avgFeedbackScore,
+          conflicts,
+          assignments_this_tournament: judgedDebates.length,
+          cross_tournament_stats: {
+            total_tournaments: 0,
+            total_debates: 0,
+            total_elimination_debates: 0,
+            avg_feedback: 3.0,
+            consistency_score: 1.0,
+          },
+        };
+      })
+    );
+
+    const validVolunteers = volunteers.filter(Boolean) as any[];
+
+    return validVolunteers.sort((a, b) => {
+
+      const experienceA = a.total_debates_judged + (a.elimination_debates * 2);
+      const experienceB = b.total_debates_judged + (b.elimination_debates * 2);
+
+      if (experienceA !== experienceB) {
+        return experienceB - experienceA;
+      }
+
+      return b.avg_feedback_score - a.avg_feedback_score;
+    });
+  },
+});
+
+// Add this query to convex/functions/admin/tournaments.ts
+
+export const getCoordinators = query({
+  args: {
+    admin_token: v.string(),
+    search: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
+      token: args.admin_token,
+    });
+
+    if (!sessionResult.valid || !sessionResult.user || sessionResult.user.role !== "admin") {
+      throw new Error("Admin access required");
+    }
+
+    let usersQuery = ctx.db.query("users");
+
+    // Filter to only active, verified admins and volunteers
+    usersQuery = usersQuery
+      .filter((q) => q.eq(q.field("status"), "active"))
+      .filter((q) => q.eq(q.field("verified"), true))
+      .filter((q) =>
+        q.or(
+          q.eq(q.field("role"), "admin"),
+          q.eq(q.field("role"), "volunteer")
+        )
+      );
+
+    // Apply search filter if provided
+    if (args.search && args.search.trim()) {
+      const searchTerm = args.search.toLowerCase();
+      usersQuery = usersQuery.filter((q) =>
+        q.or(
+          q.eq(q.field("name"), args.search),
+          q.eq(q.field("email"), args.search)
+        )
+      );
+    }
+
+    const limit = args.limit || 50;
+    const users = await usersQuery.take(limit);
+
+    // Enrich with school data
+    const enrichedUsers = await Promise.all(
+      users.map(async (user) => {
+        const school = user.school_id ? await ctx.db.get(user.school_id) : null;
+        return {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          school_id: user.school_id,
+          school_name: school?.name,
+          school_type: school?.type,
+          verified: user.verified,
+          status: user.status,
+        };
+      })
+    );
+
+    // Sort by role (admins first) then by name
+    const sortedUsers = enrichedUsers.sort((a, b) => {
+      if (a.role !== b.role) {
+        return a.role === "admin" ? -1 : 1; // Admins first
+      }
+      return a.name.localeCompare(b.name); // Then alphabetical by name
+    });
+
+    return sortedUsers;
   },
 });
