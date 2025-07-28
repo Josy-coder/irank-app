@@ -919,22 +919,50 @@ export function TournamentTeams({
                           <TableCell>
                             <div className="flex -space-x-2">
                               {team.members.slice(0, 3).map((member: any) => (
-                                <Avatar key={member._id} className="h-8 w-8 border-2 border-background">
-                                  <AvatarFallback className="text-xs">
-                                    {member.name.charAt(0).toUpperCase()}
-                                  </AvatarFallback>
-                                </Avatar>
+                                <Tooltip key={member._id}>
+                                  <TooltipTrigger asChild>
+                                    <Avatar className="h-8 w-8 border-2 border-background">
+                                      <AvatarFallback className="text-xs">
+                                        {member.name.charAt(0).toUpperCase()}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    {member.name}
+                                  </TooltipContent>
+                                </Tooltip>
                               ))}
+
                               {team.members.length > 3 && (
-                                <div className="flex items-center justify-center h-8 w-8 rounded-full bg-muted border-2 border-background text-xs text-muted-foreground">
-                                  +{team.members.length - 3}
-                                </div>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="flex items-center justify-center h-8 w-8 rounded-full bg-muted border-2 border-background text-xs text-muted-foreground cursor-default">
+                                      +{team.members.length - 3}
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    {(() => {
+                                      const extra = team.members.slice(3);
+                                      const names = extra.map((m: any) => m.name);
+                                      const preview = names.slice(0, 2); // Show first 2 names
+                                      const remaining = names.length - preview.length;
+
+                                      if (remaining > 0) {
+                                        return `${preview.join(', ')}${remaining === 1 ? `, and 1 more` : `, ...and ${remaining} more`}`;
+                                      } else {
+                                        return preview.join(', ');
+                                      }
+                                    })()}
+                                  </TooltipContent>
+                                </Tooltip>
                               )}
                             </div>
+
                             <div className="text-xs text-muted-foreground mt-1">
                               {team.memberCount}/{tournament.team_size} members
                             </div>
                           </TableCell>
+
                           <TableCell>
                             <Badge variant="secondary" className={getStatusColor(team.status)}>
                               <StatusIcon className="h-3 w-3 mr-1" />
