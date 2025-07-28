@@ -2344,6 +2344,7 @@ function BallotRow({ debate, userRole, userId, onViewDetails, onEditBallot, onFl
   );
 }
 
+
 function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot, onFlagBallot, onUnflagBallot }: any) {
   const StatusIcon = getDebateStatusIcon(debate.status);
   const canEdit = userRole === "admin" || (userRole === "volunteer" && debate.judges?.some((j: any) => j._id === userId));
