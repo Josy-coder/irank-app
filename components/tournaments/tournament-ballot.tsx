@@ -56,6 +56,7 @@ import { toast } from "sonner";
 import { Id } from "@/convex/_generated/dataModel";
 import { useGemini } from "@/hooks/use-gemini";
 import { useOffline } from "@/hooks/use-offline";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface TournamentBallotsProps {
   tournament: any;
@@ -2965,17 +2966,73 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
   );
 }
 
-function FlagBallotDialog({ debate, isOpen, onClose, onFlag }: any) {
+function FlagBallotDialog({ debate, isOpen, onClose, onFlag, userRole }: any) {
   const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedBallots, setSelectedBallots] = useState<string[]>([]);
+
+  const availableBallots = useMemo(() => {
+    if (userRole === "admin") {
+
+      return debate?.judges_ballots
+        ?.filter((jb: any) => jb.ballot?.feedback_submitted)
+        ?.map((jb: any) => ({
+          id: jb.ballot._id,
+          judgeName: jb.judge_name || debate.judges?.find((j: any) => j._id === jb.judge_id)?.name || `Judge ${jb.judge_id.slice(-4)}`,
+          isHeadJudge: debate.head_judge_id === jb.judge_id,
+          isAlreadyFlagged: jb.ballot.notes?.includes("[FLAG:") || jb.ballot.notes?.includes("[JUDGE FLAG:"),
+          ballot: jb.ballot
+        })) || [];
+    } else {
+
+      return debate?.my_submission ? [{
+        id: debate.my_submission._id,
+        judgeName: "Your Ballot",
+        isHeadJudge: debate.head_judge_id === debate.my_submission.judge_id,
+        isAlreadyFlagged: debate.my_submission.notes?.includes("[FLAG:") || debate.my_submission.notes?.includes("[JUDGE FLAG:"),
+        ballot: debate.my_submission
+      }] : [];
+    }
+  }, [debate, userRole]);
+
+  useEffect(() => {
+    if (isOpen && availableBallots.length > 0) {
+      if (userRole === "volunteer") {
+        setSelectedBallots([availableBallots[0].id]);
+      } else {
+
+        const unflaggedBallots = availableBallots
+          .filter((ballot: { isAlreadyFlagged: any; }) => !ballot.isAlreadyFlagged)
+          .map((ballot: { id: any; }) => ballot.id);
+        setSelectedBallots(unflaggedBallots);
+      }
+    }
+  }, [isOpen, availableBallots, userRole]);
+
+  const handleBallotToggle = (ballotId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedBallots(prev => [...prev, ballotId]);
+    } else {
+      setSelectedBallots(prev => prev.filter(id => id !== ballotId));
+    }
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedBallots(availableBallots.map((ballot: { id: any; }) => ballot.id));
+    } else {
+      setSelectedBallots([]);
+    }
+  };
 
   const handleFlag = async () => {
-    if (!reason.trim()) return;
+    if (!reason.trim() || selectedBallots.length === 0) return;
 
     setIsSubmitting(true);
     try {
-      await onFlag(debate, reason);
+      await onFlag(debate, reason, selectedBallots);
       setReason("");
+      setSelectedBallots([]);
       onClose();
     } catch (error) {
       console.error("Failed to flag ballot:", error);
@@ -2984,9 +3041,12 @@ function FlagBallotDialog({ debate, isOpen, onClose, onFlag }: any) {
     }
   };
 
+  const flaggableBallots = availableBallots.filter((ballot: { isAlreadyFlagged: any; }) => !ballot.isAlreadyFlagged);
+  const alreadyFlaggedCount = availableBallots.length - flaggableBallots.length;
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent>
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Flag className="h-5 w-5" />
@@ -2995,21 +3055,130 @@ function FlagBallotDialog({ debate, isOpen, onClose, onFlag }: any) {
         </DialogHeader>
 
         <div className="space-y-4">
+          
+          {userRole === "admin" && availableBallots.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Select Ballots to Flag:</Label>
+                {flaggableBallots.length > 1 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleSelectAll(selectedBallots.length !== flaggableBallots.length)}
+                    className="h-auto p-1 text-xs"
+                  >
+                    {selectedBallots.length === flaggableBallots.length ? "Deselect All" : "Select All"}
+                  </Button>
+                )}
+              </div>
+
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {availableBallots.map((ballot: any) => (
+                  <div
+                    key={ballot.id}
+                    className={`flex items-center space-x-3 p-2 border rounded ${
+                      ballot.isAlreadyFlagged ? 'border-red-200 bg-red-50' : 'border-border'
+                    }`}
+                  >
+                    <Checkbox
+                      id={`ballot-${ballot.id}`}
+                      checked={selectedBallots.includes(ballot.id)}
+                      onCheckedChange={(checked) => handleBallotToggle(ballot.id, !!checked)}
+                      disabled={ballot.isAlreadyFlagged}
+                    />
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <label
+                          htmlFor={`ballot-${ballot.id}`}
+                          className={`text-sm font-medium cursor-pointer ${
+                            ballot.isAlreadyFlagged ? 'text-muted-foreground' : ''
+                          }`}
+                        >
+                          {ballot.judgeName}
+                        </label>
+                        {ballot.isHeadJudge && (
+                          <Badge variant="default" className="gap-1">
+                            <Crown className="h-3 w-3" />
+                            Head
+                          </Badge>
+                        )}
+                      </div>
+
+                      {ballot.isAlreadyFlagged && (
+                        <div className="text-xs text-red-600 mt-1">
+                          Already flagged
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {alreadyFlaggedCount > 0 && (
+                <div className="text-xs text-muted-foreground">
+                  {alreadyFlaggedCount} ballot{alreadyFlaggedCount > 1 ? 's' : ''} already flagged
+                </div>
+              )}
+
+              {flaggableBallots.length === 0 && (
+                <div className="text-center py-4 text-muted-foreground">
+                  <Flag className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">All ballots are already flagged</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          
+          {userRole === "volunteer" && availableBallots.length > 0 && (
+            <div className="p-3 bg-muted rounded-lg">
+              <div className="flex items-center gap-2">
+                <Flag className="h-4 w-4" />
+                <span className="text-sm font-medium">Flagging your ballot</span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                This will flag your ballot for admin review
+              </p>
+            </div>
+          )}
+
+          
+          {availableBallots.length === 0 && (
+            <div className="text-center py-4 text-muted-foreground">
+              <AlertTriangle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">No ballots available to flag</p>
+              <p className="text-xs">
+                {userRole === "admin"
+                  ? "No submitted ballots found for this debate"
+                  : "You haven't submitted a ballot for this debate yet"
+                }
+              </p>
+            </div>
+          )}
+
           <div>
             <Label>Reason for flagging:</Label>
             <Textarea
-              placeholder="Describe the issue with this ballot..."
+              placeholder="Describe the issue with the ballot(s)..."
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={3}
+              disabled={availableBallots.length === 0}
             />
           </div>
 
           <div className="flex gap-2 pt-4">
             <Button
               onClick={handleFlag}
-              disabled={!reason.trim() || isSubmitting}
+              disabled={
+                !reason.trim() ||
+                selectedBallots.length === 0 ||
+                isSubmitting ||
+                availableBallots.length === 0
+              }
               variant="destructive"
+              className="flex-1"
             >
               {isSubmitting ? (
                 <>
@@ -3019,7 +3188,7 @@ function FlagBallotDialog({ debate, isOpen, onClose, onFlag }: any) {
               ) : (
                 <>
                   <Flag className="h-4 w-4 mr-2" />
-                  Flag Ballot
+                  Flag {selectedBallots.length > 1 ? `${selectedBallots.length} Ballots` : 'Ballot'}
                 </>
               )}
             </Button>
@@ -3146,34 +3315,39 @@ export default function TournamentBallots({
     setShowFlagDialog(true);
   };
 
-  const handleSubmitFlag = async (debate: any, reason: string) => {
+  const handleSubmitFlag = async (debate: any, reason: string, selectedBallotIds: string[]) => {
     try {
       if (userRole === "admin") {
-        const submissions = debate.judges?.filter((j: any) => j.has_submitted);
-        if (!submissions || submissions.length === 0) {
-          toast.error("No submitted ballots found to flag");
-          return;
+
+        for (const ballotId of selectedBallotIds) {
+          await flagBallotAdmin({
+            token,
+            ballot_id: ballotId as Id<"judging_scores">,
+            reason,
+          });
         }
 
-        await flagBallotAdmin({
-          token,
-          ballot_id: submissions[0].ballot_id || debate._id,
-          reason,
-        });
+        toast.success(
+          selectedBallotIds.length > 1
+            ? `${selectedBallotIds.length} ballots flagged successfully`
+            : "Ballot flagged successfully"
+        );
       } else if (userRole === "volunteer") {
-        const mySubmission = debate.my_submission;
-        if (!mySubmission) {
+
+        const ballotId = selectedBallotIds[0];
+        if (!ballotId) {
           toast.error("No ballot found to flag");
           return;
         }
 
         await flagBallotVolunteer({
           token,
-          ballot_id: mySubmission._id,
+          ballot_id: ballotId as Id<"judging_scores">,
           reason,
         });
+
+        toast.success("Ballot flagged successfully");
       }
-      toast.success("Ballot flagged successfully");
     } catch (error: any) {
       toast.error(error.message || "Failed to flag ballot");
     }
@@ -3186,18 +3360,37 @@ export default function TournamentBallots({
         return;
       }
 
-      const flaggedJudges = debate.judges?.filter((j: any) => j.is_flagged);
-      if (!flaggedJudges || flaggedJudges.length === 0) {
+      const flaggedBallots = debate.judges_ballots
+        ?.filter((jb: any) =>
+          jb.ballot?.notes?.includes("[FLAG:") ||
+          jb.ballot?.notes?.includes("[JUDGE FLAG:")
+        )
+        ?.map((jb: any) => jb.ballot);
+
+      if (!flaggedBallots || flaggedBallots.length === 0) {
         toast.error("No flagged ballots found");
         return;
       }
 
-      await unflagBallot({
-        token,
-        ballot_id: flaggedJudges[0].ballot_id || debate._id,
-      });
+      if (flaggedBallots.length > 1) {
+        const confirmed = window.confirm(
+          `Are you sure you want to unflag ${flaggedBallots.length} ballots?`
+        );
+        if (!confirmed) return;
+      }
 
-      toast.success("Ballot unflagged successfully");
+      for (const ballot of flaggedBallots) {
+        await unflagBallot({
+          token,
+          ballot_id: ballot._id,
+        });
+      }
+
+      toast.success(
+        flaggedBallots.length > 1
+          ? `${flaggedBallots.length} ballots unflagged successfully`
+          : "Ballot unflagged successfully"
+      );
     } catch (error: any) {
       toast.error(error.message || "Failed to unflag ballot");
     }
