@@ -50,7 +50,6 @@ import {
   Square,
   Target,
   Timer,
-  Users,
   Users2
 } from "lucide-react";
 import { toast } from "sonner";
@@ -100,58 +99,6 @@ const SCORING_CATEGORIES = [
     maxScore: 25
   },
 ];
-
-const getPositionsForFormat = (format: string, teamSize: number) => {
-  switch (format) {
-    case "WorldSchools":
-
-      const speakersPerTeam = Math.floor(teamSize / 2);
-      const propPositions = Array.from({ length: speakersPerTeam }, (_, i) => ({
-        id: `prop_speaker_${i + 1}`,
-        label: `Proposition Speaker ${i + 1}`,
-        team: "prop"
-      }));
-      const oppPositions = Array.from({ length: speakersPerTeam }, (_, i) => ({
-        id: `opp_speaker_${i + 1}`,
-        label: `Opposition Speaker ${i + 1}`,
-        team: "opp"
-      }));
-      return [...propPositions, ...oppPositions];
-    case "BritishParliamentary":
-      return [
-        { id: "PM", label: "Prime Minister", team: "prop" },
-        { id: "DPM", label: "Deputy Prime Minister", team: "prop" },
-        { id: "MG", label: "Member of Government", team: "prop" },
-        { id: "LO", label: "Leader of Opposition", team: "opp" },
-        { id: "DLO", label: "Deputy Leader of Opposition", team: "opp" },
-        { id: "MO", label: "Member of Opposition", team: "opp" },
-      ];
-    case "PublicForum":
-      return [
-        { id: "prop_speaker_1", label: "Proposition Speaker 1", team: "prop" },
-        { id: "opp_speaker_1", label: "Opposition Speaker 1", team: "opp" },
-      ];
-    case "LincolnDouglas":
-      return [
-        { id: "affirmative", label: "Affirmative", team: "prop" },
-        { id: "negative", label: "Negative", team: "opp" },
-      ];
-    default:
-
-      const defaultSpeakersPerTeam = Math.floor(teamSize / 2);
-      const defaultPropPositions = Array.from({ length: defaultSpeakersPerTeam }, (_, i) => ({
-        id: `prop_speaker_${i + 1}`,
-        label: `Proposition Speaker ${i + 1}`,
-        team: "prop"
-      }));
-      const defaultOppPositions = Array.from({ length: defaultSpeakersPerTeam }, (_, i) => ({
-        id: `opp_speaker_${i + 1}`,
-        label: `Opposition Speaker ${i + 1}`,
-        team: "opp"
-      }));
-      return [...defaultPropPositions, ...defaultOppPositions];
-  }
-};
 
 function BallotSkeleton() {
   return (
@@ -1262,7 +1209,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
       ...prev,
       [speakerId]: {
         ...prev[speakerId],
-        [category]: Math.max(0, Math.min(10, value))
+        [category]: Math.max(10, Math.min(25, value))
       }
     }));
   };
@@ -1898,7 +1845,7 @@ function JudgingInterface({ debate, ballot, userId, onSubmitBallot, tournament, 
                                       <div className="flex items-center gap-2">
                                         <Input
                                           type="number"
-                                          min="0"
+                                          min="10"
                                           max="25"
                                           value={score}
                                           onChange={(e) => updateScore(speakerId, category.key, parseInt(e.target.value) || 0)}
@@ -2588,11 +2535,9 @@ function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot, onF
 function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
   const [selectedJudge, setSelectedJudge] = useState<string>("all");
 
-  // Get all user IDs (judges and speakers)
   const allUserIds = useMemo(() => {
     const userIds = new Set<string>();
 
-    // Add judge IDs
     if (debate?.judges) {
       debate.judges.forEach((judge: any) => {
         const judgeId = judge._id || judge;
@@ -2600,7 +2545,6 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
       });
     }
 
-    // Add speaker IDs from ballot data
     if (debate?.judges_ballots) {
       debate.judges_ballots.forEach((judgeBallot: any) => {
         if (judgeBallot.ballot?.speaker_scores) {
@@ -2614,7 +2558,6 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
     return Array.from(userIds);
   }, [debate]);
 
-  // Fetch user names
   const userNamesQuery = useNames(token, allUserIds);
 
   const getUserName = (userId: string) => {
@@ -2678,7 +2621,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* Judge Selection */}
+          
           {ballotDetails.length > 1 && (
             <div className="flex items-center gap-2">
               <Label>View Judge:</Label>
@@ -2699,7 +2642,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
             </div>
           )}
 
-          {/* Teams Overview */}
+          
           <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
             <div className="text-center">
               <h3 className="font-semibold text-green-700">{debate?.proposition_team?.name}</h3>
@@ -2723,7 +2666,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
             </div>
           </div>
 
-          {/* Fact Checks */}
+          
           {debate?.fact_checks?.length > 0 && (
             <Card>
               <CardHeader>
@@ -2749,7 +2692,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
                           {new Date(check.timestamp).toLocaleString()}
                         </span>
                       </div>
-                      <p className="text-sm font-medium mb-1">"{check.claim}"</p>
+                      <p className="text-sm font-medium mb-1">&#34;{check.claim}&#34;</p>
                       {check.explanation && (
                         <p className="text-sm text-muted-foreground">{check.explanation}</p>
                       )}
@@ -2770,7 +2713,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
             </Card>
           )}
 
-          {/* Argument Flow */}
+          
           {debate?.argument_flow?.length > 0 && (
             <Card>
               <CardHeader>
@@ -2832,7 +2775,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
             </Card>
           )}
 
-          {/* Individual Judge Ballots */}
+          
           {filteredBallots.map((ballot: any, index: number) => (
             <Card key={ballot.judge_id || index}>
               <CardHeader>
@@ -2859,7 +2802,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Judge's Decision */}
+                
                 <div className="p-3 bg-muted rounded-lg">
                   <div className="flex items-center justify-between">
                     <span className="font-medium">Decision:</span>
@@ -2885,7 +2828,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
                   </div>
                 </div>
 
-                {/* Speaker Scores */}
+                
                 {ballot.speaker_scores?.length > 0 && (
                   <div>
                     <h4 className="font-medium mb-3">Speaker Scores</h4>
@@ -2909,7 +2852,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
                             </div>
                           </div>
 
-                          {/* Category Breakdown */}
+                          
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
                             {SCORING_CATEGORIES.map((category) => {
                               const CategoryIcon = category.icon;
@@ -2927,7 +2870,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
                             })}
                           </div>
 
-                          {/* Individual Feedback */}
+                          
                           {score.comments && (
                             <div className="pt-3 border-t">
                               <Label className="text-xs font-medium">Judge Feedback:</Label>
@@ -2935,7 +2878,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
                             </div>
                           )}
 
-                          {/* Bias Detection */}
+                          
                           {score.bias_detected && (
                             <div className="pt-3 border-t">
                               <Alert variant="destructive">
@@ -2955,7 +2898,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
                   </div>
                 )}
 
-                {/* Judge Notes */}
+                
                 {ballot.notes && (
                   <div className="pt-3 border-t">
                     <Label className="text-sm font-medium">Judge Notes:</Label>
@@ -2963,7 +2906,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
                   </div>
                 )}
 
-                {/* Submission Details */}
+                
                 <div className="text-xs text-muted-foreground pt-2 border-t flex justify-between">
                   <span>
                     Submitted: {ballot.submitted_at ? new Date(ballot.submitted_at).toLocaleString() : "Not submitted"}
@@ -2975,19 +2918,17 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
               </CardContent>
             </Card>
           ))}
-
-          {/* No Ballots Message */}
+          
           {filteredBallots.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
               <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
               <p>No ballot details available</p>
               {selectedJudge !== "all" && (
-                <p className="text-sm">This judge hasn't submitted a ballot yet</p>
+                <p className="text-sm">This judge hasn&apos;t submitted a ballot yet</p>
               )}
             </div>
           )}
-
-          {/* Shared Notes */}
+          
           {debate?.shared_notes?.length > 0 && (
             <Card>
               <CardHeader>
