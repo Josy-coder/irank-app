@@ -196,6 +196,106 @@ function CopyableEmail({ email }: { email: string }) {
   );
 }
 
+function InvitationsPageSkeleton() {
+  return (
+    <div className="space-y-4">
+      
+      <div className="flex bg-brown rounded-t-md flex-col lg:flex-row lg:items-center lg:justify-between gap-4 p-3">
+        <div>
+          <Skeleton className="h-6 w-56 mb-2" />
+          <div className="flex items-center gap-4 text-xs flex-wrap">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-4 w-28" />
+          </div>
+        </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          <Skeleton className="h-8 w-28" />
+          <Skeleton className="h-8 w-24" />
+          <Skeleton className="h-8 w-32" />
+          <Skeleton className="h-8 w-8" />
+        </div>
+      </div>
+
+      
+      <div className="w-full">
+        <div className="grid w-full grid-cols-2 mb-6 h-10 bg-muted rounded-lg p-1">
+          <Skeleton className="h-8 rounded-md" />
+          <Skeleton className="h-8 rounded-md" />
+        </div>
+
+        
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-12">
+                  <Skeleton className="h-4 w-4" />
+                </TableHead>
+                <TableHead>Invitee</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Invited</TableHead>
+                <TableHead>Invited By</TableHead>
+                <TableHead className="w-32">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <TableRow key={i}>
+                  <TableCell>
+                    <Skeleton className="h-4 w-4" />
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <Skeleton className="h-10 w-10 rounded-full" />
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-5 w-16 rounded-full" />
+                        </div>
+                        <Skeleton className="h-3 w-40" />
+                        <Skeleton className="h-3 w-28" />
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="space-y-2">
+                      <Skeleton className="h-6 w-20 rounded-full" />
+                      {i % 3 === 0 && <Skeleton className="h-5 w-16 rounded-full" />}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="space-y-1">
+                      <Skeleton className="h-4 w-24" />
+                      <Skeleton className="h-3 w-20" />
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-4 w-24" />
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-2">
+                      <Skeleton className="h-8 w-8" />
+                      <Skeleton className="h-8 w-8" />
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+
+        
+        <div className="flex items-center justify-center gap-4 space-x-4 mt-6 p-4">
+          <Skeleton className="h-8 w-20" />
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-8 w-16" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function TournamentInvitations({
                                         tournament,
                                         userRole,
@@ -901,6 +1001,10 @@ export function TournamentInvitations({
       hideSearch={!isAdmin}
     />
   )
+
+  if (isLoading) {
+    return <InvitationsPageSkeleton />;
+  }
 
   return (
     <CardLayoutWithToolbar toolbar={toolbar}>
