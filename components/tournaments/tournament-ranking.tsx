@@ -32,6 +32,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Id } from "@/convex/_generated/dataModel";
+import { Skeleton } from '../ui/skeleton';
 
 interface RankingResponse<T> {
   success: boolean;
@@ -127,6 +128,104 @@ interface TournamentRankingsProps {
   token: string;
   userId?: string;
   schoolId?: string;
+}
+
+function RankingSkeleton() {
+  return (
+    <div className="space-y-4">
+      
+      <div className="flex flex-col lg:flex-row lg:items-center bg-brown rounded-t-md lg:justify-between gap-4 p-3">
+        <div>
+          <Skeleton className="h-6 w-48 mb-2" />
+          <Skeleton className="h-4 w-64" />
+        </div>
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-8 w-24" />
+          <Skeleton className="h-8 w-18" />
+          <Skeleton className="h-8 w-24" />
+          <Skeleton className="h-8 w-32" />
+          <Skeleton className="h-8 w-8" />
+        </div>
+      </div>
+
+      
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col lg:flex-row gap-4">
+            <div className="flex-1">
+              <Skeleton className="h-8 w-full" />
+            </div>
+            <div className="flex gap-2">
+              <Skeleton className="h-8 w-32" />
+              <Skeleton className="h-8 w-8" />
+              <Skeleton className="h-8 w-40" />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      
+      <div className="grid w-full grid-cols-4 gap-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-10 w-full" />
+        ))}
+      </div>
+
+      
+      <div className="grid gap-4 lg:grid-cols-2">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Card key={i} className="hover:shadow-md transition-all duration-200">
+            <CardContent className="p-6">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-6 w-6 rounded-full" />
+                  <div>
+                    <Skeleton className="h-5 w-32 mb-1" />
+                    <Skeleton className="h-4 w-24" />
+                  </div>
+                </div>
+                <div className="text-right">
+                  <Skeleton className="h-8 w-12 mb-1" />
+                  <Skeleton className="h-3 w-8" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                {Array.from({ length: 3 }).map((_, j) => (
+                  <div key={j} className="text-center">
+                    <Skeleton className="h-6 w-8 mx-auto mb-1" />
+                    <Skeleton className="h-3 w-16 mx-auto" />
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 text-center text-sm">
+                {Array.from({ length: 2 }).map((_, j) => (
+                  <div key={j}>
+                    <Skeleton className="h-4 w-8 mx-auto mb-1" />
+                    <Skeleton className="h-3 w-12 mx-auto" />
+                  </div>
+                ))}
+              </div>
+
+              
+              <div className="mt-4 pt-3 border-t">
+                <Skeleton className="h-3 w-20 mx-auto mb-2" />
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  {Array.from({ length: 3 }).map((_, j) => (
+                    <div key={j}>
+                      <Skeleton className="h-4 w-6 mx-auto mb-1" />
+                      <Skeleton className="h-3 w-8 mx-auto" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default function TournamentRankings({
@@ -744,6 +843,14 @@ export default function TournamentRankings({
   const isLoading = !teamRankingsResponse || !schoolRankingsResponse || !studentRankingsResponse || !volunteerRankingsResponse;
 
   const currentRankings = filteredAndSortedRankings;
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <RankingSkeleton />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

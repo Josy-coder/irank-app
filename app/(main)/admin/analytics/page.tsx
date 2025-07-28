@@ -60,7 +60,8 @@ import jsPDF from 'jspdf'
 import { useDebounce } from "@/hooks/use-debounce"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Doc } from "@/convex/_generated/dataModel";
+import { Doc, Id } from "@/convex/_generated/dataModel";
+import { useOffline } from "@/hooks/use-offline";
 
 interface DateTimeRange {
   from?: Date
@@ -444,7 +445,7 @@ export default function AdminAnalyticsPage() {
     return sections
   }, [activeTab])
 
-  const overviewData = useQuery(
+  const overviewData = useOffline(useQuery(
     api.functions.admin.analytics.getDashboardOverview,
     token && activeTab === "overview" ? {
       token,
@@ -453,9 +454,9 @@ export default function AdminAnalyticsPage() {
         end: dateRange.to?.getTime() || Date.now(),
       } : undefined,
     } : "skip"
-  )
+  ), "analytics-overview");
 
-  const tournamentData = useQuery(
+  const tournamentData = useOffline(useQuery(
     api.functions.admin.analytics.getTournamentAnalytics,
     token && activeTab === "tournaments" ? {
       token,
@@ -465,9 +466,9 @@ export default function AdminAnalyticsPage() {
       } : undefined,
       league_id: selectedLeague !== "all" ? selectedLeague as any : undefined,
     } : "skip"
-  )
+  ), "analytics-tournament");
 
-  const userData = useQuery(
+  const userData = useOffline(useQuery(
     api.functions.admin.analytics.getUserAnalytics,
     token && activeTab === "users" ? {
       token,
@@ -476,9 +477,9 @@ export default function AdminAnalyticsPage() {
         end: dateRange.to?.getTime() || Date.now(),
       } : undefined,
     } : "skip"
-  )
+  ), "analytics-users");
 
-  const financialData = useQuery(
+  const financialData = useOffline(useQuery(
     api.functions.admin.analytics.getFinancialAnalytics,
     token && activeTab === "financial" ? {
       token,
@@ -488,9 +489,9 @@ export default function AdminAnalyticsPage() {
       } : undefined,
       currency: selectedCurrency,
     } : "skip"
-  )
+  ), "analytics-financial");
 
-  const performanceData = useQuery(
+  const performanceData = useOffline(useQuery(
     api.functions.admin.analytics.getPerformanceAnalytics,
     token && activeTab === "performance" ? {
       token,
@@ -499,7 +500,7 @@ export default function AdminAnalyticsPage() {
         end: dateRange.to?.getTime() || Date.now(),
       } : undefined,
     } : "skip"
-  )
+  ), "analytics-performance");
 
   const exportData = useQuery(
     api.functions.admin.analytics.exportAnalyticsData,
@@ -515,11 +516,21 @@ export default function AdminAnalyticsPage() {
     } : "skip"
   )
 
-  const getLeagues = useQuery(api.functions.leagues.getLeagues, {
+  const getLeagues = useOffline(useQuery(api.functions.leagues.getLeagues, {
     search: debouncedSearch,
     page: 1,
     limit: 20,
-  });
+  }), "analytics-leagues");
+
+  const isSuperAdminResult = useOffline(useQuery(
+    api.functions.admin.superadmin.isSuperAdmin,
+    token && user?.role === "admin" ? {
+      token: token,
+      user_id: user.id as Id<"users">
+    } : "skip"
+  ), "super-admin");
+
+  const isSuperAdminUser = isSuperAdminResult === true;
 
   const leagues: Doc<"leagues">[] = getLeagues?.leagues || [];
 
@@ -857,6 +868,7 @@ export default function AdminAnalyticsPage() {
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
+            {isSuperAdminUser && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="default" size="sm" className="gap-2 hover:bg-background hover:text-black">
@@ -880,6 +892,7 @@ export default function AdminAnalyticsPage() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+              )}
 
             <Button
               size="sm"

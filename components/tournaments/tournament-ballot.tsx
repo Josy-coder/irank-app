@@ -2585,14 +2585,87 @@ function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot, onF
   );
 }
 
-function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
+function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
   const [selectedJudge, setSelectedJudge] = useState<string>("all");
 
-  const ballotDetails = debate?.judges_ballots || [];
-  console.log("Ballot Details:", debate);
+  // Get all user IDs (judges and speakers)
+  const allUserIds = useMemo(() => {
+    const userIds = new Set<string>();
+
+    // Add judge IDs
+    if (debate?.judges) {
+      debate.judges.forEach((judge: any) => {
+        const judgeId = judge._id || judge;
+        userIds.add(judgeId);
+      });
+    }
+
+    // Add speaker IDs from ballot data
+    if (debate?.judges_ballots) {
+      debate.judges_ballots.forEach((judgeBallot: any) => {
+        if (judgeBallot.ballot?.speaker_scores) {
+          judgeBallot.ballot.speaker_scores.forEach((score: any) => {
+            userIds.add(score.speaker_id);
+          });
+        }
+      });
+    }
+
+    return Array.from(userIds);
+  }, [debate]);
+
+  // Fetch user names
+  const userNamesQuery = useNames(token, allUserIds);
+
+  const getUserName = (userId: string) => {
+    const user = userNamesQuery?.find((u: any) => u.id === userId);
+    return user?.name || `User ${userId.slice(-4)}`;
+  };
+
+  const getJudgeName = (judgeId: string) => {
+    const judge = debate?.judges?.find((j: any) => (j._id || j) === judgeId);
+    if (judge?.name) return judge.name;
+    return getUserName(judgeId);
+  };
+
+  const ballotDetails = useMemo(() => {
+    if (!debate?.judges_ballots) return [];
+
+    return debate.judges_ballots.map((judgeBallot: any) => {
+      if (!judgeBallot.ballot) return null;
+
+      return {
+        ...judgeBallot.ballot,
+        judge_id: judgeBallot.judge_id,
+        judge_name: getJudgeName(judgeBallot.judge_id),
+        is_head_judge: debate.head_judge_id === judgeBallot.judge_id,
+        is_flagged: judgeBallot.ballot.notes?.includes("[FLAG:") ||
+          judgeBallot.ballot.notes?.includes("[JUDGE FLAG:") || false,
+      };
+    }).filter(Boolean);
+  }, [debate, userNamesQuery]);
+
   const filteredBallots = selectedJudge === "all"
     ? ballotDetails
     : ballotDetails.filter((b: any) => b.judge_id === selectedJudge);
+
+  const getWinningTeamName = () => {
+    if (debate?.winning_team_id === debate?.proposition_team?._id) {
+      return debate.proposition_team?.name;
+    } else if (debate?.winning_team_id === debate?.opposition_team?._id) {
+      return debate.opposition_team?.name;
+    }
+    return "Unknown";
+  };
+
+  const getWinningPosition = () => {
+    if (debate?.winning_team_id === debate?.proposition_team?._id) {
+      return "proposition";
+    } else if (debate?.winning_team_id === debate?.opposition_team?._id) {
+      return "opposition";
+    }
+    return "unknown";
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -2605,7 +2678,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
         </DialogHeader>
 
         <div className="space-y-6">
-          
+          {/* Judge Selection */}
           {ballotDetails.length > 1 && (
             <div className="flex items-center gap-2">
               <Label>View Judge:</Label>
@@ -2617,8 +2690,8 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
                   <SelectItem value="all">All Judges</SelectItem>
                   {ballotDetails.map((ballot: any) => (
                     <SelectItem key={ballot.judge_id} value={ballot.judge_id}>
-                      {ballot.judge_name || `Judge ${ballot.judge_id}`}
-                      {debate?.head_judge_id === ballot.judge_id && " (Head)"}
+                      {ballot.judge_name}
+                      {ballot.is_head_judge && " (Head)"}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -2626,12 +2699,12 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
             </div>
           )}
 
-          
+          {/* Teams Overview */}
           <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
             <div className="text-center">
               <h3 className="font-semibold text-green-700">{debate?.proposition_team?.name}</h3>
               <p className="text-sm text-muted-foreground">Proposition</p>
-              {debate?.winning_team_id === debate?.proposition_team?._id && (
+              {getWinningPosition() === "proposition" && (
                 <Badge variant="default" className="mt-2">
                   <Crown className="h-3 w-3 mr-1" />
                   Winner
@@ -2641,7 +2714,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
             <div className="text-center">
               <h3 className="font-semibold text-red-700">{debate?.opposition_team?.name}</h3>
               <p className="text-sm text-muted-foreground">Opposition</p>
-              {debate?.winning_team_id === debate?.opposition_team?._id && (
+              {getWinningPosition() === "opposition" && (
                 <Badge variant="default" className="mt-2">
                   <Crown className="h-3 w-3 mr-1" />
                   Winner
@@ -2650,7 +2723,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
             </div>
           </div>
 
-          
+          {/* Fact Checks */}
           {debate?.fact_checks?.length > 0 && (
             <Card>
               <CardHeader>
@@ -2676,7 +2749,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
                           {new Date(check.timestamp).toLocaleString()}
                         </span>
                       </div>
-                      <p className="text-sm font-medium mb-1">&#34;{check.claim}&#34;</p>
+                      <p className="text-sm font-medium mb-1">"{check.claim}"</p>
                       {check.explanation && (
                         <p className="text-sm text-muted-foreground">{check.explanation}</p>
                       )}
@@ -2697,7 +2770,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
             </Card>
           )}
 
-          
+          {/* Argument Flow */}
           {debate?.argument_flow?.length > 0 && (
             <Card>
               <CardHeader>
@@ -2738,7 +2811,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
                       </div>
                       <p className="text-sm">{arg.content}</p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Speaker {arg.speaker}
+                        Speaker {getUserName(arg.speaker)}
                       </p>
                       {arg.rebutted_by?.length > 0 && (
                         <div className="mt-2 pt-2 border-t">
@@ -2759,13 +2832,13 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
             </Card>
           )}
 
-          
+          {/* Individual Judge Ballots */}
           {filteredBallots.map((ballot: any, index: number) => (
             <Card key={ballot.judge_id || index}>
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
-                  {ballot.judge_name || `Judge ${ballot.judge_id}`}
-                  {debate.head_judge_id === ballot.judge_id && (
+                  {ballot.judge_name}
+                  {ballot.is_head_judge && (
                     <Badge variant="default">
                       <Crown className="h-3 w-3 mr-1" />
                       Head Judge
@@ -2777,7 +2850,7 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
                       Submitted
                     </Badge>
                   )}
-                  {ballot.notes?.includes("[FLAG:") && (
+                  {ballot.is_flagged && (
                     <Badge variant="destructive">
                       <Flag className="h-3 w-3 mr-1" />
                       Flagged
@@ -2786,90 +2859,103 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                
+                {/* Judge's Decision */}
                 <div className="p-3 bg-muted rounded-lg">
                   <div className="flex items-center justify-between">
                     <span className="font-medium">Decision:</span>
                     <div className="flex items-center gap-2">
                       <span className="font-semibold">
-                        {ballot.winning_team_id === debate.proposition_team?._id
-                          ? debate.proposition_team?.name
-                          : debate.opposition_team?.name
+                        {ballot.winning_team_id === debate?.proposition_team?._id
+                          ? debate?.proposition_team?.name
+                          : ballot.winning_team_id === debate?.opposition_team?._id
+                            ? debate?.opposition_team?.name
+                            : "No decision recorded"
                         }
                       </span>
-                      <Badge variant="outline" className={
-                        ballot.winning_position === "proposition"
-                          ? "text-green-700 border-green-700"
-                          : "text-red-700 border-red-700"
-                      }>
-                        {ballot.winning_position}
-                      </Badge>
+                      {ballot.winning_position && (
+                        <Badge variant="outline" className={
+                          ballot.winning_position === "proposition"
+                            ? "text-green-700 border-green-700"
+                            : "text-red-700 border-red-700"
+                        }>
+                          {ballot.winning_position}
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 </div>
 
-                
-                <div>
-                  <h4 className="font-medium mb-3">Speaker Scores</h4>
-                  <div className="space-y-3">
-                    {ballot.speaker_scores?.map((score: any, scoreIndex: number) => (
-                      <div key={scoreIndex} className="border rounded-lg p-4">
-                        <div className="flex justify-between items-start mb-3">
-                          <div>
-                            <h5 className="font-medium">Speaker {score.speaker_id}</h5>
-                            <p className="text-sm text-muted-foreground">{score.position}</p>
+                {/* Speaker Scores */}
+                {ballot.speaker_scores?.length > 0 && (
+                  <div>
+                    <h4 className="font-medium mb-3">Speaker Scores</h4>
+                    <div className="space-y-3">
+                      {ballot.speaker_scores.map((score: any, scoreIndex: number) => (
+                        <div key={scoreIndex} className="border rounded-lg p-4">
+                          <div className="flex justify-between items-start mb-3">
+                            <div>
+                              <h5 className="font-medium">{getUserName(score.speaker_id)}</h5>
+                              <p className="text-sm text-muted-foreground">{score.position}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Team: {score.team_id === debate?.proposition_team?._id
+                                ? debate?.proposition_team?.name
+                                : debate?.opposition_team?.name
+                              }
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-2xl font-bold text-primary">{score.score}</div>
+                              <div className="text-sm text-muted-foreground">out of 30</div>
+                            </div>
                           </div>
-                          <div className="text-right">
-                            <div className="text-2xl font-bold text-primary">{score.score}</div>
-                            <div className="text-sm text-muted-foreground">out of 30</div>
-                          </div>
-                        </div>
 
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-                          {SCORING_CATEGORIES.map((category) => {
-                            const CategoryIcon = category.icon;
-                            const categoryScore = score[category.key] || 0;
-                            return (
-                              <div key={category.key} className="text-center">
-                                <div className="flex items-center justify-center gap-1 mb-1">
-                                  <CategoryIcon className={`h-3 w-3 ${category.color}`} />
-                                  <span className="text-xs font-medium">{category.label.split(' ')[0]}</span>
+                          {/* Category Breakdown */}
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                            {SCORING_CATEGORIES.map((category) => {
+                              const CategoryIcon = category.icon;
+                              const categoryScore = score[category.key] || 0;
+                              return (
+                                <div key={category.key} className="text-center">
+                                  <div className="flex items-center justify-center gap-1 mb-1">
+                                    <CategoryIcon className={`h-3 w-3 ${category.color}`} />
+                                    <span className="text-xs font-medium">{category.label.split(' ')[0]}</span>
+                                  </div>
+                                  <div className="text-sm font-bold">{categoryScore}/25</div>
+                                  <Progress value={(categoryScore / 25) * 100} className="h-1 mt-1" />
                                 </div>
-                                <div className="text-sm font-bold">{categoryScore}/25</div>
-                                <Progress value={(categoryScore / 25) * 100} className="h-1 mt-1" />
-                              </div>
-                            );
-                          })}
+                              );
+                            })}
+                          </div>
+
+                          {/* Individual Feedback */}
+                          {score.comments && (
+                            <div className="pt-3 border-t">
+                              <Label className="text-xs font-medium">Judge Feedback:</Label>
+                              <p className="text-sm mt-1 p-2 bg-muted rounded">{score.comments}</p>
+                            </div>
+                          )}
+
+                          {/* Bias Detection */}
+                          {score.bias_detected && (
+                            <div className="pt-3 border-t">
+                              <Alert variant="destructive">
+                                <AlertCircle className="h-4 w-4" />
+                                <AlertDescription>
+                                  <p className="font-medium">Bias Detected</p>
+                                  {score.bias_explanation && (
+                                    <p className="text-sm mt-1">{score.bias_explanation}</p>
+                                  )}
+                                </AlertDescription>
+                              </Alert>
+                            </div>
+                          )}
                         </div>
-
-                        
-                        {score.comments && (
-                          <div className="pt-3 border-t">
-                            <Label className="text-xs font-medium">Judge Feedback:</Label>
-                            <p className="text-sm mt-1 p-2 bg-muted rounded">{score.comments}</p>
-                          </div>
-                        )}
-
-                        
-                        {score.bias_detected && (
-                          <div className="pt-3 border-t">
-                            <Alert variant="destructive">
-                              <AlertCircle className="h-4 w-4" />
-                              <AlertDescription>
-                                <p className="font-medium">Bias Detected</p>
-                                {score.bias_explanation && (
-                                  <p className="text-sm mt-1">{score.bias_explanation}</p>
-                                )}
-                              </AlertDescription>
-                            </Alert>
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
-                
+                {/* Judge Notes */}
                 {ballot.notes && (
                   <div className="pt-3 border-t">
                     <Label className="text-sm font-medium">Judge Notes:</Label>
@@ -2877,19 +2963,60 @@ function BallotDetailsDialog({ debate, isOpen, onClose }: any) {
                   </div>
                 )}
 
-                
-                <div className="text-xs text-muted-foreground pt-2 border-t">
-                  Submitted: {new Date(ballot.submitted_at).toLocaleString()}
+                {/* Submission Details */}
+                <div className="text-xs text-muted-foreground pt-2 border-t flex justify-between">
+                  <span>
+                    Submitted: {ballot.submitted_at ? new Date(ballot.submitted_at).toLocaleString() : "Not submitted"}
+                  </span>
+                  {ballot.feedback_submitted && (
+                    <span className="text-green-600 font-medium">Final Submission</span>
+                  )}
                 </div>
               </CardContent>
             </Card>
           ))}
 
+          {/* No Ballots Message */}
           {filteredBallots.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
               <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
               <p>No ballot details available</p>
+              {selectedJudge !== "all" && (
+                <p className="text-sm">This judge hasn't submitted a ballot yet</p>
+              )}
             </div>
+          )}
+
+          {/* Shared Notes */}
+          {debate?.shared_notes?.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <MessageSquare className="h-5 w-5" />
+                  Shared Notes ({debate.shared_notes.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {debate.shared_notes.map((note: any, idx: number) => (
+                    <div key={idx} className="p-3 bg-muted rounded-lg">
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="font-medium text-sm">{getUserName(note.author)}</span>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-xs">
+                            {note.visibility}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(note.timestamp).toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                      <p className="text-sm">{note.content}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           )}
         </div>
       </DialogContent>

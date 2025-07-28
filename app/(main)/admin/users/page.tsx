@@ -63,6 +63,7 @@ import { formatDistanceToNow } from "date-fns"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { useOffline } from "@/hooks/use-offline";
 
 function UserTableSkeleton() {
   return (
@@ -235,7 +236,7 @@ export default function UsersPage() {
 
   const debouncedSearch = useDebounce(searchTerm, 300)
 
-  const usersData = useQuery(
+  const usersData = useOffline(useQuery(
     api.functions.admin.users.getUsers,
     token ? {
       admin_token: token,
@@ -246,15 +247,15 @@ export default function UsersPage() {
       page,
       limit: 20,
     } : "skip"
-  )
+  ), "users");
 
-  const isSuperAdminResult = useQuery(
+  const isSuperAdminResult = useOffline(useQuery(
     api.functions.admin.superadmin.isSuperAdmin,
     token && user?.role === "admin" ? {
       token: token,
       user_id: user.id as Id<"users">
     } : "skip"
-  );
+  ), "super-admin");
 
   const isSuperAdminUser = isSuperAdminResult === true;
 
@@ -552,16 +553,18 @@ export default function UsersPage() {
       <Upload className="h-4 w-4" />
       <span className="hidden md:block">Import</span>
     </Button>,
-    <Button
-      key="export"
-      variant="outline"
-      size="sm"
-      className="h-8 border-white/20"
-      onClick={() => setShowExportDialog(true)}
-    >
-      <Download className="h-4 w-4" />
-      <span className="hidden md:block">Export</span>
-    </Button>,
+    isSuperAdminUser && (
+      <Button
+        key="export"
+        variant="outline"
+        size="sm"
+        className="h-8 border-white/20"
+        onClick={() => setShowExportDialog(true)}
+      >
+        <Download className="h-4 w-4" />
+        <span className="hidden md:block">Export</span>
+      </Button>
+    ),
     <Button
       key="add"
       size="sm"
