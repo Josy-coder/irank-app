@@ -3316,14 +3316,38 @@ export default function TournamentBallots({
     }
   }, [isMobile, ballots]);
 
-  const availableRounds = useMemo<number[]>(() => {
-    if (!ballots || ballots.length === 0) return [];
-    const rounds = ballots
-      .map((b: any) => b.round?.round_number)
-      .filter(Boolean)
-      .sort((a: number, b: number) => a - b);
-    return Array.from(new Set(rounds));
-  }, [ballots]);
+  const availableRounds = useMemo(() => {
+    const totalRounds = tournament.prelim_rounds + tournament.elimination_rounds;
+
+    return Array.from({ length: totalRounds }, (_, i) => {
+      const roundNumber = i + 1;
+      const isElim = roundNumber > tournament.prelim_rounds;
+
+      let label = `Round ${roundNumber}`;
+
+      if (isElim) {
+        const elimNames = [
+          "Round of 64",
+          "Round of 32",
+          "Round of 16",
+          "Octofinals",
+          "Quarterfinals",
+          "Semifinals",
+          "Finals"
+        ];
+
+        const elimIndex = roundNumber - tournament.prelim_rounds - 1;
+        const nameStartIndex = elimNames.length - tournament.elimination_rounds;
+
+        label = elimNames[nameStartIndex + elimIndex] ?? `Elim Round ${elimIndex + 1}`;
+      }
+
+      return {
+        value: roundNumber,
+        label: label
+      };
+    });
+  }, [tournament.prelim_rounds, tournament.elimination_rounds]);
 
   const filteredBallots = useMemo(() => {
     if (!ballots) return [];
@@ -3534,14 +3558,13 @@ export default function TournamentBallots({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Rounds</SelectItem>
-                {availableRounds.map((round: number) => (
-                  <SelectItem key={round} value={round.toString()}>
-                    Round {round}
+                {availableRounds.map((round) => (
+                  <SelectItem key={round.value} value={round.value.toString()}>
+                    {round.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-32 h-8 bg-background">
                 <SelectValue />
