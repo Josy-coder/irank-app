@@ -83,6 +83,11 @@ export class PairingAlgorithm {
     this.tournament = tournament;
     this.roundNumber = roundNumber;
     this.method = roundNumber <= 5 ? 'fold' : 'swiss';
+
+    console.log(`=== Round ${roundNumber} Pairing Debug ===`);
+    console.log(`Input teams: ${teams.length}, Filtered teams: ${this.teams.length}`);
+    console.log(`Active team names:`, this.teams.map(t => t.name));
+    console.log(`Expected pairings: ${Math.ceil(this.teams.length / 2)}`);
   }
 
   public generatePairings(): PairingResult[] {
