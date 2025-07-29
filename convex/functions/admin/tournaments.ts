@@ -787,7 +787,6 @@ export const getAllTournamentVolunteers = query({
   },
 });
 
-// Add this query to convex/functions/admin/tournaments.ts
 
 export const getCoordinators = query({
   args: {
@@ -806,7 +805,6 @@ export const getCoordinators = query({
 
     let usersQuery = ctx.db.query("users");
 
-    // Filter to only active, verified admins and volunteers
     usersQuery = usersQuery
       .filter((q) => q.eq(q.field("status"), "active"))
       .filter((q) => q.eq(q.field("verified"), true))
@@ -817,13 +815,12 @@ export const getCoordinators = query({
         )
       );
 
-    // Apply search filter if provided
     if (args.search && args.search.trim()) {
       const searchTerm = args.search.toLowerCase();
       usersQuery = usersQuery.filter((q) =>
         q.or(
-          q.eq(q.field("name"), args.search),
-          q.eq(q.field("email"), args.search)
+          q.eq(q.field("name"), searchTerm),
+          q.eq(q.field("email"), searchTerm)
         )
       );
     }
@@ -831,7 +828,6 @@ export const getCoordinators = query({
     const limit = args.limit || 50;
     const users = await usersQuery.take(limit);
 
-    // Enrich with school data
     const enrichedUsers = await Promise.all(
       users.map(async (user) => {
         const school = user.school_id ? await ctx.db.get(user.school_id) : null;
@@ -849,12 +845,11 @@ export const getCoordinators = query({
       })
     );
 
-    // Sort by role (admins first) then by name
     const sortedUsers = enrichedUsers.sort((a, b) => {
       if (a.role !== b.role) {
-        return a.role === "admin" ? -1 : 1; // Admins first
+        return a.role === "admin" ? -1 : 1;
       }
-      return a.name.localeCompare(b.name); // Then alphabetical by name
+      return a.name.localeCompare(b.name);
     });
 
     return sortedUsers;
