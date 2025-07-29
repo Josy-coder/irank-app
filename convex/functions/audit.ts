@@ -61,10 +61,6 @@ type ActionType =
   | "payment_processed"
   | "system_setting_changed";
 
-/**
- * Create an audit log entry
- * This is an internal mutation that can only be called by other server functions
- */
 export const createAuditLog = internalMutation({
   args: {
     user_id: v.id("users"),

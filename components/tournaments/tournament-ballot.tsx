@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -60,6 +60,7 @@ import { Id } from "@/convex/_generated/dataModel";
 import { useGemini } from "@/hooks/use-gemini";
 import { useOffline } from "@/hooks/use-offline";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useDebounce } from "@/hooks/use-debounce";
 
 interface TournamentBallotsProps {
   tournament: any;
@@ -3237,6 +3238,7 @@ export default function TournamentBallots({
                                             userRole,
                                             token,
                                             userId,
+                                            schoolId
                                           }: TournamentBallotsProps) {
   const [selectedRound, setSelectedRound] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -3248,6 +3250,9 @@ export default function TournamentBallots({
   const [flaggingDebate, setFlaggingDebate] = useState<any>(null);
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
   const [isMobile, setIsMobile] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
   let queryFn: any;
   let queryArgs: any;
@@ -3259,6 +3264,7 @@ export default function TournamentBallots({
       tournament_id: tournament._id,
       round_number: selectedRound || undefined,
       status_filter: statusFilter !== "all" ? statusFilter as any : undefined,
+      search: debouncedSearchQuery || undefined,
     };
   } else if (userRole === "volunteer") {
     queryFn = api.functions.volunteers.ballots.getJudgeAssignedDebates;
@@ -3266,6 +3272,7 @@ export default function TournamentBallots({
       token,
       tournament_id: tournament._id,
       round_number: selectedRound || undefined,
+      search: debouncedSearchQuery || undefined,
     };
   } else {
     queryFn = api.functions.ballots.getTournamentBallots;
@@ -3273,10 +3280,21 @@ export default function TournamentBallots({
       token,
       tournament_id: tournament._id,
       round_number: selectedRound || undefined,
+      search: debouncedSearchQuery || undefined,
     };
   }
 
-  const ballotsQuery = useOffline(useQuery(queryFn, queryArgs), "tournament-ballots");
+  const {
+    results: ballots,
+    status,
+    loadMore
+  } = usePaginatedQuery(
+    queryFn,
+    queryArgs,
+    { initialNumItems: 20 }
+  );
+
+  const isLoading = status === "LoadingFirstPage";
 
   const submitBallot = useMutation(api.functions.volunteers.ballots.submitBallot);
   const submitBallotAdmin = useMutation(api.functions.admin.ballots.submitBallot);
@@ -3284,9 +3302,6 @@ export default function TournamentBallots({
   const flagBallotAdmin = useMutation(api.functions.admin.ballots.flagBallotForReview);
   const flagBallotVolunteer = useMutation(api.functions.volunteers.ballots.flagBallot);
   const unflagBallot = useMutation(api.functions.admin.ballots.unflagBallot);
-
-  const ballots = useMemo(() => ballotsQuery || [], [ballotsQuery]);
-  const isLoading = ballotsQuery === undefined;
 
   useEffect(() => {
     const checkIsMobile = () => setIsMobile(window.innerWidth < 768);
@@ -3296,10 +3311,10 @@ export default function TournamentBallots({
   }, []);
 
   useEffect(() => {
-    if (!isMobile && ballots.length > 20) {
+    if (!isMobile && ballots && ballots.length > 20) {
       setViewMode("table");
     }
-  }, [isMobile, ballots.length]);
+  }, [isMobile, ballots]);
 
   const availableRounds = useMemo<number[]>(() => {
     if (!ballots || ballots.length === 0) return [];
@@ -3348,7 +3363,6 @@ export default function TournamentBallots({
   const handleSubmitFlag = async (debate: any, reason: string, selectedBallotIds: string[]) => {
     try {
       if (userRole === "admin") {
-
         for (const ballotId of selectedBallotIds) {
           await flagBallotAdmin({
             token,
@@ -3363,7 +3377,6 @@ export default function TournamentBallots({
             : "Ballot flagged successfully"
         );
       } else if (userRole === "volunteer") {
-
         const ballotId = selectedBallotIds[0];
         if (!ballotId) {
           toast.error("No ballot found to flag");
@@ -3494,7 +3507,6 @@ export default function TournamentBallots({
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
-
             {!isMobile && (
               <div className="flex border rounded-md bg-background">
                 <Button
@@ -3546,12 +3558,22 @@ export default function TournamentBallots({
         </div>
 
         <div className="p-4">
+          <div className="relative mb-4">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+            <Input
+              placeholder="Search by room, team, or judge..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+
           {filteredBallots.length === 0 ? (
             <div className="text-center py-12">
               <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
               <h3 className="font-medium mb-2">No ballots found</h3>
               <p className="text-muted-foreground text-center text-sm max-w-sm mx-auto">
-                {selectedRound || statusFilter !== "all"
+                {selectedRound || statusFilter !== "all" || searchQuery
                   ? "Try adjusting your filters to see more results"
                   : userRole === "volunteer"
                     ? "You don't have any judging assignments yet"
@@ -3561,7 +3583,6 @@ export default function TournamentBallots({
             </div>
           ) : (
             <>
-
               {viewMode === "table" && !isMobile ? (
                 <div className="border rounded-md">
                   <Table>
@@ -3587,24 +3608,59 @@ export default function TournamentBallots({
                           onUnflagBallot={handleUnflagBallot}
                         />
                       ))}
+                      {status === "LoadingMore" && (
+                        <TableRow>
+                          <TableCell colSpan={userRole === "admin" ? 5 : 4} className="text-center py-4">
+                            <div className="flex items-center justify-center gap-2">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <span>Loading more ballots...</span>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
                     </TableBody>
                   </Table>
+                  {status === "CanLoadMore" && (
+                    <div className="p-4 text-center border-t">
+                      <Button onClick={() => loadMore(20)} variant="outline">
+                        <ChevronDown className="h-4 w-4 mr-2" />
+                        Load More
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ) : (
-                /* Card view for mobile and desktop with fewer items */
-                <div className="grid gap-4 lg:grid-cols-2">
-                  {filteredBallots.map((debate: any) => (
-                    <BallotCard
-                      key={debate._id}
-                      debate={debate}
-                      userRole={userRole}
-                      userId={userId}
-                      onViewDetails={handleViewDetails}
-                      onEditBallot={handleEditBallot}
-                      onFlagBallot={handleFlagBallot}
-                      onUnflagBallot={handleUnflagBallot}
-                    />
-                  ))}
+                <div className="space-y-4">
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    {filteredBallots.map((debate: any) => (
+                      <BallotCard
+                        key={debate._id}
+                        debate={debate}
+                        userRole={userRole}
+                        userId={userId}
+                        onViewDetails={handleViewDetails}
+                        onEditBallot={handleEditBallot}
+                        onFlagBallot={handleFlagBallot}
+                        onUnflagBallot={handleUnflagBallot}
+                      />
+                    ))}
+                  </div>
+                  {status === "LoadingMore" && (
+                    <div className="text-center py-4">
+                      <div className="flex items-center justify-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Loading more ballots...</span>
+                      </div>
+                    </div>
+                  )}
+                  {status === "CanLoadMore" && (
+                    <div className="text-center py-4">
+                      <Button onClick={() => loadMore(20)} variant="outline">
+                        <ChevronDown className="h-4 w-4 mr-2" />
+                        Load More
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </>

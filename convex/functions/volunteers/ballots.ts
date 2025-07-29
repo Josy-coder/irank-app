@@ -2,14 +2,17 @@ import { mutation, query } from "../../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../../_generated/api";
 import { Doc, Id } from "../../_generated/dataModel";
+import { paginationOptsValidator } from "convex/server";
 
 export const getJudgeAssignedDebates = query({
   args: {
     token: v.string(),
     tournament_id: v.id("tournaments"),
     round_number: v.optional(v.number()),
+    search: v.optional(v.string()),
+    paginationOpts: paginationOptsValidator,
   },
-  handler: async (ctx, args): Promise<any[]> => {
+  handler: async (ctx, args): Promise<any> => {
     const sessionResult = await ctx.runQuery(internal.functions.auth.verifySessionReadOnly, {
       token: args.token,
     });
@@ -20,7 +23,7 @@ export const getJudgeAssignedDebates = query({
 
     const judgeId: Id<"users"> = sessionResult.user.id;
 
-    let debates: Doc<"debates">[];
+    let debatesQuery;
     if (args.round_number) {
       const round = await ctx.db
         .query("rounds")
@@ -30,32 +33,36 @@ export const getJudgeAssignedDebates = query({
         .first();
 
       if (round) {
-        const allDebatesInRound = await ctx.db
+        debatesQuery = ctx.db
           .query("debates")
-          .withIndex("by_round_id", (q) => q.eq("round_id", round._id))
-          .collect();
-
-        debates = allDebatesInRound.filter(debate =>
-          debate.judges.includes(judgeId)
-        );
+          .withIndex("by_round_id", (q) => q.eq("round_id", round._id));
       } else {
-        debates = [];
+        return {
+          page: [],
+          isDone: true,
+          continueCursor: null,
+        };
       }
     } else {
-      const allDebates = await ctx.db
+      debatesQuery = ctx.db
         .query("debates")
-        .withIndex("by_tournament_id", (q) =>
-          q.eq("tournament_id", args.tournament_id)
-        )
-        .collect();
-
-      debates = allDebates.filter((debate) =>
-        debate.judges.includes(judgeId)
-      );
+        .withIndex("by_tournament_id", (q) => q.eq("tournament_id", args.tournament_id));
     }
 
+    const allDebates = await debatesQuery.collect();
+
+    const judgeDebates = allDebates.filter(debate =>
+      debate.judges.includes(judgeId)
+    );
+
+    const totalItems = judgeDebates.length;
+    const startIndex = args.paginationOpts.cursor ? parseInt(args.paginationOpts.cursor) : 0;
+    const endIndex = Math.min(startIndex + args.paginationOpts.numItems, totalItems);
+    const paginatedDebates = judgeDebates.slice(startIndex, endIndex);
+    const isDone = endIndex >= totalItems;
+
     const enrichedDebates = await Promise.all(
-      debates.map(async (debate) => {
+      paginatedDebates.map(async (debate) => {
         const propTeam: Doc<"teams"> | null = debate.proposition_team_id
           ? await ctx.db.get(debate.proposition_team_id)
           : null;
@@ -89,10 +96,34 @@ export const getJudgeAssignedDebates = query({
       })
     );
 
-    return enrichedDebates.sort((a, b) => {
+    let filteredPage = enrichedDebates;
+    if (args.search && args.search.trim()) {
+      const searchLower = args.search.toLowerCase();
+      filteredPage = enrichedDebates.filter(debate => {
+        const roomName = debate.room_name?.toLowerCase() || '';
+        const propTeamName = debate.proposition_team?.name?.toLowerCase() || '';
+        const oppTeamName = debate.opposition_team?.name?.toLowerCase() || '';
+
+        const judges = debate.judges || [];
+        const judgeNames = judges.map(() => 'judge').join(' ').toLowerCase();
+
+        return roomName.includes(searchLower) ||
+          propTeamName.includes(searchLower) ||
+          oppTeamName.includes(searchLower) ||
+          judgeNames.includes(searchLower);
+      });
+    }
+
+    const sortedPage = filteredPage.sort((a, b) => {
       if (!a.round || !b.round) return 0;
       return a.round.round_number - b.round.round_number;
     });
+
+    return {
+      page: sortedPage,
+      isDone,
+      continueCursor: isDone ? null : endIndex.toString(),
+    };
   },
 });
 
