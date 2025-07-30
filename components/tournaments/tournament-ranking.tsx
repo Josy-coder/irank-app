@@ -233,6 +233,8 @@ export default function TournamentRankings({
                                              userRole,
                                              token,
                                            }: TournamentRankingsProps) {
+
+
   const [activeTab, setActiveTab] = useState<'teams' | 'schools' | 'students' | 'volunteers'>('teams');
   const [includeElimination, setIncludeElimination] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -252,6 +254,14 @@ export default function TournamentRankings({
   const canExportRankings = isAdmin;
 
   const scope = includeElimination ? "full_tournament" : "prelims";
+
+  console.log('Debug Info:', {
+    userRole,
+    hasToken: Boolean(token),
+    tournamentRankingReleased: tournament.ranking_released,
+    includeElimination,
+    scope: includeElimination ? "full_tournament" : "prelims"
+  });
 
   const teamRankingsResponse = useQuery(
     api.functions.rankings.getTeamRankings,
@@ -313,6 +323,24 @@ export default function TournamentRankings({
     [volunteerRankingsResponse]
   );
   const volunteerError = volunteerRankingsResponse?.success === false ? volunteerRankingsResponse.error : null;
+
+  console.log('Query Results:', {
+    teamRankingsResponse,
+    schoolRankingsResponse,
+    studentRankingsResponse,
+    volunteerRankingsResponse
+  });
+
+  console.log('Computed Values:', {
+    teamRankings,
+    teamError,
+    schoolRankings,
+    schoolError,
+    studentRankings,
+    studentError,
+    volunteerRankings,
+    volunteerError
+  });
 
   const [releaseSettings, setReleaseSettings] = useState({
     prelims: {

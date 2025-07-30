@@ -387,7 +387,6 @@ const computeSchoolRankings = async (
 ): Promise<SchoolRanking[]> => {
   const teamRankings = await computeTeamRankings(ctx, tournament, scope);
 
-  // Get all debates and rounds to determine elimination progression
   const rounds = await ctx.db
     .query("rounds")
     .withIndex("by_tournament_id", (q: any) => q.eq("tournament_id", tournament._id))
@@ -398,7 +397,6 @@ const computeSchoolRankings = async (
     .withIndex("by_tournament_id", (q: any) => q.eq("tournament_id", tournament._id))
     .collect();
 
-  // Calculate speaker rankings for top 10/20 analysis
   const speakerRankings = await computeStudentRankings(ctx, tournament, scope);
   const top10Speakers = speakerRankings.slice(0, 10).map(s => s.speaker_id);
   const top20Speakers = speakerRankings.slice(0, 20).map(s => s.speaker_id);
@@ -427,7 +425,6 @@ const computeSchoolRankings = async (
     speakers_in_top20: number;
   }>();
 
-  // Helper function to calculate elimination progression
   const getEliminationProgression = (teamId: Id<"teams">): { reached: boolean; progression: number } => {
     const elimRounds = rounds.filter((r: { type: string; }) => r.type === "elimination").sort((a: {
       round_number: number;
@@ -451,7 +448,6 @@ const computeSchoolRankings = async (
         reachedElims = true;
         maxProgression = i + 1;
 
-        // Check if they won this round to continue
         const wonRound = teamDebatesInRound.some((d: {
           winning_team_id: Id<"teams">;
         }) => d.winning_team_id === teamId);
@@ -511,7 +507,6 @@ const computeSchoolRankings = async (
       schoolStat.best_elimination_progression = Math.max(schoolStat.best_elimination_progression, elimData.progression);
     }
 
-    // Count speakers in top 10/20 from this team
     const team = await ctx.db.get(teamRanking.team_id);
     if (team) {
       for (const speakerId of team.members) {
@@ -527,7 +522,6 @@ const computeSchoolRankings = async (
   const schoolRankings: SchoolRanking[] = Array.from(schoolStats.entries()).map(([schoolId, stats]) => {
     stats.avg_team_rank = stats.teams.reduce((sum, team) => sum + team.rank, 0) / stats.teams.length;
 
-    // Calculate average elimination progression for teams that reached eliminations
     const teamsWithElimProgression = stats.teams.filter(t => t.reached_eliminations);
     stats.avg_elimination_progression = teamsWithElimProgression.length > 0
       ? teamsWithElimProgression.reduce((sum, team) => sum + team.elimination_progression, 0) / teamsWithElimProgression.length
@@ -552,49 +546,40 @@ const computeSchoolRankings = async (
     };
   });
 
-  // Sort by new criteria: wins > points > teams to elims > elimination progression > speaker rankings
   schoolRankings.sort((a, b) => {
-    // 1. Total wins (most important)
+
     if (a.total_wins !== b.total_wins) {
       return b.total_wins - a.total_wins;
     }
 
-    // 2. Total points
     if (a.total_points !== b.total_points) {
       return b.total_points - a.total_points;
     }
 
-    // 3. Teams that reached eliminations
     if (a.teams_to_eliminations !== b.teams_to_eliminations) {
       return b.teams_to_eliminations - a.teams_to_eliminations;
     }
 
-    // 4. Best elimination progression (how far the best team went)
     if (a.best_elimination_progression !== b.best_elimination_progression) {
       return b.best_elimination_progression - a.best_elimination_progression;
     }
 
-    // 5. Average elimination progression
     if (a.avg_elimination_progression !== b.avg_elimination_progression) {
       return b.avg_elimination_progression - a.avg_elimination_progression;
     }
 
-    // 6. Speakers in top 10
     if (a.speakers_in_top10 !== b.speakers_in_top10) {
       return b.speakers_in_top10 - a.speakers_in_top10;
     }
 
-    // 7. Speakers in top 20
     if (a.speakers_in_top20 !== b.speakers_in_top20) {
       return b.speakers_in_top20 - a.speakers_in_top20;
     }
 
-    // 8. Best team rank (lower is better)
     if (a.best_team_rank !== b.best_team_rank) {
       return a.best_team_rank - b.best_team_rank;
     }
 
-    // 9. School name (alphabetical)
     return a.school_name.localeCompare(b.school_name);
   });
 
@@ -947,7 +932,6 @@ const computeVolunteerRankings = async (
     });
   }
 
-  // Count debates judged
   for (let i = 0; i < debates.length; i++) {
     const debate = debates[i];
     if (debate.status !== "completed") continue;
@@ -987,7 +971,6 @@ const computeVolunteerRankings = async (
     }
   }
 
-  // Process feedback scores
   for (let i = 0; i < allFeedback.length; i++) {
     const feedback = allFeedback[i];
     const stats = volunteerStats.get(feedback.judge_id);
@@ -1007,7 +990,6 @@ const computeVolunteerRankings = async (
     Array.from(volunteerStats.entries()).map(async ([volunteerId, stats]) => {
       const school = stats.volunteer.school_id ? await ctx.db.get(stats.volunteer.school_id) : null;
 
-      // Fixed attendance score - always 5 points
       const attendanceScore = 5;
 
       const avgFeedbackScore = stats.feedback_scores.length > 0
@@ -1053,14 +1035,13 @@ const computeVolunteerRankings = async (
   );
 
   volunteerRankings.sort((a, b) => {
-    // Weighted debate score (elimination debates × 2 + prelim debates)
+
     const aScore = a.elimination_debates_judged * 2 + a.prelim_debates_judged;
     const bScore = b.elimination_debates_judged * 2 + b.prelim_debates_judged;
     if (aScore !== bScore) {
       return bScore - aScore;
     }
 
-    // Since attendance_score is now fixed at 5 for everyone, skip this comparison
 
     if (a.avg_feedback_score !== b.avg_feedback_score) {
       return b.avg_feedback_score - a.avg_feedback_score;
@@ -1101,14 +1082,41 @@ export const getTeamRankings = query({
     }
 
     const user = sessionResult.user;
-    const canSeeRankings = user.role === "admin" ||
-      (tournament.ranking_released &&
-        tournament.ranking_released.visible_to_roles.includes(user.role));
 
-    if (!canSeeRankings) {
+    if (user.role === "admin") {
+      try {
+        await validateTournamentData(ctx, tournament, args.scope);
+        const rankings = await computeTeamRankings(ctx, tournament, args.scope);
+        return {
+          success: true,
+          error: null,
+          data: rankings,
+          type: 'success'
+        };
+      } catch (error: any) {
+        return {
+          success: false,
+          error: `Team rankings not available: ${error.message}`,
+          data: [],
+          type: 'data_insufficient'
+        };
+      }
+    }
+
+    if (!tournament.ranking_released ||
+      !tournament.ranking_released.visible_to_roles.includes(user.role)) {
       return {
         success: false,
-        error: "Rankings not yet released",
+        error: "Rankings not yet released for your role",
+        data: [],
+        type: 'not_released'
+      };
+    }
+
+    if (!tournament.ranking_released[args.scope].teams) {
+      return {
+        success: false,
+        error: "Team rankings not yet released for this scope",
         data: [],
         type: 'not_released'
       };
@@ -1122,15 +1130,6 @@ export const getTeamRankings = query({
         error: `Team rankings not available: ${error.message}`,
         data: [],
         type: 'data_insufficient'
-      };
-    }
-
-    if (tournament.ranking_released && !tournament.ranking_released[args.scope].teams) {
-      return {
-        success: false,
-        error: "Team rankings not yet released for this scope",
-        data: [],
-        type: 'not_released'
       };
     }
 
@@ -1166,14 +1165,41 @@ export const getSchoolRankings = query({
     }
 
     const user = sessionResult.user;
-    const canSeeRankings = user.role === "admin" ||
-      (tournament.ranking_released &&
-        tournament.ranking_released.visible_to_roles.includes(user.role));
 
-    if (!canSeeRankings) {
+    if (user.role === "admin") {
+      try {
+        await validateTournamentData(ctx, tournament, args.scope);
+        const rankings = await computeSchoolRankings(ctx, tournament, args.scope);
+        return {
+          success: true,
+          error: null,
+          data: rankings,
+          type: 'success'
+        };
+      } catch (error: any) {
+        return {
+          success: false,
+          error: `School rankings not available: ${error.message}`,
+          data: [],
+          type: 'data_insufficient'
+        };
+      }
+    }
+
+    if (!tournament.ranking_released ||
+      !tournament.ranking_released.visible_to_roles.includes(user.role)) {
       return {
         success: false,
-        error: "Rankings not yet released",
+        error: "Rankings not yet released for your role",
+        data: [],
+        type: 'not_released'
+      };
+    }
+
+    if (!tournament.ranking_released[args.scope].schools) {
+      return {
+        success: false,
+        error: "School rankings not yet released for this scope",
         data: [],
         type: 'not_released'
       };
@@ -1187,15 +1213,6 @@ export const getSchoolRankings = query({
         error: `School rankings not available: ${error.message}`,
         data: [],
         type: 'data_insufficient'
-      };
-    }
-
-    if (tournament.ranking_released && !tournament.ranking_released[args.scope].schools) {
-      return {
-        success: false,
-        error: "School rankings not yet released for this scope",
-        data: [],
-        type: 'not_released'
       };
     }
 
@@ -1231,14 +1248,41 @@ export const getStudentRankings = query({
     }
 
     const user = sessionResult.user;
-    const canSeeRankings = user.role === "admin" ||
-      (tournament.ranking_released &&
-        tournament.ranking_released.visible_to_roles.includes(user.role));
 
-    if (!canSeeRankings) {
+    if (user.role === "admin") {
+      try {
+        await validateTournamentData(ctx, tournament, args.scope);
+        const rankings = await computeStudentRankings(ctx, tournament, args.scope);
+        return {
+          success: true,
+          error: null,
+          data: rankings,
+          type: 'success'
+        };
+      } catch (error: any) {
+        return {
+          success: false,
+          error: `Student rankings not available: ${error.message}`,
+          data: [],
+          type: 'data_insufficient'
+        };
+      }
+    }
+
+    if (!tournament.ranking_released ||
+      !tournament.ranking_released.visible_to_roles.includes(user.role)) {
       return {
         success: false,
-        error: "Rankings not yet released",
+        error: "Rankings not yet released for your role",
+        data: [],
+        type: 'not_released'
+      };
+    }
+
+    if (!tournament.ranking_released[args.scope].students) {
+      return {
+        success: false,
+        error: "Student rankings not yet released for this scope",
         data: [],
         type: 'not_released'
       };
@@ -1252,15 +1296,6 @@ export const getStudentRankings = query({
         error: `Student rankings not available: ${error.message}`,
         data: [],
         type: 'data_insufficient'
-      };
-    }
-
-    if (tournament.ranking_released && !tournament.ranking_released[args.scope].students) {
-      return {
-        success: false,
-        error: "Student rankings not yet released for this scope",
-        data: [],
-        type: 'not_released'
       };
     }
 
@@ -1295,14 +1330,44 @@ export const getVolunteerRankings = query({
     }
 
     const user = sessionResult.user;
-    const canSeeRankings = user.role === "admin" ||
-      (tournament.ranking_released &&
-        tournament.ranking_released.visible_to_roles.includes(user.role));
 
-    if (!canSeeRankings) {
+    if (user.role === "admin") {
+      try {
+        await validateTournamentData(ctx, tournament, "prelims");
+        const rankings = await computeVolunteerRankings(ctx, tournament);
+        return {
+          success: true,
+          error: null,
+          data: rankings,
+          type: 'success'
+        };
+      } catch (error: any) {
+        return {
+          success: false,
+          error: `Volunteer rankings not available: ${error.message}`,
+          data: [],
+          type: 'data_insufficient'
+        };
+      }
+    }
+
+    if (!tournament.ranking_released ||
+      !tournament.ranking_released.visible_to_roles.includes(user.role)) {
       return {
         success: false,
-        error: "Rankings not yet released",
+        error: "Rankings not yet released for your role",
+        data: [],
+        type: 'not_released'
+      };
+    }
+
+    const volunteerRankingsEnabled = tournament.ranking_released.prelims.volunteers ||
+      tournament.ranking_released.full_tournament.volunteers;
+
+    if (!volunteerRankingsEnabled) {
+      return {
+        success: false,
+        error: "Volunteer rankings not yet released",
         data: [],
         type: 'not_released'
       };
@@ -1316,15 +1381,6 @@ export const getVolunteerRankings = query({
         error: `Volunteer rankings not available: ${error.message}`,
         data: [],
         type: 'data_insufficient'
-      };
-    }
-
-    if (tournament.ranking_released && !tournament.ranking_released.full_tournament.volunteers) {
-      return {
-        success: false,
-        error: "Volunteer rankings not yet released",
-        data: [],
-        type: 'not_released'
       };
     }
 
