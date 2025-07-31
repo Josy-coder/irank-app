@@ -13,26 +13,32 @@ import {
   Building,
   Loader2,
   Settings,
-  ChevronUp,
-  ChevronDown,
   Search,
-  AlertTriangle,
-  UsersRound, School, GraduationCap
+  UsersRound,
+  School,
+  GraduationCap,
+  FileText,
+  FileSpreadsheet, FileBadge2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress";
+import { Skeleton } from '../ui/skeleton';
 import { toast } from "sonner";
 import { Id } from "@/convex/_generated/dataModel";
-import { Skeleton } from '../ui/skeleton';
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 interface RankingResponse<T> {
   success: boolean;
@@ -133,7 +139,6 @@ interface TournamentRankingsProps {
 function RankingSkeleton() {
   return (
     <div className="space-y-4">
-      
       <div className="flex flex-col lg:flex-row lg:items-center bg-brown rounded-t-md lg:justify-between gap-4 p-3">
         <div>
           <Skeleton className="h-6 w-48 mb-2" />
@@ -148,7 +153,6 @@ function RankingSkeleton() {
         </div>
       </div>
 
-      
       <Card>
         <CardContent className="p-4">
           <div className="flex flex-col lg:flex-row gap-4">
@@ -164,104 +168,449 @@ function RankingSkeleton() {
         </CardContent>
       </Card>
 
-      
       <div className="grid w-full grid-cols-4 gap-2">
         {Array.from({ length: 4 }).map((_, i) => (
           <Skeleton key={i} className="h-10 w-full" />
         ))}
       </div>
 
-      
-      <div className="grid gap-4 lg:grid-cols-2">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <Card key={i} className="hover:shadow-md transition-all duration-200">
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
+      <div className="border rounded-md">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-16">
+                <Skeleton className="h-4 w-8" />
+              </TableHead>
+              <TableHead>
+                <Skeleton className="h-4 w-20" />
+              </TableHead>
+              <TableHead>
+                <Skeleton className="h-4 w-16" />
+              </TableHead>
+              <TableHead>
+                <Skeleton className="h-4 w-16" />
+              </TableHead>
+              <TableHead>
+                <Skeleton className="h-4 w-20" />
+              </TableHead>
+              <TableHead>
+                <Skeleton className="h-4 w-16" />
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {Array.from({ length: 10 }).map((_, i) => (
+              <TableRow key={i}>
+                <TableCell>
                   <Skeleton className="h-6 w-6 rounded-full" />
-                  <div>
-                    <Skeleton className="h-5 w-32 mb-1" />
-                    <Skeleton className="h-4 w-24" />
+                </TableCell>
+                <TableCell>
+                  <div className="space-y-1">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-3 w-24" />
                   </div>
-                </div>
-                <div className="text-right">
-                  <Skeleton className="h-8 w-12 mb-1" />
-                  <Skeleton className="h-3 w-8" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-4 mb-4">
-                {Array.from({ length: 3 }).map((_, j) => (
-                  <div key={j} className="text-center">
-                    <Skeleton className="h-6 w-8 mx-auto mb-1" />
-                    <Skeleton className="h-3 w-16 mx-auto" />
-                  </div>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 text-center text-sm">
-                {Array.from({ length: 2 }).map((_, j) => (
-                  <div key={j}>
-                    <Skeleton className="h-4 w-8 mx-auto mb-1" />
-                    <Skeleton className="h-3 w-12 mx-auto" />
-                  </div>
-                ))}
-              </div>
-
-              
-              <div className="mt-4 pt-3 border-t">
-                <Skeleton className="h-3 w-20 mx-auto mb-2" />
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  {Array.from({ length: 3 }).map((_, j) => (
-                    <div key={j}>
-                      <Skeleton className="h-4 w-6 mx-auto mb-1" />
-                      <Skeleton className="h-3 w-8 mx-auto" />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-8" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-8" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-12" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-16" />
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </div>
     </div>
   );
 }
+
+const RankingBadge = ({ rank }: { rank: number }) => {
+  if (rank === 1) {
+    return <Crown className="h-6 w-6 text-yellow-500" />;
+  } else if (rank === 2) {
+    return <Medal className="h-6 w-6 text-gray-400" />;
+  } else if (rank === 3) {
+    return <Award className="h-6 w-6 text-amber-600" />;
+  } else if (rank > 3 && rank <= 10) {
+    return <FileBadge2 className="h-6 w-6 text-gray-400" />;
+  } else if (rank > 10) {
+    return (
+      <div className="w-6 h-6 rounded-full bg-white" />
+    );
+  }
+  return null;
+};
+
+
+const NotAvailableCard = ({ response, title, icon: Icon }: {
+  response: RankingResponse<any>;
+  title: string;
+  icon: any;
+}) => (
+  <Card>
+    <CardContent className="text-center py-12">
+      <Icon className="h-8 w-8 text-muted-foreground mx-auto mb-4" />
+      <h3 className="font-medium mb-2">{title}</h3>
+      <p className="text-muted-foreground text-xs max-w-md mx-auto">
+        {response.error}
+      </p>
+    </CardContent>
+  </Card>
+);
+
+const ExportDialog = ({
+                        rankings,
+                        tournament,
+                        activeTab,
+                        includeElimination
+                      }: {
+  rankings: any[];
+  tournament: any;
+  activeTab: string;
+  includeElimination: boolean;
+}) => {
+  const [open, setOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<'csv' | 'pdf' | 'excel'>('excel');
+  const [isExporting, setIsExporting] = useState(false);
+
+  const exportToExcel = async () => {
+    setIsExporting(true);
+    try {
+      const wb = XLSX.utils.book_new();
+
+      let data: any[] = [];
+      const scope = includeElimination ? 'Full Tournament' : 'Preliminary Rounds';
+
+      switch (activeTab) {
+        case 'teams':
+          data = rankings.map((team: TeamRanking) => ({
+            'Rank': team.rank,
+            'Team Name': team.team_name,
+            'School': team.school_name || 'N/A',
+            'School Type': team.school_type || 'N/A',
+            'Wins': team.total_wins || 0,
+            'Losses': team.total_losses || 0,
+            'Total Points': team.total_points || 0,
+            'Opponent Wins': team.opponents_total_wins || 0,
+            'Opponent Points': team.opponents_total_points || 0,
+            'Head to Head Wins': team.head_to_head_wins || 0,
+            'Eliminated in Round': team.eliminated_in_round || 'N/A'
+          }));
+          break;
+        case 'schools':
+          data = rankings.map((school: SchoolRanking) => ({
+            'Rank': school.rank,
+            'School Name': school.school_name,
+            'School Type': school.school_type,
+            'Total Teams': school.total_teams || 0,
+            'Total Wins': school.total_wins || 0,
+            'Total Points': school.total_points || 0,
+            'Best Team Rank': school.best_team_rank || 'N/A',
+            'Average Team Rank': school.avg_team_rank ? school.avg_team_rank.toFixed(1) : 'N/A'
+          }));
+          break;
+        case 'students':
+          data = rankings.map((student: StudentRanking) => ({
+            'Rank': student.rank,
+            'Speaker Name': student.speaker_name,
+            'Email': student.speaker_email,
+            'Team': student.team_name || 'N/A',
+            'School': student.school_name || 'N/A',
+            'Total Speaker Points': student.total_speaker_points || 0,
+            'Average Score': student.average_speaker_score ? student.average_speaker_score.toFixed(1) : 'N/A',
+            'Team Wins': student.team_wins || 0,
+            'Team Rank': student.team_rank || 'N/A',
+            'Debates Count': student.debates_count || 0,
+            'Highest Score': student.highest_individual_score || 0,
+            'Points Deviation': student.points_deviation ? student.points_deviation.toFixed(2) : 'N/A'
+          }));
+          break;
+        case 'volunteers':
+          data = rankings.map((volunteer: VolunteerRanking) => ({
+            'Rank': volunteer.rank,
+            'Volunteer Name': volunteer.volunteer_name,
+            'Email': volunteer.volunteer_email,
+            'School': volunteer.school_name || 'N/A',
+            'Total Debates Judged': volunteer.total_debates_judged || 0,
+            'Elimination Debates': volunteer.elimination_debates_judged || 0,
+            'Prelim Debates': volunteer.prelim_debates_judged || 0,
+            'Head Judge Assignments': volunteer.head_judge_assignments || 0,
+            'Attendance Score': volunteer.attendance_score ? volunteer.attendance_score.toFixed(1) : 'N/A',
+            'Average Feedback Score': volunteer.avg_feedback_score ? volunteer.avg_feedback_score.toFixed(1) : 'N/A',
+            'Feedback Count': volunteer.total_feedback_count || 0,
+            'Consistency Score': volunteer.consistency_score ? volunteer.consistency_score.toFixed(1) : 'N/A'
+          }));
+          break;
+      }
+
+      const ws = XLSX.utils.json_to_sheet(data);
+      XLSX.utils.book_append_sheet(wb, ws, `${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Rankings`);
+
+      const fileName = `${tournament.name}_${activeTab}_Rankings_${scope.replace(' ', '_')}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+
+      toast.success("Excel file downloaded!");
+    } catch (error) {
+      toast.error("Failed to export Excel file");
+    } finally {
+      setIsExporting(false);
+      setOpen(false);
+    }
+  };
+
+  const exportToPDF = async () => {
+    setIsExporting(true);
+    try {
+      const doc = new jsPDF();
+      const scope = includeElimination ? 'Full Tournament' : 'Preliminary Rounds';
+
+      doc.setFontSize(16);
+      doc.text(`${tournament.name} - ${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Rankings`, 20, 20);
+      doc.setFontSize(12);
+      doc.text(`Scope: ${scope}`, 20, 30);
+
+      let tableData: any[] = [];
+      let headers: string[] = [];
+
+      switch (activeTab) {
+        case 'teams':
+          headers = ['Rank', 'Team', 'School', 'Wins', 'Losses', 'Points'];
+          tableData = rankings.map((team: TeamRanking) => [
+            team.rank,
+            team.team_name,
+            team.school_name || 'N/A',
+            team.total_wins || 0,
+            team.total_losses || 0,
+            team.total_points || 0
+          ]);
+          break;
+        case 'schools':
+          headers = ['Rank', 'School', 'Type', 'Teams', 'Wins', 'Points', 'Best Rank', 'Avg Rank'];
+          tableData = rankings.map((school: SchoolRanking) => [
+            school.rank,
+            school.school_name,
+            school.school_type,
+            school.total_teams || 0,
+            school.total_wins || 0,
+            school.total_points || 0,
+            school.best_team_rank || 'N/A',
+            school.avg_team_rank ? school.avg_team_rank.toFixed(1) : 'N/A'
+          ]);
+          break;
+        case 'students':
+          headers = ['Rank', 'Speaker', 'Team', 'School', 'Points', 'Avg Score', 'Debates'];
+          tableData = rankings.map((student: StudentRanking) => [
+            student.rank,
+            student.speaker_name,
+            student.team_name || 'N/A',
+            student.school_name || 'N/A',
+            student.total_speaker_points || 0,
+            student.average_speaker_score ? student.average_speaker_score.toFixed(1) : 'N/A',
+            student.debates_count || 0
+          ]);
+          break;
+        case 'volunteers':
+          headers = ['Rank', 'Volunteer', 'School', 'Debates', 'Eliminations', 'Feedback', 'Consistency'];
+          tableData = rankings.map((volunteer: VolunteerRanking) => [
+            volunteer.rank,
+            volunteer.volunteer_name,
+            volunteer.school_name || 'N/A',
+            volunteer.total_debates_judged || 0,
+            volunteer.elimination_debates_judged || 0,
+            volunteer.avg_feedback_score ? volunteer.avg_feedback_score.toFixed(1) : 'N/A',
+            volunteer.consistency_score ? volunteer.consistency_score.toFixed(1) : 'N/A'
+          ]);
+          break;
+      }
+
+      autoTable(doc, {
+        head: [headers],
+        body: tableData,
+        startY: 40,
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [66, 139, 202] },
+        margin: { left: 10, right: 10 }
+      });
+
+      const fileName = `${tournament.name}_${activeTab}_Rankings_${scope.replace(' ', '_')}.pdf`;
+      doc.save(fileName);
+
+      toast.success("PDF file downloaded!");
+    } catch (error) {
+      toast.error("Failed to export PDF file");
+    } finally {
+      setIsExporting(false);
+      setOpen(false);
+    }
+  };
+
+  const exportToCSV = async () => {
+    setIsExporting(true);
+    try {
+      let csvContent = "";
+      const scope = includeElimination ? 'Full Tournament' : 'Preliminary Rounds';
+
+      switch (activeTab) {
+        case 'teams':
+          csvContent = "Rank,Team Name,School,School Type,Wins,Losses,Total Points,Opponent Wins,Opponent Points,Head to Head Wins,Eliminated in Round\n";
+          csvContent += rankings.map((team: TeamRanking) =>
+            `${team.rank},"${team.team_name}","${team.school_name || 'N/A'}","${team.school_type || 'N/A'}",${team.total_wins || 0},${team.total_losses || 0},${team.total_points || 0},${team.opponents_total_wins || 0},${team.opponents_total_points || 0},${team.head_to_head_wins || 0},"${team.eliminated_in_round || 'N/A'}"`
+          ).join('\n');
+          break;
+        case 'schools':
+          csvContent = "Rank,School Name,School Type,Total Teams,Total Wins,Total Points,Best Team Rank,Average Team Rank\n";
+          csvContent += rankings.map((school: SchoolRanking) =>
+            `${school.rank},"${school.school_name}","${school.school_type}",${school.total_teams || 0},${school.total_wins || 0},${school.total_points || 0},${school.best_team_rank || 'N/A'},${school.avg_team_rank ? school.avg_team_rank.toFixed(1) : 'N/A'}`
+          ).join('\n');
+          break;
+        case 'students':
+          csvContent = "Rank,Speaker Name,Email,Team,School,Total Speaker Points,Average Score,Team Wins,Team Rank,Debates Count,Highest Score,Points Deviation\n";
+          csvContent += rankings.map((student: StudentRanking) =>
+            `${student.rank},"${student.speaker_name}","${student.speaker_email}","${student.team_name || 'N/A'}","${student.school_name || 'N/A'}",${student.total_speaker_points || 0},${student.average_speaker_score ? student.average_speaker_score.toFixed(1) : 'N/A'},${student.team_wins || 0},${student.team_rank || 'N/A'},${student.debates_count || 0},${student.highest_individual_score || 0},${student.points_deviation ? student.points_deviation.toFixed(2) : 'N/A'}`
+          ).join('\n');
+          break;
+        case 'volunteers':
+          csvContent = "Rank,Volunteer Name,Email,School,Total Debates Judged,Elimination Debates,Prelim Debates,Head Judge Assignments,Attendance Score,Average Feedback Score,Feedback Count,Consistency Score\n";
+          csvContent += rankings.map((volunteer: VolunteerRanking) =>
+            `${volunteer.rank},"${volunteer.volunteer_name}","${volunteer.volunteer_email}","${volunteer.school_name || 'N/A'}",${volunteer.total_debates_judged || 0},${volunteer.elimination_debates_judged || 0},${volunteer.prelim_debates_judged || 0},${volunteer.head_judge_assignments || 0},${volunteer.attendance_score ? volunteer.attendance_score.toFixed(1) : 'N/A'},${volunteer.avg_feedback_score ? volunteer.avg_feedback_score.toFixed(1) : 'N/A'},${volunteer.total_feedback_count || 0},${volunteer.consistency_score ? volunteer.consistency_score.toFixed(1) : 'N/A'}`
+          ).join('\n');
+          break;
+      }
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `${tournament.name}_${activeTab}_Rankings_${scope.replace(' ', '_')}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast.success("CSV file downloaded!");
+    } catch (error) {
+      toast.error("Failed to export CSV file");
+    } finally {
+      setIsExporting(false);
+      setOpen(false);
+    }
+  };
+
+  const handleExport = () => {
+    switch (exportFormat) {
+      case 'excel':
+        exportToExcel();
+        break;
+      case 'pdf':
+        exportToPDF();
+        break;
+      case 'csv':
+        exportToCSV();
+        break;
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm">
+          <Download className="h-4 w-4 mr-1" />
+          Export
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Export Rankings</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div>
+            <Label className="text-sm font-medium">Export Format</Label>
+            <Select value={exportFormat} onValueChange={(value: 'csv' | 'pdf' | 'excel') => setExportFormat(value)}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="excel">
+                  <div className="flex items-center gap-2">
+                    <FileSpreadsheet className="h-4 w-4" />
+                    Excel (.xlsx)
+                  </div>
+                </SelectItem>
+                <SelectItem value="pdf">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    PDF
+                  </div>
+                </SelectItem>
+                <SelectItem value="csv">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    CSV
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="text-sm text-muted-foreground">
+            <p><strong>Exporting:</strong> {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Rankings</p>
+            <p><strong>Scope:</strong> {includeElimination ? 'Full Tournament' : 'Preliminary Rounds'}</p>
+            <p><strong>Records:</strong> {rankings.length} entries</p>
+          </div>
+
+          <div className="flex gap-2 pt-4">
+            <Button onClick={handleExport} disabled={isExporting || rankings.length === 0} className="flex-1">
+              {isExporting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Exporting...
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4 mr-2" />
+                  Export {exportFormat.toUpperCase()}
+                </>
+              )}
+            </Button>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
 
 export default function TournamentRankings({
                                              tournament,
                                              userRole,
                                              token,
                                            }: TournamentRankingsProps) {
-
-
   const [activeTab, setActiveTab] = useState<'teams' | 'schools' | 'students' | 'volunteers'>('teams');
   const [includeElimination, setIncludeElimination] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'rank' | 'name' | 'performance'>('rank');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [sortDirection,] = useState<'asc' | 'desc'>('asc');
   const [filterSchool, setFilterSchool] = useState<string>('all');
-  const [showDetails, setShowDetails] = useState<Record<string, boolean>>({});
-  const [exportFormat, setExportFormat] = useState<'csv' | 'pdf'>('csv');
+  const [isTabLoading, setIsTabLoading] = useState(false);
 
   const isAdmin = userRole === 'admin';
   const hasToken = Boolean(token);
 
   const canViewRankings = hasToken;
-  const canRecalculateRankings = isAdmin;
   const canManageReleaseSettings = isAdmin;
   const canToggleElimination = isAdmin;
   const canExportRankings = isAdmin;
 
   const scope = includeElimination ? "full_tournament" : "prelims";
-
-  console.log('Debug Info:', {
-    userRole,
-    hasToken: Boolean(token),
-    tournamentRankingReleased: tournament.ranking_released,
-    includeElimination,
-    scope: includeElimination ? "full_tournament" : "prelims"
-  });
 
   const teamRankingsResponse = useQuery(
     api.functions.rankings.getTeamRankings,
@@ -324,24 +673,6 @@ export default function TournamentRankings({
   );
   const volunteerError = volunteerRankingsResponse?.success === false ? volunteerRankingsResponse.error : null;
 
-  console.log('Query Results:', {
-    teamRankingsResponse,
-    schoolRankingsResponse,
-    studentRankingsResponse,
-    volunteerRankingsResponse
-  });
-
-  console.log('Computed Values:', {
-    teamRankings,
-    teamError,
-    schoolRankings,
-    schoolError,
-    studentRankings,
-    studentError,
-    volunteerRankings,
-    volunteerError
-  });
-
   const [releaseSettings, setReleaseSettings] = useState({
     prelims: {
       teams: false,
@@ -363,6 +694,15 @@ export default function TournamentRankings({
       setReleaseSettings(tournament.ranking_released);
     }
   }, [tournament, canManageReleaseSettings]);
+
+  useEffect(() => {
+    setIsTabLoading(true);
+    const timer = setTimeout(() => {
+      setIsTabLoading(false);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [activeTab, includeElimination]);
 
   const filteredAndSortedRankings = useMemo(() => {
     let rankings: any[] = [];
@@ -461,416 +801,9 @@ export default function TournamentRankings({
     }
   };
 
-  const exportRankings = () => {
-    if (!canExportRankings) {
-      toast.error("You don't have permission to export rankings");
-      return;
-    }
-
-    const currentData = filteredAndSortedRankings;
-    if (!currentData || currentData.length === 0) {
-      toast.error("No data to export");
-      return;
-    }
-
-    const headers = Object.keys(currentData[0] || {});
-
-    if (exportFormat === 'csv') {
-      const csv = [
-        headers.join(','),
-        ...currentData.map((row: any) => headers.map(header => {
-          const value = row[header];
-          return typeof value === 'string' && value.includes(',') ? `"${value}"` : value;
-        }).join(','))
-      ].join('\n');
-
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${tournament.name}-${activeTab}-rankings${includeElimination ? '-full' : '-prelims'}.csv`;
-      a.click();
-      window.URL.revokeObjectURL(url);
-
-      toast.success("Rankings exported successfully");
-    } else {
-      toast.info("PDF export coming soon");
-    }
-  };
-
-  const toggleDetails = (id: string) => {
-    setShowDetails(prev => ({
-      ...prev,
-      [id]: !prev[id]
-    }));
-  };
-
-  const RankingBadge = ({ rank }: { rank: number }) => {
-    if (rank === 1) {
-      return <Crown className="h-6 w-6 text-yellow-500" />;
-    } else if (rank === 2) {
-      return <Medal className="h-6 w-6 text-gray-400" />;
-    } else if (rank === 3) {
-      return <Award className="h-6 w-6 text-amber-600" />;
-    }
-    return (
-      <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-sm font-bold text-muted-foreground">
-        {rank}
-      </div>
-    );
-  };
-
-  const PerformanceIndicator = ({ value, max, label }: { value: number; max: number; label: string }) => {
-    const percentage = Math.min((value / max) * 100, 100);
-    const getColor = () => {
-      if (percentage >= 80) return 'bg-green-500';
-      if (percentage >= 60) return 'bg-yellow-500';
-      return 'bg-red-500';
-    };
-
-    return (
-      <div className="space-y-1">
-        <div className="flex justify-between text-xs">
-          <span>{label}</span>
-          <span>{value}/{max}</span>
-        </div>
-        <div className="w-full bg-muted rounded-full h-2">
-          <div
-            className={`h-2 rounded-full transition-all duration-300 ${getColor()}`}
-            style={{ width: `${percentage}%` }}
-          />
-        </div>
-      </div>
-    );
-  };
-
-  const NotAvailableCard = ({ response, title, icon: Icon }: {
-    response: RankingResponse<any>;
-    title: string;
-    icon: any;
-  }) => (
-    <Card>
-      <CardContent className="text-center py-12">
-        <Icon className="h-8 w-8 text-muted-foreground mx-auto mb-4" />
-        <h3 className="font-medium mb-2">{title}</h3>
-        <p className="text-muted-foreground text-xs max-w-md mx-auto">
-          {response.error}
-        </p>
-        {canRecalculateRankings && response.type === 'data_insufficient' && (
-          <div className="mt-4">
-            <Alert className="text-left max-w-md mx-auto">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Admin Note</AlertTitle>
-              <AlertDescription className="text-xs">
-                Rankings become available once preliminary rounds are completed and results are scored.
-              </AlertDescription>
-            </Alert>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-
-  const TeamRankingCard = ({ team }: { team: TeamRanking }) => (
-    <Card className="hover:shadow-md transition-all duration-200">
-      <CardContent className="p-6">
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <RankingBadge rank={team.rank} />
-            <div>
-              <h3 className="font-semibold text-lg">{team.team_name}</h3>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                {team.school_name && <span>{team.school_name}</span>}
-                {team.school_type && <Badge variant="outline">{team.school_type}</Badge>}
-              </div>
-            </div>
-          </div>
-          <div className="text-right">
-            <div className="text-2xl font-bold text-primary">{team.total_wins}</div>
-            <div className="text-sm text-muted-foreground">wins</div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-3 gap-4 mb-4">
-          <div className="text-center">
-            <div className="text-xl font-bold">{team.total_points}</div>
-            <div className="text-xs text-muted-foreground">Total Points</div>
-          </div>
-          <div className="text-center">
-            <div className="text-xl font-bold">{team.total_losses}</div>
-            <div className="text-xs text-muted-foreground">Losses</div>
-          </div>
-          <div className="text-center">
-            <div className="text-xl font-bold">{team.opponents_total_wins}</div>
-            <div className="text-xs text-muted-foreground">Opp Wins</div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 text-center text-sm">
-          <div>
-            <div className="font-medium">{team.opponents_total_points}</div>
-            <div className="text-xs text-muted-foreground">Opponent Points</div>
-          </div>
-          <div>
-            <div className="font-medium">{team.head_to_head_wins}</div>
-            <div className="text-xs text-muted-foreground">H2H Wins</div>
-          </div>
-        </div>
-
-        {team.eliminated_in_round && (
-          <div className="mt-3 pt-3 border-t">
-            <Badge variant="secondary" className="w-full justify-center">
-              Eliminated in Round {team.eliminated_in_round}
-            </Badge>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-
-  const SchoolRankingCard = ({ school }: { school: SchoolRanking }) => (
-    <Card className="hover:shadow-md transition-all duration-200">
-      <CardContent className="p-6">
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <RankingBadge rank={school.rank} />
-            <div>
-              <h3 className="font-semibold text-lg">{school.school_name}</h3>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Badge variant="outline">{school.school_type}</Badge>
-                <span>{school.total_teams} teams</span>
-              </div>
-            </div>
-          </div>
-          <div className="text-right">
-            <div className="text-2xl font-bold text-primary">{school.total_wins}</div>
-            <div className="text-sm text-muted-foreground">wins</div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-3 gap-4 mb-4">
-          <div className="text-center">
-            <div className="text-xl font-bold">{school.total_points}</div>
-            <div className="text-xs text-muted-foreground">Total Points</div>
-          </div>
-          <div className="text-center">
-            <div className="text-xl font-bold">#{school.best_team_rank}</div>
-            <div className="text-xs text-muted-foreground">Best Team</div>
-          </div>
-          <div className="text-center">
-            <div className="text-xl font-bold">{school.avg_team_rank.toFixed(1)}</div>
-            <div className="text-xs text-muted-foreground">Avg Rank</div>
-          </div>
-        </div>
-
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => toggleDetails(school.school_id)}
-          className="w-full"
-        >
-          {showDetails[school.school_id] ? (
-            <>
-              <ChevronUp className="h-4 w-4 mr-1" />
-              Hide Teams
-            </>
-          ) : (
-            <>
-              <ChevronDown className="h-4 w-4 mr-1" />
-              Show Teams ({school.teams.length})
-            </>
-          )}
-        </Button>
-
-        {showDetails[school.school_id] && (
-          <>
-            <Separator className="my-3" />
-            <div className="space-y-2">
-              {school.teams.map((team) => (
-                <div key={team.team_id} className="flex items-center justify-between text-sm p-2 bg-muted/50 rounded">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline">#{team.rank}</Badge>
-                    <span className="font-medium">{team.team_name}</span>
-                  </div>
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                    <span>{team.wins} wins</span>
-                    <span>{team.total_points} pts</span>
-                    {team.eliminated_in_round && (
-                      <Badge variant="secondary">
-                        Elim R{team.eliminated_in_round}
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
-  );
-
-  const StudentRankingCard = ({ student }: { student: StudentRanking }) => (
-    <Card className="hover:shadow-md transition-all duration-200">
-      <CardContent className="p-6">
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <RankingBadge rank={student.rank} />
-            <div>
-              <h3 className="font-semibold text-lg">{student.speaker_name}</h3>
-              <div className="text-sm text-muted-foreground">
-                {student.team_name && <div>{student.team_name}</div>}
-                {student.school_name && <div>{student.school_name}</div>}
-              </div>
-            </div>
-          </div>
-          <div className="text-right">
-            <div className="text-2xl font-bold text-primary">{student.total_speaker_points}</div>
-            <div className="text-sm text-muted-foreground">total points</div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <PerformanceIndicator
-            value={student.total_speaker_points}
-            max={Math.max(100, student.total_speaker_points)}
-            label="Speaker Points"
-          />
-          <PerformanceIndicator
-            value={student.team_wins}
-            max={tournament.prelim_rounds + (includeElimination ? tournament.elimination_rounds : 0)}
-            label="Team Wins"
-          />
-        </div>
-
-        <div className="grid grid-cols-4 gap-2 text-center">
-          <div>
-            <div className="text-lg font-bold">{student.average_speaker_score.toFixed(1)}</div>
-            <div className="text-xs text-muted-foreground">Avg Score</div>
-          </div>
-          <div>
-            <div className="text-lg font-bold">#{student.team_rank}</div>
-            <div className="text-xs text-muted-foreground">Team Rank</div>
-          </div>
-          <div>
-            <div className="text-lg font-bold">{student.debates_count}</div>
-            <div className="text-xs text-muted-foreground">Debates</div>
-          </div>
-          <div>
-            <div className="text-lg font-bold">{student.highest_individual_score}</div>
-            <div className="text-xs text-muted-foreground">Best Score</div>
-          </div>
-        </div>
-
-        <div className="mt-3 pt-3 border-t text-center text-sm">
-          <div className="font-medium">{student.points_deviation.toFixed(2)}</div>
-          <div className="text-xs text-muted-foreground">Points Deviation</div>
-        </div>
-
-        {student.cross_tournament_performance.tournaments_participated > 0 && (
-          <div className="mt-4 pt-3 border-t">
-            <div className="text-sm font-medium mb-2">Cross-Tournament Performance</div>
-            <div className="grid grid-cols-3 gap-2 text-center text-xs">
-              <div>
-                <div className="font-medium">{student.cross_tournament_performance.tournaments_participated}</div>
-                <div className="text-muted-foreground">Tournaments</div>
-              </div>
-              <div>
-                <div className="font-medium">{student.cross_tournament_performance.avg_points_per_tournament.toFixed(1)}</div>
-                <div className="text-muted-foreground">Avg Points</div>
-              </div>
-              <div>
-                <div className="font-medium">
-                  {student.cross_tournament_performance.best_tournament_rank ?
-                    `#${student.cross_tournament_performance.best_tournament_rank}` : 'N/A'
-                  }
-                </div>
-                <div className="text-muted-foreground">Best Rank</div>
-              </div>
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-
-  const VolunteerRankingCard = ({ volunteer }: { volunteer: VolunteerRanking }) => (
-    <Card className="hover:shadow-md transition-all duration-200">
-      <CardContent className="p-6">
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <RankingBadge rank={volunteer.rank} />
-            <div>
-              <h3 className="font-semibold text-lg">{volunteer.volunteer_name}</h3>
-              {volunteer.school_name && (
-                <div className="text-sm text-muted-foreground">{volunteer.school_name}</div>
-              )}
-            </div>
-          </div>
-          <div className="text-right">
-            <div className="text-2xl font-bold text-primary">{volunteer.total_debates_judged}</div>
-            <div className="text-sm text-muted-foreground">debates judged</div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <PerformanceIndicator
-            value={volunteer.elimination_debates_judged}
-            max={volunteer.total_debates_judged}
-            label="Elimination Debates"
-          />
-          <PerformanceIndicator
-            value={Math.round(volunteer.avg_feedback_score)}
-            max={5}
-            label="Feedback Rating"
-          />
-        </div>
-
-        <div className="grid grid-cols-4 gap-2 text-center mb-4">
-          <div>
-            <div className="text-lg font-bold">{volunteer.head_judge_assignments}</div>
-            <div className="text-xs text-muted-foreground">Head Judge</div>
-          </div>
-          <div>
-            <div className="text-lg font-bold">{volunteer.attendance_score.toFixed(1)}</div>
-            <div className="text-xs text-muted-foreground">Attendance</div>
-          </div>
-          <div>
-            <div className="text-lg font-bold">{volunteer.consistency_score.toFixed(1)}</div>
-            <div className="text-xs text-muted-foreground">Consistency</div>
-          </div>
-          <div>
-            <div className="text-lg font-bold">{volunteer.total_feedback_count}</div>
-            <div className="text-xs text-muted-foreground">Reviews</div>
-          </div>
-        </div>
-
-        {volunteer.cross_tournament_stats.tournaments_judged > 0 && (
-          <div className="pt-3 border-t">
-            <div className="text-sm font-medium mb-2">Cross-Tournament Stats</div>
-            <div className="grid grid-cols-3 gap-2 text-center text-xs">
-              <div>
-                <div className="font-medium">{volunteer.cross_tournament_stats.tournaments_judged}</div>
-                <div className="text-muted-foreground">Tournaments</div>
-              </div>
-              <div>
-                <div className="font-medium">{volunteer.cross_tournament_stats.total_debates_across_tournaments}</div>
-                <div className="text-muted-foreground">Total Debates</div>
-              </div>
-              <div>
-                <div className="font-medium">{volunteer.cross_tournament_stats.avg_feedback_across_tournaments.toFixed(1)}</div>
-                <div className="text-muted-foreground">Avg Rating</div>
-              </div>
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
+  const currentRankings = filteredAndSortedRankings;
 
   const isLoading = !teamRankingsResponse || !schoolRankingsResponse || !studentRankingsResponse || !volunteerRankingsResponse;
-
-  const currentRankings = filteredAndSortedRankings;
 
   if (isLoading) {
     return (
@@ -880,6 +813,360 @@ export default function TournamentRankings({
     );
   }
 
+  const renderTeamsTable = () => {
+    if (teamError) {
+      return (
+        <NotAvailableCard
+          response={teamRankingsResponse!}
+          title="Team Rankings Not Available"
+          icon={UsersRound}
+        />
+      );
+    }
+
+    if (currentRankings.length === 0) {
+      return (
+        <Card>
+          <CardContent className="text-center py-12">
+            <UsersRound className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-medium mb-2">No Team Rankings</h3>
+            <p className="text-muted-foreground">
+              {searchQuery || filterSchool !== 'all'
+                ? 'No teams match your search criteria.'
+                : 'Team rankings will appear here once calculated.'
+              }
+            </p>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    return (
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-16">Rank</TableHead>
+              <TableHead>Team</TableHead>
+              <TableHead className="w-20">Wins</TableHead>
+              <TableHead className="w-20">Losses</TableHead>
+              <TableHead className="w-24">Points</TableHead>
+              <TableHead className="w-24">Opp Wins</TableHead>
+              <TableHead className="w-24">Opp Points</TableHead>
+              <TableHead className="w-20">H2H</TableHead>
+              <TableHead className="w-32">Status</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {currentRankings.map((team: TeamRanking) => (
+              <TableRow key={team.team_id}>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <RankingBadge rank={team.rank} />
+                    <span className="font-bold">{team.rank}</span>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div>
+                    <div className="font-semibold">{team.team_name}</div>
+                    <div className="text-sm text-muted-foreground flex items-center gap-1">
+                      {team.school_name && <span>{team.school_name}</span>}
+                      {team.school_type && <Badge variant="outline" className="text-xs">{team.school_type}</Badge>}
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <span className="text-green-600 font-bold">{team.total_wins || 0}</span>
+                </TableCell>
+                <TableCell>
+                  <span className="text-red-600">{team.total_losses || 0}</span>
+                </TableCell>
+                <TableCell>
+                  <span className="font-semibold">{team.total_points || 0}</span>
+                </TableCell>
+                <TableCell>
+                  <span>{team.opponents_total_wins || 0}</span>
+                </TableCell>
+                <TableCell>
+                  <span>{(team.opponents_total_points || 0).toFixed(1)}</span>
+                </TableCell>
+                <TableCell>
+                  <span>{team.head_to_head_wins || 0}</span>
+                </TableCell>
+                <TableCell>
+                  {team.eliminated_in_round ? (
+                    <Badge variant="secondary">
+                      Elim R{team.eliminated_in_round}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline">Active</Badge>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    );
+  };
+
+  const renderSchoolsTable = () => {
+    if (schoolError) {
+      return (
+        <NotAvailableCard
+          response={schoolRankingsResponse!}
+          title="School Rankings Not Available"
+          icon={Building}
+        />
+      );
+    }
+
+    if (currentRankings.length === 0) {
+      return (
+        <Card>
+          <CardContent className="text-center py-12">
+            <Building className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-medium mb-2">No School Rankings</h3>
+            <p className="text-muted-foreground">
+              {searchQuery || filterSchool !== 'all'
+                ? 'No schools match your search criteria.'
+                : 'School rankings will appear here once calculated.'
+              }
+            </p>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    return (
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-16">Rank</TableHead>
+              <TableHead>School</TableHead>
+              <TableHead className="w-20">Teams</TableHead>
+              <TableHead className="w-20">Wins</TableHead>
+              <TableHead className="w-24">Points</TableHead>
+              <TableHead className="w-24">Best Rank</TableHead>
+              <TableHead className="w-24">Avg Rank</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {currentRankings.map((school: SchoolRanking) => (
+              <TableRow key={school.school_id}>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <RankingBadge rank={school.rank} />
+                    <span className="font-bold">{school.rank}</span>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div>
+                    <div className="font-semibold">{school.school_name}</div>
+                    <div className="text-sm text-muted-foreground">
+                      <Badge variant="outline" className="text-xs">{school.school_type}</Badge>
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <span className="font-semibold">{school.total_teams || 0}</span>
+                </TableCell>
+                <TableCell>
+                  <span className="text-green-600 font-bold">{school.total_wins || 0}</span>
+                </TableCell>
+                <TableCell>
+                  <span className="font-semibold">{school.total_points || 0}</span>
+                </TableCell>
+                <TableCell>
+                  <span className="text-blue-600 font-semibold">#{school.best_team_rank || 'N/A'}</span>
+                </TableCell>
+                <TableCell>
+                  <span>{school.avg_team_rank ? school.avg_team_rank.toFixed(1) : 'N/A'}</span>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    );
+  };
+
+  const renderStudentsTable = () => {
+    if (studentError) {
+      return (
+        <NotAvailableCard
+          response={studentRankingsResponse!}
+          title="Student Rankings Not Available"
+          icon={GraduationCap}
+        />
+      );
+    }
+
+    if (currentRankings.length === 0) {
+      return (
+        <Card>
+          <CardContent className="text-center py-12">
+            <GraduationCap className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-medium mb-2">No Student Rankings</h3>
+            <p className="text-muted-foreground">
+              {searchQuery || filterSchool !== 'all'
+                ? 'No students match your search criteria.'
+                : 'Student rankings will appear here once calculated.'
+              }
+            </p>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    return (
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-16">Rank</TableHead>
+              <TableHead>Speaker</TableHead>
+              <TableHead className="w-24">Points</TableHead>
+              <TableHead className="w-20">Avg Score</TableHead>
+              <TableHead className="w-20">Team Wins</TableHead>
+              <TableHead className="w-24">Team Rank</TableHead>
+              <TableHead className="w-20">Debates</TableHead>
+              <TableHead className="w-20">Best Score</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {currentRankings.map((student: StudentRanking) => (
+              <TableRow key={student.speaker_id}>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <RankingBadge rank={student.rank} />
+                    <span className="font-bold">{student.rank}</span>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div>
+                    <div className="font-semibold">{student.speaker_name}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {student.team_name && <div>{student.team_name}</div>}
+                      {student.school_name && <div>{student.school_name}</div>}
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <span className="text-primary font-bold">{student.total_speaker_points || 0}</span>
+                </TableCell>
+                <TableCell>
+                  <span>{student.average_speaker_score ? student.average_speaker_score.toFixed(1) : 'N/A'}</span>
+                </TableCell>
+                <TableCell>
+                  <span className="text-green-600">{student.team_wins || 0}</span>
+                </TableCell>
+                <TableCell>
+                  <span>#{student.team_rank || 'N/A'}</span>
+                </TableCell>
+                <TableCell>
+                  <span>{student.debates_count || 0}</span>
+                </TableCell>
+                <TableCell>
+                  <span className="font-semibold">{student.highest_individual_score || 0}</span>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    );
+  };
+
+  const renderVolunteersTable = () => {
+    if (volunteerError) {
+      return (
+        <NotAvailableCard
+          response={volunteerRankingsResponse!}
+          title="Volunteer Rankings Not Available"
+          icon={Star}
+        />
+      );
+    }
+
+    if (currentRankings.length === 0) {
+      return (
+        <Card>
+          <CardContent className="text-center py-12">
+            <Star className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-medium mb-2">No Volunteer Rankings</h3>
+            <p className="text-muted-foreground">
+              {searchQuery || filterSchool !== 'all'
+                ? 'No volunteers match your search criteria.'
+                : 'Volunteer rankings will appear here once calculated.'
+              }
+            </p>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    return (
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-16">Rank</TableHead>
+              <TableHead>Volunteer</TableHead>
+              <TableHead className="w-20">Debates</TableHead>
+              <TableHead className="w-20">Eliminations</TableHead>
+              <TableHead className="w-20">Head Judge</TableHead>
+              <TableHead className="w-24">Feedback</TableHead>
+              <TableHead className="w-24">Consistency</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {currentRankings.map((volunteer: VolunteerRanking) => (
+              <TableRow key={volunteer.volunteer_id}>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <RankingBadge rank={volunteer.rank} />
+                    <span className="font-bold">{volunteer.rank}</span>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div>
+                    <div className="font-semibold">{volunteer.volunteer_name}</div>
+                    {volunteer.school_name && (
+                      <div className="text-sm text-muted-foreground">{volunteer.school_name}</div>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <span className="text-primary font-bold">{volunteer.total_debates_judged || 0}</span>
+                </TableCell>
+                <TableCell>
+                  <span className="text-purple-600">{volunteer.elimination_debates_judged || 0}</span>
+                </TableCell>
+                <TableCell>
+                  <span className="text-blue-600">{volunteer.head_judge_assignments || 0}</span>
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <span>{volunteer.avg_feedback_score ? volunteer.avg_feedback_score.toFixed(1) : 'N/A'}</span>
+                    <Progress
+                      value={volunteer.avg_feedback_score ? (volunteer.avg_feedback_score / 5) * 100 : 0}
+                      className="w-12 h-2"
+                    />
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <span>{volunteer.consistency_score ? volunteer.consistency_score.toFixed(1) : 'N/A'}</span>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       <Card>
@@ -887,9 +1174,9 @@ export default function TournamentRankings({
           <div>
             <h2 className="text-xl text-white font-bold">Tournament Rankings</h2>
             <div className="flex items-center gap-4 text-xs text-gray-300">
-            <span>
-              {includeElimination ? 'Full Tournament' : 'Preliminary Rounds'} Results
-            </span>
+              <span>
+                {includeElimination ? 'Full Tournament' : 'Preliminary Rounds'} Results
+              </span>
               {currentRankings.length > 0 && (
                 <span>{currentRankings.length} entries</span>
               )}
@@ -910,32 +1197,18 @@ export default function TournamentRankings({
               </div>
             )}
 
-            {canExportRankings && (
-              <>
-                <Select value={exportFormat} onValueChange={(value: 'csv' | 'pdf') => setExportFormat(value)}>
-                  <SelectTrigger className="w-18 h-8 bg-background">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="csv">CSV</SelectItem>
-                    <SelectItem value="pdf">PDF</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <Button
-                  onClick={exportRankings}
-                  disabled={!currentRankings || currentRankings.length === 0}
-                  size="sm"
-                >
-                  <Download className="h-4 w-4" />
-                  <span className="hidden custom:block">Export</span>
-                </Button>
-              </>
+            {canExportRankings && currentRankings.length > 0 && (
+              <ExportDialog
+                rankings={currentRankings}
+                tournament={tournament}
+                activeTab={activeTab}
+                includeElimination={includeElimination}
+              />
             )}
           </div>
         </div>
-        <div className="p-4 space-y-2">
 
+        <div className="p-4 space-y-2">
           {canManageReleaseSettings && (
             <Alert>
               <Settings className="h-4 w-4" />
@@ -1001,8 +1274,6 @@ export default function TournamentRankings({
             </Alert>
           )}
 
-
-
           <Card>
             <CardContent className="p-4">
               <div className="flex flex-col lg:flex-row gap-4">
@@ -1030,14 +1301,6 @@ export default function TournamentRankings({
                     </SelectContent>
                   </Select>
 
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
-                  >
-                    {sortDirection === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </Button>
-
                   {availableSchools.length > 0 && (
                     <Select value={filterSchool} onValueChange={setFilterSchool}>
                       <SelectTrigger className="w-40">
@@ -1057,7 +1320,6 @@ export default function TournamentRankings({
               </div>
             </CardContent>
           </Card>
-
 
           <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)}>
             <TabsList className="grid w-full grid-cols-4">
@@ -1099,175 +1361,27 @@ export default function TournamentRankings({
               </TabsTrigger>
             </TabsList>
 
-            {isLoading && (
+            {isTabLoading && (
               <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin" />
+                <Loader2 className="h-6 w-6 text-primary animate-spin" />
                 <span className="ml-2">Loading rankings...</span>
               </div>
             )}
 
             <TabsContent value="teams" className="space-y-4">
-              {teamError ? (
-                <NotAvailableCard
-                  response={teamRankingsResponse!}
-                  title="Team Rankings Not Available"
-                  icon={UsersRound}
-                />
-              ) : currentRankings.length > 0 ? (
-                <div className="grid gap-4 lg:grid-cols-2">
-                  {currentRankings.map((team: TeamRanking) => (
-                    <TeamRankingCard key={team.team_id} team={team} />
-                  ))}
-                </div>
-              ) : (
-                <Card>
-                  <CardContent className="text-center py-12">
-                    <UsersRound className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <h3 className="text-lg font-medium mb-2">No Team Rankings</h3>
-                    <p className="text-muted-foreground">
-                      {searchQuery || filterSchool !== 'all'
-                        ? 'No teams match your search criteria.'
-                        : 'Team rankings will appear here once calculated.'
-                      }
-                    </p>
-                    {(searchQuery || filterSchool !== 'all') && (
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setSearchQuery('');
-                          setFilterSchool('all');
-                        }}
-                        className="mt-3"
-                      >
-                        Clear Filters
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
+              {!isTabLoading && renderTeamsTable()}
             </TabsContent>
 
             <TabsContent value="schools" className="space-y-4">
-              {schoolError ? (
-                <NotAvailableCard
-                  response={schoolRankingsResponse!}
-                  title="School Rankings Not Available"
-                  icon={Building}
-                />
-              ) : currentRankings.length > 0 ? (
-                <div className="grid gap-4 lg:grid-cols-2">
-                  {currentRankings.map((school: SchoolRanking) => (
-                    <SchoolRankingCard key={school.school_id} school={school} />
-                  ))}
-                </div>
-              ) : (
-                <Card>
-                  <CardContent className="text-center py-12">
-                    <Building className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <h3 className="text-lg font-medium mb-2">No School Rankings</h3>
-                    <p className="text-muted-foreground">
-                      {searchQuery || filterSchool !== 'all'
-                        ? 'No schools match your search criteria.'
-                        : 'School rankings will appear here once calculated.'
-                      }
-                    </p>
-                    {(searchQuery || filterSchool !== 'all') && (
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setSearchQuery('');
-                          setFilterSchool('all');
-                        }}
-                        className="mt-3"
-                      >
-                        Clear Filters
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
+              {!isTabLoading && renderSchoolsTable()}
             </TabsContent>
 
             <TabsContent value="students" className="space-y-4">
-              {studentError ? (
-                <NotAvailableCard
-                  response={studentRankingsResponse!}
-                  title="Student Rankings Not Available"
-                  icon={Users}
-                />
-              ) : currentRankings.length > 0 ? (
-                <div className="grid gap-4 lg:grid-cols-2">
-                  {currentRankings.map((student: StudentRanking) => (
-                    <StudentRankingCard key={student.speaker_id} student={student} />
-                  ))}
-                </div>
-              ) : (
-                <Card>
-                  <CardContent className="text-center py-12">
-                    <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <h3 className="text-lg font-medium mb-2">No Student Rankings</h3>
-                    <p className="text-muted-foreground">
-                      {searchQuery || filterSchool !== 'all'
-                        ? 'No students match your search criteria.'
-                        : 'Student rankings will appear here once calculated.'
-                      }
-                    </p>
-                    {(searchQuery || filterSchool !== 'all') && (
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setSearchQuery('');
-                          setFilterSchool('all');
-                        }}
-                        className="mt-3"
-                      >
-                        Clear Filters
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
+              {!isTabLoading && renderStudentsTable()}
             </TabsContent>
 
             <TabsContent value="volunteers" className="space-y-4">
-              {volunteerError ? (
-                <NotAvailableCard
-                  response={volunteerRankingsResponse!}
-                  title="Volunteer Rankings Not Available"
-                  icon={Star}
-                />
-              ) : currentRankings.length > 0 ? (
-                <div className="grid gap-4 lg:grid-cols-2">
-                  {currentRankings.map((volunteer: VolunteerRanking) => (
-                    <VolunteerRankingCard key={volunteer.volunteer_id} volunteer={volunteer} />
-                  ))}
-                </div>
-              ) : (
-                <Card>
-                  <CardContent className="text-center py-12">
-                    <Star className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <h3 className="text-lg font-medium mb-2">No Volunteer Rankings</h3>
-                    <p className="text-muted-foreground">
-                      {searchQuery || filterSchool !== 'all'
-                        ? 'No volunteers match your search criteria.'
-                        : 'Volunteer rankings will appear here once calculated.'
-                      }
-                    </p>
-                    {(searchQuery || filterSchool !== 'all') && (
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setSearchQuery('');
-                          setFilterSchool('all');
-                        }}
-                        className="mt-3"
-                      >
-                        Clear Filters
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
+              {!isTabLoading && renderVolunteersTable()}
             </TabsContent>
           </Tabs>
         </div>

@@ -153,6 +153,49 @@ export const getAllTournamentBallots = query({
   },
 });
 
+const checkAndUpdateRoundCompletion = async (ctx: any, roundId: Id<"rounds">) => {
+  const round = await ctx.db.get(roundId);
+  if (!round || round.status === "completed") return;
+
+  const roundDebates = await ctx.db
+    .query("debates")
+    .withIndex("by_round_id", (q: any) => q.eq("round_id", roundId))
+    .collect();
+
+  if (roundDebates.length === 0) return;
+
+  const allDebatesCompleted = roundDebates.every((debate: any) => {
+    return debate.status === "completed" && debate.winning_team_id;
+  });
+
+  let allBallotsSubmitted = true;
+  for (const debate of roundDebates) {
+    if (debate.judges && debate.judges.length > 0) {
+      const submissions = await ctx.db
+        .query("judging_scores")
+        .withIndex("by_debate_id", (q: any) => q.eq("debate_id", debate._id))
+        .filter((q: any) => q.eq(q.field("feedback_submitted"), true))
+        .collect();
+
+      if (submissions.length < debate.judges.length) {
+        allBallotsSubmitted = false;
+        break;
+      }
+    }
+  }
+
+  if (allDebatesCompleted && allBallotsSubmitted) {
+    await ctx.db.patch(roundId, {
+      status: "completed",
+      end_time: Date.now(),
+      updated_at: Date.now(),
+    });
+
+    console.log(`Round ${round.round_number} marked as completed - all debates finished and ballots submitted`);
+  }
+};
+
+
 const updateDebateResults = async (ctx: any, debateId: Id<"debates">) => {
   const submissions = await ctx.db
     .query("judging_scores")
@@ -206,6 +249,8 @@ const updateDebateResults = async (ctx: any, debateId: Id<"debates">) => {
     status: "completed",
     updated_at: Date.now(),
   });
+
+  await checkAndUpdateRoundCompletion(ctx, debate.round_id);
 };
 
 export const updateBallot = mutation({
