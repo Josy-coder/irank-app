@@ -149,6 +149,9 @@ export const getTournamentBallots = query({
           winning_team_id: debate.winning_team_id,
           winning_position: debate.winning_team_position,
           can_see_full_details: canSeeFullDetails,
+          argument_flow: debate.argument_flow || [],
+          fact_checks: debate.fact_checks || [],
+          shared_notes: debate.shared_notes || [],
         };
       })
     );

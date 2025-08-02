@@ -2566,6 +2566,8 @@ function BallotCard({ debate, userRole, userId, onViewDetails, onEditBallot, onF
 
 function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
   const [selectedJudge, setSelectedJudge] = useState<string>("all");
+  const [expandedJudge, setExpandedJudge] = useState<string | null>(null);
+  const [expandedSpeaker, setExpandedSpeaker] = useState<string | null>(null);
 
   const allUserIds = useMemo(() => {
     const userIds = new Set<string>();
@@ -2584,6 +2586,17 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
             userIds.add(score.speaker_id);
           });
         }
+      });
+    }
+
+    if (debate?.proposition_team?.members) {
+      debate.proposition_team.members.forEach((memberId: string) => {
+        userIds.add(memberId);
+      });
+    }
+    if (debate?.opposition_team?.members) {
+      debate.opposition_team.members.forEach((memberId: string) => {
+        userIds.add(memberId);
       });
     }
 
@@ -2642,360 +2655,561 @@ function BallotDetailsDialog({ debate, isOpen, onClose, token }: any) {
     return "unknown";
   };
 
+  const groupSpeakerScoresByTeam = (speakerScores: any[]) => {
+    const propTeamScores = speakerScores.filter(score =>
+      score.team_id === debate?.proposition_team?._id
+    );
+    const oppTeamScores = speakerScores.filter(score =>
+      score.team_id === debate?.opposition_team?._id
+    );
+
+    return {
+      proposition: propTeamScores,
+      opposition: oppTeamScores
+    };
+  };
+
+  const handleJudgeToggle = (judgeId: string) => {
+    if (expandedJudge === judgeId) {
+      setExpandedJudge(null);
+    } else {
+      setExpandedJudge(judgeId);
+      setExpandedSpeaker(null); // Reset speaker expansion when changing judges
+    }
+  };
+
+  const handleSpeakerToggle = (speakerId: string) => {
+    if (expandedSpeaker === speakerId) {
+      setExpandedSpeaker(null);
+    } else {
+      setExpandedSpeaker(speakerId);
+    }
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Ballot Details - {debate?.room_name || "Unknown Debate"}
+      <DialogContent className="max-w-6xl max-h-[95vh] overflow-hidden flex flex-col">
+        <DialogHeader className="flex-shrink-0 border-b pb-4">
+          <DialogTitle className="flex items-center gap-2 text-lg md:text-xl">
+            <FileText className="h-4 w-4 md:h-5 md:w-5" />
+            <span className="truncate">Ballot Details - {debate?.room_name || "Unknown Debate"}</span>
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <div className="flex-1 overflow-y-auto">
+          <div className="space-y-4 md:space-y-6 p-4">
+            
+            {ballotDetails.length > 1 && (
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <Label className="text-sm md:text-base flex-shrink-0">View Judge:</Label>
+                <Select value={selectedJudge} onValueChange={setSelectedJudge}>
+                  <SelectTrigger className="w-full sm:w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Judges</SelectItem>
+                    {ballotDetails.map((ballot: any) => (
+                      <SelectItem key={ballot.judge_id} value={ballot.judge_id}>
+                        {ballot.judge_name}
+                        {ballot.is_head_judge && " (Head)"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
-          {ballotDetails.length > 1 && (
-            <div className="flex items-center gap-2">
-              <Label>View Judge:</Label>
-              <Select value={selectedJudge} onValueChange={setSelectedJudge}>
-                <SelectTrigger className="w-48">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Judges</SelectItem>
-                  {ballotDetails.map((ballot: any) => (
-                    <SelectItem key={ballot.judge_id} value={ballot.judge_id}>
-                      {ballot.judge_name}
-                      {ballot.is_head_judge && " (Head)"}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-
-          <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
-            <div className="text-center">
-              <h3 className="font-semibold text-green-700">{debate?.proposition_team?.name}</h3>
-              <p className="text-sm text-muted-foreground">Proposition</p>
-              {getWinningPosition() === "proposition" && (
-                <Badge variant="default" className="mt-2">
-                  <Crown className="h-3 w-3 mr-1" />
-                  Winner
-                </Badge>
-              )}
-            </div>
-            <div className="text-center">
-              <h3 className="font-semibold text-red-700">{debate?.opposition_team?.name}</h3>
-              <p className="text-sm text-muted-foreground">Opposition</p>
-              {getWinningPosition() === "opposition" && (
-                <Badge variant="default" className="mt-2">
-                  <Crown className="h-3 w-3 mr-1" />
-                  Winner
-                </Badge>
-              )}
-            </div>
-          </div>
-
-
-          {debate?.fact_checks?.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Search className="h-5 w-5" />
-                  Fact Checks ({debate.fact_checks.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {debate.fact_checks.map((check: any, idx: number) => (
-                    <div key={idx} className={`p-3 rounded border ${
-                      check.result === 'true' ? 'bg-green-50 border-green-200' :
-                        check.result === 'false' ? 'bg-red-50 border-red-200' :
-                          check.result === 'partially_true' ? 'bg-yellow-50 border-yellow-200' :
-                            'bg-gray-50 border-gray-200'
-                    }`}>
-                      <div className="flex justify-between items-start mb-2">
-                        <Badge variant="outline" className="capitalize">
-                          {check.result.replace('_', ' ')}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(check.timestamp).toLocaleString()}
-                        </span>
-                      </div>
-                      <p className="text-sm font-medium mb-1">&#34;{check.claim}&#34;</p>
-                      {check.explanation && (
-                        <p className="text-sm text-muted-foreground">{check.explanation}</p>
-                      )}
-                      {check.sources?.length > 0 && (
-                        <div className="mt-2">
-                          <p className="text-xs font-medium">Sources:</p>
-                          <ul className="text-xs list-disc list-inside">
-                            {check.sources.map((source: string, i: number) => (
-                              <li key={i}>{source}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 p-3 md:p-4 bg-muted rounded-lg">
+              <div className="text-center">
+                <h3 className="font-semibold text-green-700 text-sm md:text-base truncate">{debate?.proposition_team?.name}</h3>
+                <p className="text-xs md:text-sm text-muted-foreground">Proposition</p>
+                <div className="text-xs text-muted-foreground mt-1 truncate">
+                  {debate?.proposition_team?.school?.name}
                 </div>
-              </CardContent>
-            </Card>
-          )}
-
-
-          {debate?.argument_flow?.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5" />
-                  Argument Flow ({debate.argument_flow.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {debate.argument_flow.map((arg: any, idx: number) => (
-                    <div key={idx} className={`p-3 rounded border ${
-                      arg.type === 'main' ? 'bg-blue-50 border-blue-200' :
-                        arg.type === 'rebuttal' ? 'bg-red-50 border-red-200' :
-                          'bg-yellow-50 border-yellow-200'
-                    }`}>
-                      <div className="flex justify-between items-start mb-2">
-                        <Badge variant="outline" className="capitalize">
-                          {arg.type} #{idx + 1}
-                        </Badge>
-                        <div className="flex items-center gap-2">
-                          {arg.strength && (
-                            <div className="flex">
-                              {Array.from({ length: 5 }, (_, i) => (
-                                <div
-                                  key={i}
-                                  className={`w-2 h-2 rounded-full mx-px ${
-                                    i < arg.strength ? 'bg-sky-500' : 'bg-gray-300'
-                                  }`}
-                                />
-                              ))}
-                            </div>
-                          )}
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(arg.timestamp).toLocaleString()}
-                          </span>
-                        </div>
-                      </div>
-                      <p className="text-sm">{arg.content}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Speaker {getUserName(arg.speaker)}
-                      </p>
-                      {arg.rebutted_by?.length > 0 && (
-                        <div className="mt-2 pt-2 border-t">
-                          <span className="text-xs text-muted-foreground">Links to:</span>
-                          <div className="flex gap-1 mt-1">
-                            {arg.rebutted_by.map((rebuttal: string, i: number) => (
-                              <Badge key={i} variant="secondary" className="text-xs">
-                                #{parseInt(rebuttal) + 1}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-
-          {filteredBallots.map((ballot: any, index: number) => (
-            <Card key={ballot.judge_id || index}>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  {ballot.judge_name}
-                  {ballot.is_head_judge && (
-                    <Badge variant="default">
-                      <Crown className="h-3 w-3 mr-1" />
-                      Head Judge
-                    </Badge>
-                  )}
-                  {ballot.feedback_submitted && (
-                    <Badge variant="outline" className="text-green-600">
-                      <CheckCircle className="h-3 w-3 mr-1" />
-                      Submitted
-                    </Badge>
-                  )}
-                  {ballot.is_flagged && (
-                    <Badge variant="destructive">
-                      <Flag className="h-3 w-3 mr-1" />
-                      Flagged
-                    </Badge>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-
-                <div className="p-3 bg-muted rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">Decision:</span>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold">
-                        {ballot.winning_team_id === debate?.proposition_team?._id
-                          ? debate?.proposition_team?.name
-                          : ballot.winning_team_id === debate?.opposition_team?._id
-                            ? debate?.opposition_team?.name
-                            : "No decision recorded"
-                        }
-                      </span>
-                      {ballot.winning_position && (
-                        <Badge variant="outline" className={
-                          ballot.winning_position === "proposition"
-                            ? "text-green-700 border-green-700"
-                            : "text-red-700 border-red-700"
-                        }>
-                          {ballot.winning_position}
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-
-                {ballot.speaker_scores?.length > 0 && (
-                  <div>
-                    <h4 className="font-medium mb-3">Speaker Scores</h4>
-                    <div className="space-y-3">
-                      {ballot.speaker_scores.map((score: any, scoreIndex: number) => (
-                        <div key={scoreIndex} className="border rounded-lg p-4">
-                          <div className="flex justify-between items-start mb-3">
-                            <div>
-                              <h5 className="font-medium">{getUserName(score.speaker_id)}</h5>
-                              <p className="text-sm text-muted-foreground">{score.position}</p>
-                              <p className="text-xs text-muted-foreground">
-                                Team: {score.team_id === debate?.proposition_team?._id
-                                ? debate?.proposition_team?.name
-                                : debate?.opposition_team?.name
-                              }
-                              </p>
-                            </div>
-                            <div className="text-right">
-                              <div className="text-2xl font-bold text-primary">{score.score}</div>
-                              <div className="text-sm text-muted-foreground">out of 30</div>
-                            </div>
-                          </div>
-
-
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-                            {SCORING_CATEGORIES.map((category) => {
-                              const CategoryIcon = category.icon;
-                              const categoryScore = score[category.key] || 0;
-                              return (
-                                <div key={category.key} className="text-center">
-                                  <div className="flex items-center justify-center gap-1 mb-1">
-                                    <CategoryIcon className={`h-3 w-3 ${category.color}`} />
-                                    <span className="text-xs font-medium">{category.label.split(' ')[0]}</span>
-                                  </div>
-                                  <div className="text-sm font-bold">{categoryScore}/25</div>
-                                  <Progress value={(categoryScore / 25) * 100} className="h-1 mt-1" />
-                                </div>
-                              );
-                            })}
-                          </div>
-
-
-                          {score.comments && (
-                            <div className="pt-3 border-t">
-                              <Label className="text-xs font-medium">Judge Feedback:</Label>
-                              <p className="text-sm mt-1 p-2 bg-muted rounded">{score.comments}</p>
-                            </div>
-                          )}
-
-
-                          {score.bias_detected && (
-                            <div className="pt-3 border-t">
-                              <Alert variant="destructive">
-                                <AlertCircle className="h-4 w-4" />
-                                <AlertDescription>
-                                  <p className="font-medium">Bias Detected</p>
-                                  {score.bias_explanation && (
-                                    <p className="text-sm mt-1">{score.bias_explanation}</p>
-                                  )}
-                                </AlertDescription>
-                              </Alert>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                {getWinningPosition() === "proposition" && (
+                  <Badge variant="default" className="mt-2 text-xs">
+                    <Crown className="h-3 w-3 mr-1" />
+                    Winner
+                  </Badge>
                 )}
-
-
-                {ballot.notes && (
-                  <div className="pt-3 border-t">
-                    <Label className="text-sm font-medium">Judge Notes:</Label>
-                    <p className="text-sm mt-1 p-3 bg-muted rounded">{ballot.notes}</p>
-                  </div>
-                )}
-
-
-                <div className="text-xs text-muted-foreground pt-2 border-t flex justify-between">
-                  <span>
-                    Submitted: {ballot.submitted_at ? new Date(ballot.submitted_at).toLocaleString() : "Not submitted"}
-                  </span>
-                  {ballot.feedback_submitted && (
-                    <span className="text-green-600 font-medium">Final Submission</span>
-                  )}
+              </div>
+              <div className="text-center">
+                <h3 className="font-semibold text-red-700 text-sm md:text-base truncate">{debate?.opposition_team?.name}</h3>
+                <p className="text-xs md:text-sm text-muted-foreground">Opposition</p>
+                <div className="text-xs text-muted-foreground mt-1 truncate">
+                  {debate?.opposition_team?.school?.name}
                 </div>
-              </CardContent>
-            </Card>
-          ))}
-
-          {filteredBallots.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground">
-              <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p>No ballot details available</p>
-              {selectedJudge !== "all" && (
-                <p className="text-sm">This judge hasn&apos;t submitted a ballot yet</p>
-              )}
+                {getWinningPosition() === "opposition" && (
+                  <Badge variant="default" className="mt-2 text-xs">
+                    <Crown className="h-3 w-3 mr-1" />
+                    Winner
+                  </Badge>
+                )}
+              </div>
             </div>
-          )}
 
-          {debate?.shared_notes?.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <MessageSquare className="h-5 w-5" />
-                  Shared Notes ({debate.shared_notes.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {debate.shared_notes.map((note: any, idx: number) => (
-                    <div key={idx} className="p-3 bg-muted rounded-lg">
-                      <div className="flex justify-between items-start mb-2">
-                        <span className="font-medium text-sm">{getUserName(note.author)}</span>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-xs">
-                            {note.visibility}
+            
+            {debate?.fact_checks?.length > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base md:text-lg flex items-center gap-2">
+                    <Search className="h-4 w-4 md:h-5 md:w-5" />
+                    Fact Checks ({debate.fact_checks.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {debate.fact_checks.map((check: any, idx: number) => (
+                      <div key={idx} className={`p-3 rounded border ${
+                        check.result === 'true' ? 'bg-green-50 border-green-200' :
+                          check.result === 'false' ? 'bg-red-50 border-red-200' :
+                            check.result === 'partially_true' ? 'bg-yellow-50 border-yellow-200' :
+                              'bg-gray-50 border-gray-200'
+                      }`}>
+                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 mb-2">
+                          <Badge variant="outline" className="capitalize text-xs w-fit">
+                            {check.result.replace('_', ' ')}
                           </Badge>
                           <span className="text-xs text-muted-foreground">
-                            {new Date(note.timestamp).toLocaleString()}
+                            {new Date(check.timestamp).toLocaleString()}
                           </span>
                         </div>
+                        <p className="text-sm font-medium mb-1 break-words">&#34;{check.claim}&#34;</p>
+                        {check.explanation && (
+                          <p className="text-sm text-muted-foreground break-words">{check.explanation}</p>
+                        )}
+                        {check.sources?.length > 0 && (
+                          <div className="mt-2">
+                            <p className="text-xs font-medium">Sources:</p>
+                            <ul className="text-xs list-disc list-inside">
+                              {check.sources.map((source: string, i: number) => (
+                                <li key={i} className="break-words">{source}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
                       </div>
-                      <p className="text-sm">{note.content}</p>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            
+            {debate?.argument_flow?.length > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base md:text-lg flex items-center gap-2">
+                    <BarChart3 className="h-4 w-4 md:h-5 md:w-5" />
+                    Argument Flow ({debate.argument_flow.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {debate.argument_flow.map((arg: any, idx: number) => (
+                      <div key={idx} className={`p-3 rounded border ${
+                        arg.type === 'main' ? 'bg-blue-50 border-blue-200' :
+                          arg.type === 'rebuttal' ? 'bg-red-50 border-red-200' :
+                            'bg-yellow-50 border-yellow-200'
+                      }`}>
+                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 mb-2">
+                          <Badge variant="outline" className="capitalize text-xs w-fit">
+                            {arg.type} #{idx + 1}
+                          </Badge>
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                            {arg.strength && (
+                              <div className="flex">
+                                {Array.from({ length: 5 }, (_, i) => (
+                                  <div
+                                    key={i}
+                                    className={`w-2 h-2 rounded-full mx-px ${
+                                      i < arg.strength ? 'bg-sky-500' : 'bg-gray-300'
+                                    }`}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(arg.timestamp).toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                        <p className="text-sm break-words">{arg.content}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Speaker {getUserName(arg.speaker)}
+                        </p>
+                        {arg.rebutted_by?.length > 0 && (
+                          <div className="mt-2 pt-2 border-t">
+                            <span className="text-xs text-muted-foreground">Links to:</span>
+                            <div className="flex gap-1 mt-1 flex-wrap">
+                              {arg.rebutted_by.map((rebuttal: string, i: number) => (
+                                <Badge key={i} variant="secondary" className="text-xs">
+                                  #{parseInt(rebuttal) + 1}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            
+            {filteredBallots.map((ballot: any, index: number) => (
+              <Collapsible
+                key={ballot.judge_id || index}
+                open={expandedJudge === ballot.judge_id}
+                onOpenChange={() => handleJudgeToggle(ballot.judge_id)}
+              >
+                <Card>
+                  <CollapsibleTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      className="w-full p-3 md:p-4 h-auto justify-between hover:bg-muted/50"
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        {expandedJudge === ballot.judge_id ? (
+                          <ChevronDown className="h-4 w-4 flex-shrink-0" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4 flex-shrink-0" />
+                        )}
+                        <div className="text-left min-w-0 flex-1">
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                            <span className="font-medium text-sm md:text-base truncate">{ballot.judge_name}</span>
+                            <div className="flex flex-wrap gap-1">
+                              {ballot.is_head_judge && (
+                                <Badge variant="default" className="text-xs">
+                                  <Crown className="h-3 w-3 mr-1" />
+                                  Head
+                                </Badge>
+                              )}
+                              {ballot.feedback_submitted && (
+                                <Badge variant="outline" className="text-green-600 text-xs">
+                                  <CheckCircle className="h-3 w-3 mr-1" />
+                                  Final
+                                </Badge>
+                              )}
+                              {ballot.is_flagged && (
+                                <Badge variant="destructive" className="text-xs">
+                                  <Flag className="h-3 w-3 mr-1" />
+                                  Flagged
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right min-w-0 flex-shrink-0 ml-2">
+                        <div className="text-xs md:text-sm font-medium truncate">
+                          {ballot.winning_team_id === debate?.proposition_team?._id
+                            ? debate?.proposition_team?.name
+                            : ballot.winning_team_id === debate?.opposition_team?._id
+                              ? debate?.opposition_team?.name
+                              : "No decision"
+                          }
+                        </div>
+                      </div>
+                    </Button>
+                  </CollapsibleTrigger>
+
+                  <CollapsibleContent>
+                    <div className="px-3 md:px-4 pb-3 md:pb-4 space-y-4 border-t">
+                      
+                      <div className="p-3 bg-muted rounded-lg mt-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                          <span className="font-medium text-sm md:text-base">Decision:</span>
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                            <span className="font-semibold text-sm md:text-base">
+                              {ballot.winning_team_id === debate?.proposition_team?._id
+                                ? debate?.proposition_team?.name
+                                : ballot.winning_team_id === debate?.opposition_team?._id
+                                  ? debate?.opposition_team?.name
+                                  : "No decision recorded"
+                              }
+                            </span>
+                            {ballot.winning_position && (
+                              <Badge variant="outline" className={`text-xs ${
+                                ballot.winning_position === "proposition"
+                                  ? "text-green-700 border-green-700"
+                                  : "text-red-700 border-red-700"
+                              }`}>
+                                {ballot.winning_position}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      
+                      {ballot.speaker_scores?.length > 0 && (
+                        <div>
+                          <h4 className="font-medium mb-3 text-sm md:text-base">Speaker Scores</h4>
+
+                          
+                          {(() => {
+                            const { proposition, opposition } = groupSpeakerScoresByTeam(ballot.speaker_scores);
+
+                            return (
+                              <div className="space-y-4">
+                                
+                                {proposition.length > 0 && (
+                                  <div>
+                                    <h5 className="font-medium text-green-700 mb-2 flex flex-col sm:flex-row sm:items-center gap-2">
+                                      <Badge variant="outline" className="text-green-700 border-green-700 text-xs w-fit">Prop</Badge>
+                                      <span className="text-sm md:text-base">{debate?.proposition_team?.name}</span>
+                                    </h5>
+                                    <div className="space-y-3">
+                                      {proposition.map((score: any, scoreIndex: number) => (
+                                        <Collapsible
+                                          key={`prop-${score.speaker_id}`}
+                                          open={expandedSpeaker === score.speaker_id}
+                                          onOpenChange={() => handleSpeakerToggle(score.speaker_id)}
+                                        >
+                                          <Card className="border-green-200">
+                                            <CollapsibleTrigger asChild>
+                                              <Button
+                                                variant="ghost"
+                                                className="w-full p-3 md:p-4 h-auto justify-between hover:bg-green-50"
+                                              >
+                                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                                  {expandedSpeaker === score.speaker_id ? (
+                                                    <ChevronDown className="h-4 w-4 flex-shrink-0" />
+                                                  ) : (
+                                                    <ChevronRight className="h-4 w-4 flex-shrink-0" />
+                                                  )}
+                                                  <div className="text-left min-w-0 flex-1">
+                                                    <h6 className="font-medium text-sm md:text-base truncate">{getUserName(score.speaker_id)}</h6>
+                                                    <p className="text-xs md:text-sm text-muted-foreground">{score.position}</p>
+                                                  </div>
+                                                </div>
+                                                <div className="text-right flex-shrink-0 ml-2">
+                                                  <div className="text-xl md:text-2xl font-bold text-primary">{score.score}</div>
+                                                  <div className="text-xs md:text-sm text-muted-foreground">out of 30</div>
+                                                </div>
+                                              </Button>
+                                            </CollapsibleTrigger>
+
+                                            <CollapsibleContent>
+                                              <div className="px-3 md:px-4 pb-3 md:pb-4 space-y-3 border-t">
+                                                
+                                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+                                                  {SCORING_CATEGORIES.map((category) => {
+                                                    const CategoryIcon = category.icon;
+                                                    const categoryScore = score[category.key] || 0;
+                                                    return (
+                                                      <div key={category.key} className="text-center">
+                                                        <div className="flex items-center justify-center gap-1 mb-1">
+                                                          <CategoryIcon className={`h-3 w-3 ${category.color}`} />
+                                                          <span className="text-xs font-medium truncate">{category.label.split(' ')[0]}</span>
+                                                        </div>
+                                                        <div className="text-sm font-bold">{categoryScore}/25</div>
+                                                        <Progress value={(categoryScore / 25) * 100} className="h-1 mt-1" />
+                                                      </div>
+                                                    );
+                                                  })}
+                                                </div>
+
+                                                
+                                                {score.comments && (
+                                                  <div className="pt-3 border-t">
+                                                    <Label className="text-xs font-medium">Judge Feedback:</Label>
+                                                    <p className="text-sm mt-1 p-2 bg-muted rounded break-words">{score.comments}</p>
+                                                  </div>
+                                                )}
+
+                                                
+                                                {score.bias_detected && (
+                                                  <div className="pt-3 border-t">
+                                                    <Alert variant="destructive">
+                                                      <AlertCircle className="h-4 w-4" />
+                                                      <AlertDescription>
+                                                        <p className="font-medium">Bias Detected</p>
+                                                        {score.bias_explanation && (
+                                                          <p className="text-sm mt-1 break-words">{score.bias_explanation}</p>
+                                                        )}
+                                                      </AlertDescription>
+                                                    </Alert>
+                                                  </div>
+                                                )}
+                                              </div>
+                                            </CollapsibleContent>
+                                          </Card>
+                                        </Collapsible>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                
+                                {opposition.length > 0 && (
+                                  <div>
+                                    <h5 className="font-medium text-red-700 mb-2 flex flex-col sm:flex-row sm:items-center gap-2">
+                                      <Badge variant="outline" className="text-red-700 border-red-700 text-xs w-fit">Opp</Badge>
+                                      <span className="text-sm md:text-base">{debate?.opposition_team?.name}</span>
+                                    </h5>
+                                    <div className="space-y-3">
+                                      {opposition.map((score: any, scoreIndex: number) => (
+                                        <Collapsible
+                                          key={`opp-${score.speaker_id}`}
+                                          open={expandedSpeaker === score.speaker_id}
+                                          onOpenChange={() => handleSpeakerToggle(score.speaker_id)}
+                                        >
+                                          <Card className="border-red-200">
+                                            <CollapsibleTrigger asChild>
+                                              <Button
+                                                variant="ghost"
+                                                className="w-full p-3 md:p-4 h-auto justify-between hover:bg-red-50"
+                                              >
+                                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                                  {expandedSpeaker === score.speaker_id ? (
+                                                    <ChevronDown className="h-4 w-4 flex-shrink-0" />
+                                                  ) : (
+                                                    <ChevronRight className="h-4 w-4 flex-shrink-0" />
+                                                  )}
+                                                  <div className="text-left min-w-0 flex-1">
+                                                    <h6 className="font-medium text-sm md:text-base truncate">{getUserName(score.speaker_id)}</h6>
+                                                    <p className="text-xs md:text-sm text-muted-foreground">{score.position}</p>
+                                                  </div>
+                                                </div>
+                                                <div className="text-right flex-shrink-0 ml-2">
+                                                  <div className="text-xl md:text-2xl font-bold text-primary">{score.score}</div>
+                                                  <div className="text-xs md:text-sm text-muted-foreground">out of 30</div>
+                                                </div>
+                                              </Button>
+                                            </CollapsibleTrigger>
+
+                                            <CollapsibleContent>
+                                              <div className="px-3 md:px-4 pb-3 md:pb-4 space-y-3 border-t">
+                                                
+                                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+                                                  {SCORING_CATEGORIES.map((category) => {
+                                                    const CategoryIcon = category.icon;
+                                                    const categoryScore = score[category.key] || 0;
+                                                    return (
+                                                      <div key={category.key} className="text-center">
+                                                        <div className="flex items-center justify-center gap-1 mb-1">
+                                                          <CategoryIcon className={`h-3 w-3 ${category.color}`} />
+                                                          <span className="text-xs font-medium truncate">{category.label.split(' ')[0]}</span>
+                                                        </div>
+                                                        <div className="text-sm font-bold">{categoryScore}/25</div>
+                                                        <Progress value={(categoryScore / 25) * 100} className="h-1 mt-1" />
+                                                      </div>
+                                                    );
+                                                  })}
+                                                </div>
+
+                                                
+                                                {score.comments && (
+                                                  <div className="pt-3 border-t">
+                                                    <Label className="text-xs font-medium">Judge Feedback:</Label>
+                                                    <p className="text-sm mt-1 p-2 bg-muted rounded break-words">{score.comments}</p>
+                                                  </div>
+                                                )}
+
+                                                
+                                                {score.bias_detected && (
+                                                  <div className="pt-3 border-t">
+                                                    <Alert variant="destructive">
+                                                      <AlertCircle className="h-4 w-4" />
+                                                      <AlertDescription>
+                                                        <p className="font-medium">Bias Detected</p>
+                                                        {score.bias_explanation && (
+                                                          <p className="text-sm mt-1 break-words">{score.bias_explanation}</p>
+                                                        )}
+                                                      </AlertDescription>
+                                                    </Alert>
+                                                  </div>
+                                                )}
+                                              </div>
+                                            </CollapsibleContent>
+                                          </Card>
+                                        </Collapsible>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+
+                      
+                      {ballot.notes && (
+                        <div className="pt-3 border-t">
+                          <Label className="text-sm font-medium">Judge Notes:</Label>
+                          <p className="text-sm mt-1 p-3 bg-muted rounded break-words">{ballot.notes}</p>
+                        </div>
+                      )}
+
+                      
+                      <div className="text-xs text-muted-foreground pt-2 border-t flex flex-col sm:flex-row sm:justify-between gap-2">
+                        <span>
+                          Submitted: {ballot.submitted_at ? new Date(ballot.submitted_at).toLocaleString() : "Not submitted"}
+                        </span>
+                        {ballot.feedback_submitted && (
+                          <span className="text-green-600 font-medium">Final Submission</span>
+                        )}
+                      </div>
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
+            ))}
+
+            
+            {filteredBallots.length === 0 && (
+              <div className="text-center py-8 text-muted-foreground">
+                <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p>No ballot details available</p>
+                {selectedJudge !== "all" && (
+                  <p className="text-sm">This judge hasn&#39;t submitted a ballot yet</p>
+                )}
+              </div>
+            )}
+
+            
+            {debate?.shared_notes?.length > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base md:text-lg flex items-center gap-2">
+                    <MessageSquare className="h-4 w-4 md:h-5 md:w-5" />
+                    Shared Notes ({debate.shared_notes.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {debate.shared_notes.map((note: any, idx: number) => (
+                      <div key={idx} className="p-3 bg-muted rounded-lg">
+                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 mb-2">
+                          <span className="font-medium text-sm">{getUserName(note.author)}</span>
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                            <Badge variant="outline" className="text-xs w-fit">
+                              {note.visibility}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(note.timestamp).toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                        <p className="text-sm break-words">{note.content}</p>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>
   );
 }
+
 
 function FlagBallotDialog({ debate, isOpen, onClose, onFlag, userRole }: any) {
   const [reason, setReason] = useState("");

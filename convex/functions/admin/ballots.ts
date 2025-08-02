@@ -121,6 +121,9 @@ export const getAllTournamentBallots = query({
           has_flagged_ballots: submissions.some(s =>
             s.notes?.includes("[FLAG:") || s.notes?.includes("[JUDGE FLAG:")
           ),
+          argument_flow: debate.argument_flow || [],
+          fact_checks: debate.fact_checks || [],
+          shared_notes: debate.shared_notes || [],
         };
       })
     );
