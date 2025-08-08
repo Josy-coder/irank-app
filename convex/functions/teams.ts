@@ -674,6 +674,18 @@ export const getPotentialTeamMembers = query({
     const user = sessionResult.user;
     const { tournament_id, search, exclude_team_id, school_id } = args;
 
+    const tournament = await ctx.db.get(tournament_id);
+    if (!tournament) {
+      throw new Error("Tournament not found");
+    }
+
+    let league = null;
+    if (tournament.league_id) {
+      league = await ctx.db.get(tournament.league_id);
+    }
+
+    const isDreamsMode = league?.type === "Dreams Mode";
+
     const existingTeams = await ctx.db
       .query("teams")
       .withIndex("by_tournament_id", (q) => q.eq("tournament_id", tournament_id))
@@ -682,6 +694,7 @@ export const getPotentialTeamMembers = query({
 
     const assignedStudentIds = new Set();
     for (const team of existingTeams) {
+
       if (!exclude_team_id || team._id !== exclude_team_id) {
         team.members.forEach(memberId => assignedStudentIds.add(memberId));
       }
@@ -689,10 +702,13 @@ export const getPotentialTeamMembers = query({
 
     let studentsQuery;
     if (search && search.trim()) {
+
+      const searchTerm = search.trim();
+
       studentsQuery = ctx.db
         .query("users")
         .withSearchIndex("search_users", (q) =>
-          q.search("name", search.trim())
+          q.search("name", searchTerm)
             .eq("role", "student")
             .eq("status", "active")
             .eq("verified", true)
@@ -706,21 +722,68 @@ export const getPotentialTeamMembers = query({
 
     let allStudents = await studentsQuery.collect();
 
+    if (search && search.trim() && allStudents.length === 0) {
+      const searchTerm = search.trim();
+
+      const fallbackStudents = await ctx.db
+        .query("users")
+        .withIndex("by_role_status", (q) => q.eq("role", "student").eq("status", "active"))
+        .filter((q) => q.eq(q.field("verified"), true))
+        .collect();
+
+      const manualSearchResults = fallbackStudents.filter(student =>
+        student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        student.email.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+
+      allStudents = manualSearchResults;
+    }
+
     allStudents = allStudents.filter(student => {
+
       if (user.role === "school_admin" && user.school_id && student.school_id !== user.school_id) {
         return false;
       }
-      return !(school_id && student.school_id !== school_id);
 
+
+      if (school_id && student.school_id !== school_id) {
+        return false;
+      }
+
+      return true;
     });
 
     const availableStudents = allStudents.filter(student => !assignedStudentIds.has(student._id));
 
+    let currentTeamMembers: any[] = [];
+    if (exclude_team_id) {
+      const currentTeam = await ctx.db.get(exclude_team_id);
+      if (currentTeam) {
+        const currentMembers = await Promise.all(
+          currentTeam.members.map(async (memberId: Id<"users">) => {
+            const member = await ctx.db.get(memberId);
+            return member;
+          })
+        );
+        currentTeamMembers = currentMembers.filter(Boolean);
+      }
+    }
+
+    const allPotentialMembers = [...availableStudents, ...currentTeamMembers];
+
+    const uniqueMembers = Array.from(
+      new Map(allPotentialMembers.map(student => [student._id, student])).values()
+    );
+
     const enrichedStudents = await Promise.all(
-      availableStudents.map(async (student) => {
+      uniqueMembers.map(async (student) => {
         let school = null;
         if (student.school_id) {
-          school = await ctx.db.get(student.school_id);
+          const schoolDoc = await ctx.db.get(student.school_id);
+
+          if (schoolDoc && 'name' in schoolDoc && 'type' in schoolDoc) {
+            school = schoolDoc;
+          }
         }
 
         return {
@@ -737,6 +800,8 @@ export const getPotentialTeamMembers = query({
       })
     );
 
-    return enrichedStudents.slice(0, 50);
+    enrichedStudents.sort((a, b) => a.name.localeCompare(b.name));
+
+    return enrichedStudents.slice(0, 100);
   },
 });

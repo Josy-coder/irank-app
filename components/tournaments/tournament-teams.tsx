@@ -439,7 +439,7 @@ export function TournamentTeams({
       setShowDeleteDialog(false);
       setTeamToDelete(null);
     } catch (error: any) {
-      toast.error(error.message || "Failed to delete team");
+      toast.error(error.message?.split("Uncaught Error:")[1]?.split(/\.|Called by client/)[0]?.trim() || "Failed to delete team");
     }
   };
 

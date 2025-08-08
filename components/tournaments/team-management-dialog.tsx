@@ -47,6 +47,7 @@ import {
   AlertCircle,
   Ticket
 } from "lucide-react"
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface TeamManagementDialogProps {
   open: boolean;
@@ -230,6 +231,21 @@ export function TeamManagementDialog({
 
   const canUseWaiverCode = isSchoolAdmin && !isDreamsMode && mode === "create";
 
+  const MemberSearchSkeleton = () => (
+    <div className="space-y-2 p-2">
+      {[1].map((i) => (
+        <div key={i} className="flex items-center gap-3 p-3">
+          <Skeleton className="h-5 w-5 rounded-full" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-3 w-48" />
+            <Skeleton className="h-3 w-24" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -380,51 +396,68 @@ export function TeamManagementDialog({
               <PopoverContent className="w-full p-0" align="start">
                 <Command>
                   <CommandInput
-                    placeholder="Search students..."
+                    placeholder="Search students by name or email..."
                     value={memberSearch}
                     onValueChange={setMemberSearch}
                   />
                   <CommandList className="max-h-64">
-                    <CommandEmpty>
-                      <div className="flex flex-col items-center gap-2 py-6">
-                        <Search className="h-6 w-6 text-muted-foreground" />
-                        <div className="text-xs text-muted-foreground">
-                          {debouncedMemberSearch.length > 0
-                            ? `No students found for "${debouncedMemberSearch}"`
-                            : "Search for students to add to the team"
-                          }
-                        </div>
-                      </div>
-                    </CommandEmpty>
-                    <CommandGroup>
-                      {availableMembers.map((student) => (
-                        <CommandItem
-                          key={student._id}
-                          value={student._id}
-                          onSelect={() => {
-                            handleAddMember(student._id);
-                            setShowMemberSelector(false);
-                          }}
-                          className="flex items-center gap-3 p-3"
-                        >
-                          <Avatar className="h-8 w-8">
-                            <AvatarFallback>
-                              {student.name.charAt(0).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium truncate">{student.name}</div>
-                            <div className="text-xs text-muted-foreground truncate">{student.email}</div>
-                            {student.school && (
-                              <div className="text-xs text-muted-foreground flex items-center gap-1">
-                                <School className="h-3 w-3" />
-                                {student.school.name}
+                    
+                    {potentialMembers === undefined && debouncedMemberSearch.length > 0 ? (
+                      <MemberSearchSkeleton />
+                    ) : (
+                      <>
+                        <CommandEmpty>
+                          <div className="flex flex-col items-center gap-2 py-6">
+                            <Search className="h-6 w-6 text-muted-foreground" />
+                            <div className="text-xs text-muted-foreground text-center">
+                              {debouncedMemberSearch.length > 0
+                                ? `No students found for "${debouncedMemberSearch}"`
+                                : "Search for students to add to the team"
+                              }
+                            </div>
+                            {debouncedMemberSearch.length > 0 && (
+                              <div className="text-xs text-muted-foreground/60 text-center max-w-48">
+                                Try searching with a different term or check spelling
                               </div>
                             )}
                           </div>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
+                        </CommandEmpty>
+                        <CommandGroup>
+                          {availableMembers?.map((student) => (
+                            <CommandItem
+                              key={student._id}
+                              value={`${student.name} ${student.email}`}
+                              onSelect={() => {
+                                handleAddMember(student._id);
+                                setShowMemberSelector(false);
+                              }}
+                              className="flex items-center gap-3 p-3 cursor-pointer"
+                            >
+                              <Avatar className="h-8 w-8">
+                                <AvatarFallback>
+                                  {student.name.charAt(0).toUpperCase()}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium truncate">{student.name}</div>
+                                <div className="text-xs text-muted-foreground truncate">{student.email}</div>
+                                {student.grade && (
+                                  <div className="text-xs text-muted-foreground">
+                                    Grade {student.grade}
+                                  </div>
+                                )}
+                                {student.school && (
+                                  <div className="text-xs text-muted-foreground flex items-center gap-1">
+                                    <School className="h-3 w-3" />
+                                    {student.school.name}
+                                  </div>
+                                )}
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </>
+                    )}
                   </CommandList>
                 </Command>
               </PopoverContent>
