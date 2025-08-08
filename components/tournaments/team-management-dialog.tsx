@@ -440,10 +440,9 @@ export function TeamManagementDialog({
                               </Avatar>
                               <div className="flex-1 min-w-0">
                                 <div className="font-medium truncate">{student.name}</div>
-                                <div className="text-xs text-muted-foreground truncate">{student.email}</div>
                                 {student.grade && (
                                   <div className="text-xs text-muted-foreground">
-                                    Grade {student.grade}
+                                    {student.grade}
                                   </div>
                                 )}
                                 {student.school && (
