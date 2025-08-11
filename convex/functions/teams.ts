@@ -12,6 +12,115 @@ function generateInvitationCode(): string {
   return result;
 }
 
+export const findStudentsByEmail = mutation({
+  args: {
+    token: v.string(),
+    emails: v.array(v.string()),
+    tournament_id: v.id("tournaments"),
+    exclude_team_id: v.optional(v.id("teams")),
+  },
+  handler: async (ctx, args) => {
+    const sessionResult = await ctx.runMutation(internal.functions.auth.verifySession, {
+      token: args.token,
+    });
+
+    if (!sessionResult.user || !sessionResult.valid) {
+      throw new Error("Authentication required");
+    }
+
+    const { emails, tournament_id, exclude_team_id } = args;
+
+    if (emails.length === 0) {
+      return { success: true, students: [], errors: [] };
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const validEmails = emails.filter(email => emailRegex.test(email));
+    const invalidEmails = emails.filter(email => !emailRegex.test(email));
+
+    if (validEmails.length === 0) {
+      return {
+        success: false,
+        students: [], // Fixed: was 'users'
+        errors: invalidEmails.map(email => `Invalid email format: ${email}`)
+      };
+    }
+
+    // Get existing teams for this tournament
+    const existingTeams = await ctx.db
+      .query("teams")
+      .withIndex("by_tournament_id", (q) => q.eq("tournament_id", tournament_id))
+      .filter((q) => q.eq(q.field("status"), "active"))
+      .collect();
+
+    // Get assigned student IDs (excluding the team being edited if any)
+    const assignedStudentIds = new Set();
+    for (const team of existingTeams) {
+      if (!exclude_team_id || team._id !== exclude_team_id) {
+        team.members.forEach(memberId => assignedStudentIds.add(memberId));
+      }
+    }
+
+    // Find students by email and check their eligibility
+    const results = await Promise.all(
+      validEmails.map(async (email) => {
+        const student = await ctx.db
+          .query("users")
+          .withIndex("by_email", (q) => q.eq("email", email.toLowerCase()))
+          .filter((q) => q.eq(q.field("status"), "active"))
+          .filter((q) => q.eq(q.field("verified"), true))
+          .filter((q) => q.eq(q.field("role"), "student"))
+          .first();
+
+        if (!student) {
+          return { email, student: null, error: `No student found with email: ${email}` };
+        }
+
+        // Check if student is already in a team for this tournament
+        if (assignedStudentIds.has(student._id)) {
+          const existingTeam = existingTeams.find(team =>
+            team.members.includes(student._id) && (!exclude_team_id || team._id !== exclude_team_id)
+          );
+          return {
+            email,
+            student: null, // Fixed: was 'students'
+            error: `${student.name} (${email}) is already in team "${existingTeam?.name || 'Unknown'}" for this tournament`
+          };
+        }
+
+        return {
+          email,
+          student: { // Fixed: consistent property name
+            _id: student._id,
+            name: student.name,
+            email: student.email,
+            role: student.role,
+            school_id: student.school_id,
+            grade: student.grade,
+          },
+          error: null
+        };
+      })
+    );
+
+    // Separate successful students from errors
+    const successfulStudents = results
+      .filter(result => result.student !== null)
+      .map(result => result.student!); // Fixed: use 'student' not 'user'
+
+    const errorMessages = [
+      ...results.filter(result => result.error !== null).map(result => result.error!),
+      ...invalidEmails.map(email => `Invalid email format: ${email}`)
+    ];
+
+    return {
+      success: successfulStudents.length > 0,
+      students: successfulStudents,
+      errors: errorMessages
+    };
+  },
+});
+
 export const getTournamentTeams = query({
   args: {
     token: v.string(),
@@ -702,7 +811,6 @@ export const getPotentialTeamMembers = query({
 
     let studentsQuery;
     if (search && search.trim()) {
-
       const searchTerm = search.trim();
 
       studentsQuery = ctx.db
@@ -722,21 +830,29 @@ export const getPotentialTeamMembers = query({
 
     let allStudents = await studentsQuery.collect();
 
-    if (search && search.trim() && allStudents.length === 0) {
-      const searchTerm = search.trim();
 
-      const fallbackStudents = await ctx.db
-        .query("users")
-        .withIndex("by_role_status", (q) => q.eq("role", "student").eq("status", "active"))
-        .filter((q) => q.eq(q.field("verified"), true))
-        .collect();
+    if (search && search.trim()) {
+      const searchTerm = search.trim().toLowerCase();
+      const isEmailLike = searchTerm.includes('@');
 
-      const manualSearchResults = fallbackStudents.filter(student =>
-        student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        student.email.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+      if (allStudents.length === 0 || isEmailLike) {
 
-      allStudents = manualSearchResults;
+        const fallbackStudents = await ctx.db
+          .query("users")
+          .withIndex("by_role_status", (q) => q.eq("role", "student").eq("status", "active"))
+          .filter((q) => q.eq(q.field("verified"), true))
+          .collect();
+
+        const manualSearchResults = fallbackStudents.filter(student => {
+          const nameMatch = student.name.toLowerCase().includes(searchTerm);
+          const emailMatch = student.email.toLowerCase().includes(searchTerm);
+          return nameMatch || emailMatch;
+        });
+
+        if (manualSearchResults.length > 0) {
+          allStudents = manualSearchResults;
+        }
+      }
     }
 
     allStudents = allStudents.filter(student => {
